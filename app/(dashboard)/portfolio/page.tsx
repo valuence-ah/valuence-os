@@ -11,11 +11,11 @@ export const metadata = { title: "Portfolio" };
 export default async function PortfolioPage() {
   const supabase = await createClient();
 
-  const { data: portfolioCompanies } = await supabase
+  const { data: portfolioCompanies } = await (supabase
     .from("companies")
     .select("*")
     .eq("deal_status", "portfolio")
-    .order("name");
+    .order("name") as unknown as Promise<{ data: import("@/lib/types").Company[] | null; error: unknown }>);
 
   // Get latest KPIs for portfolio companies
   const { data: kpiEntries } = await supabase

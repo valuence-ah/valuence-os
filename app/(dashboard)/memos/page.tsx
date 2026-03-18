@@ -9,10 +9,10 @@ export const metadata = { title: "IC Memos" };
 export default async function MemosPage() {
   const supabase = await createClient();
 
-  const { data: memos } = await supabase
+  const { data: memos } = await (supabase
     .from("ic_memos")
     .select("*, company:companies(id, name, type, sectors)")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }) as unknown as Promise<{ data: (import("@/lib/types").IcMemo & { company?: { id: string; name: string; type: string; sectors: string[] | null } | null })[] | null; error: unknown }>);
 
   return (
     <div className="flex flex-col h-full">

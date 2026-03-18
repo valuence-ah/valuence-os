@@ -17,9 +17,9 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
 
   const [{ data: company }, { data: contacts }, { data: interactions }, { data: deals }] = await Promise.all([
     supabase.from("companies").select("*").eq("id", id).single() as unknown as Promise<{ data: Company | null; error: unknown }>,
-    supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }),
-    supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(10),
-    supabase.from("deals").select("*").eq("company_id", id).order("created_at", { ascending: false }),
+    supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }) as unknown as Promise<{ data: Contact[] | null; error: unknown }>,
+    supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(10) as unknown as Promise<{ data: import("@/lib/types").Interaction[] | null; error: unknown }>,
+    supabase.from("deals").select("*").eq("company_id", id).order("created_at", { ascending: false }) as unknown as Promise<{ data: Deal[] | null; error: unknown }>,
   ]);
 
   if (!company) notFound();

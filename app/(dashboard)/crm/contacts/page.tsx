@@ -15,11 +15,11 @@ export default async function ContactsPage() {
       .from("contacts")
       .select("*, company:companies(id, name, type)")
       .eq("status", "active")
-      .order("updated_at", { ascending: false }),
+      .order("updated_at", { ascending: false }) as unknown as Promise<{ data: (import("@/lib/types").Contact & { company?: { id: string; name: string; type: string } | null })[] | null; error: unknown }>,
     supabase
       .from("contacts")
       .select("*", { count: "exact", head: true })
-      .eq("status", "pending"),
+      .eq("status", "pending") as unknown as Promise<{ count: number | null; error: unknown }>,
   ]);
 
   const PendingBadge = pendingCount && pendingCount > 0 ? (
