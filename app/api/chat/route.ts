@@ -28,6 +28,13 @@ export async function POST(req: Request) {
   // We run several quick queries to give Claude real-time fund data.
   // This is a "retrieval-augmented" approach without needing vector search for simple queries.
 
+  type CompanyRow = { id: string; name: string; type: string; deal_status: string | null; sectors: string[] | null; stage: string | null; description: string | null; location_city: string | null; location_country: string | null; funding_raised: number | null; source: string | null; created_at: string };
+  type DealRow = { stage: string; instrument: string | null; investment_amount: number | null; valuation_cap: number | null; company?: { name: string; sectors: string[] | null } | null };
+  type PortfolioRow = { name: string; sectors: string[] | null; deal_status: string | null; funding_raised: number | null };
+  type LpRow = { stage: string; target_allocation: number | null; committed_amount: number | null; fund_vehicle: string | null; company?: { name: string; lp_type: string | null } | null };
+  type SignalRow = { source: string; signal_type: string; title: string | null; relevance_score: number | null; sector_tags: string[] | null; status: string; published_date: string | null };
+  type MemoRow = { title: string; recommendation: string | null; status: string; company?: { name: string; sectors: string[] | null } | null; created_at: string };
+
   const [
     { data: companies },
     { data: deals },
@@ -36,12 +43,12 @@ export async function POST(req: Request) {
     { data: recentSignals },
     { data: recentMemos },
   ] = await Promise.all([
-    supabase.from("companies").select("id, name, type, deal_status, sectors, stage, description, location_city, location_country, funding_raised, source, created_at").order("updated_at", { ascending: false }).limit(50),
-    supabase.from("deals").select("stage, instrument, investment_amount, valuation_cap, company:companies(name, sectors)").neq("stage", "passed").order("created_at", { ascending: false }).limit(30),
-    supabase.from("companies").select("name, sectors, deal_status, funding_raised").eq("deal_status", "portfolio"),
-    supabase.from("lp_relationships").select("stage, target_allocation, committed_amount, fund_vehicle, company:companies(name, lp_type)").neq("stage", "passed").limit(30),
-    supabase.from("sourcing_signals").select("source, signal_type, title, relevance_score, sector_tags, status, published_date").eq("status", "new").order("relevance_score", { ascending: false }).limit(20),
-    supabase.from("ic_memos").select("title, recommendation, status, company:companies(name, sectors), created_at").order("created_at", { ascending: false }).limit(10),
+    supabase.from("companies").select("id, name, type, deal_status, sectors, stage, description, location_city, location_country, funding_raised, source, created_at").order("updated_at", { ascending: false }).limit(50) as unknown as Promise<{ data: CompanyRow[] | null; error: unknown }>,
+    supabase.from("deals").select("stage, instrument, investment_amount, valuation_cap, company:companies(name, sectors)").neq("stage", "passed").order("created_at", { ascending: false }).limit(30) as unknown as Promise<{ data: DealRow[] | null; error: unknown }>,
+    supabase.from("companies").select("name, sectors, deal_status, funding_raised").eq("deal_status", "portfolio") as unknown as Promise<{ data: PortfolioRow[] | null; error: unknown }>,
+    supabase.from("lp_relationships").select("stage, target_allocation, committed_amount, fund_vehicle, company:companies(name, lp_type)").neq("stage", "passed").limit(30) as unknown as Promise<{ data: LpRow[] | null; error: unknown }>,
+    supabase.from("sourcing_signals").select("source, signal_type, title, relevance_score, sector_tags, status, published_date").eq("status", "new").order("relevance_score", { ascending: false }).limit(20) as unknown as Promise<{ data: SignalRow[] | null; error: unknown }>,
+    supabase.from("ic_memos").select("title, recommendation, status, company:companies(name, sectors), created_at").order("created_at", { ascending: false }).limit(10) as unknown as Promise<{ data: MemoRow[] | null; error: unknown }>,
   ]);
 
   // ── 3. Format context as readable text for Claude ─────────────────────────
