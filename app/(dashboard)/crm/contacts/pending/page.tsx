@@ -19,14 +19,16 @@ export default async function PendingContactsPage() {
       .from("contacts")
       .select("*, company:companies(id, name, type)")
       .or("type.eq.other,location_country.is.null")
-      .order("created_at", { ascending: false }) as unknown as Promise<{
+      .order("created_at", { ascending: false })
+      .limit(10000) as unknown as Promise<{
         data: (import("@/lib/types").Contact & { company?: { id: string; name: string; type: string } | null })[] | null;
         error: unknown;
       }>,
     supabase
       .from("companies")
       .select("id, name, type")
-      .order("name") as unknown as Promise<{
+      .order("name")
+      .limit(10000) as unknown as Promise<{
         data: { id: string; name: string; type: string }[] | null;
         error: unknown;
       }>,

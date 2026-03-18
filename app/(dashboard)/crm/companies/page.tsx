@@ -14,6 +14,7 @@ export default async function AllCompaniesPage() {
     .from("companies")
     .select("*")
     .order("updated_at", { ascending: false })
+    .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };
 
   return (

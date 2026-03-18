@@ -69,17 +69,20 @@ export async function POST(req: Request) {
       .from("companies")
       .select("id, name, deal_status, sectors, sub_type, stage, description, location_city, location_country, funding_raised, website, first_contact_date, last_contact_date, notes, tags, source, updated_at")
       .eq("type", "startup")
-      .order("updated_at", { ascending: false }) as unknown as Promise<{ data: StartupRow[] | null; error: unknown }>,
+      .order("updated_at", { ascending: false })
+      .limit(10000) as unknown as Promise<{ data: StartupRow[] | null; error: unknown }>,
 
     supabase
       .from("contacts")
       .select("first_name, last_name, title, email, last_contact_date, company_id")
-      .order("last_contact_date", { ascending: false }) as unknown as Promise<{ data: ContactRow[] | null; error: unknown }>,
+      .order("last_contact_date", { ascending: false })
+      .limit(10000) as unknown as Promise<{ data: ContactRow[] | null; error: unknown }>,
 
     supabase
       .from("deals")
       .select("stage, instrument, investment_amount, valuation_cap, discount_pct, close_date, notes, company_id")
-      .order("created_at", { ascending: false }) as unknown as Promise<{ data: DealRow[] | null; error: unknown }>,
+      .order("created_at", { ascending: false })
+      .limit(10000) as unknown as Promise<{ data: DealRow[] | null; error: unknown }>,
   ]);
 
   // ── Index contacts and deals by company_id ────────────────────────────────

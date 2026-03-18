@@ -15,6 +15,7 @@ export default async function FundsPage() {
     .select("*")
     .eq("type", "fund")
     .order("name", { ascending: true })
+    .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };
 
   return (

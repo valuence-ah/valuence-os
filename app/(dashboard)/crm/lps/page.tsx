@@ -15,6 +15,7 @@ export default async function LpsPage() {
     .select("*")
     .eq("type", "lp")
     .order("name", { ascending: true })
+    .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };
 
   return (

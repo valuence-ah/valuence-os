@@ -15,7 +15,8 @@ export default async function ContactsPage() {
       .from("contacts")
       .select("*, company:companies(id, name, type)")
       .eq("status", "active")
-      .order("updated_at", { ascending: false }) as unknown as Promise<{ data: (import("@/lib/types").Contact & { company?: { id: string; name: string; type: string } | null })[] | null; error: unknown }>,
+      .order("updated_at", { ascending: false })
+      .limit(10000) as unknown as Promise<{ data: (import("@/lib/types").Contact & { company?: { id: string; name: string; type: string } | null })[] | null; error: unknown }>,
     supabase
       .from("contacts")
       .select("*", { count: "exact", head: true })

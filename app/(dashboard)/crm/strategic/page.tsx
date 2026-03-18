@@ -16,6 +16,7 @@ export default async function StrategicPage() {
     .select("*")
     .in("type", ["ecosystem_partner", "corporate"])
     .order("name", { ascending: true })
+    .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };
 
   return (

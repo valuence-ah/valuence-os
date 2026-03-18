@@ -16,6 +16,7 @@ export default async function OtherPage() {
     .select("*")
     .in("type", ["government", "other"])
     .order("name", { ascending: true })
+    .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };
 
   return (
