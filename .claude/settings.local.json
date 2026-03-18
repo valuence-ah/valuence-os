@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"C:\\\\Users\\\\sh225\\\\Valuence OS\\\\Airtable\"\" 2>/dev/null && echo \"---FILES ABOVE---\" || echo \"Folder empty or missing \")",
+      "Bash(DRY_RUN=true npx tsx scripts/migrate-airtable.ts)",
+      "Bash(npm install:*)",
+      "Bash(set DRY_RUN=true)",
+      "Bash(npx tsx:*)",
+      "Bash(ls \"C:/Users/sh225/Valuence OS/app/\\(dashboard\\)\")",
+      "Bash(ls \"C:/Users/sh225/Valuence OS/app/\\(dashboard\\)/crm\")",
+      "Bash(ls \"C:/Users/sh225/Valuence OS/app/\\(dashboard\\)/pipeline\")",
+      "Bash(ls \"C:/Users/sh225/Valuence OS/app/\\(dashboard\\)/crm/contacts\")",
+      "mcp__518fd9c7-9e4a-4805-8c84-8f4f11635e15__apply_migration"
+    ]
+  }
+}
