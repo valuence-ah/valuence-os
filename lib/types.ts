@@ -210,21 +210,28 @@ export interface LpRelationship {
 }
 
 // ── Supabase Database type (used to type the Supabase client) ─────────────────
+// Includes all required fields for Supabase v2 TypeScript inference to work
+// (Relationships, Views, Functions, Enums, CompositeTypes).
 export type Database = {
   public: {
     Tables: {
-      profiles:           { Row: Profile;          Insert: Partial<Profile>;          Update: Partial<Profile> };
-      companies:          { Row: Company;           Insert: Partial<Company>;           Update: Partial<Company> };
-      contacts:           { Row: Contact;           Insert: Partial<Contact>;           Update: Partial<Contact> };
-      interactions:       { Row: Interaction;       Insert: Partial<Interaction>;       Update: Partial<Interaction> };
-      deals:              { Row: Deal;              Insert: Partial<Deal>;              Update: Partial<Deal> };
-      ic_memos:           { Row: IcMemo;            Insert: Partial<IcMemo>;            Update: Partial<IcMemo> };
-      kpi_templates:      { Row: KpiTemplate;       Insert: Partial<KpiTemplate>;       Update: Partial<KpiTemplate> };
-      kpi_entries:        { Row: KpiEntry;          Insert: Partial<KpiEntry>;          Update: Partial<KpiEntry> };
-      sourcing_signals:   { Row: SourcingSignal;    Insert: Partial<SourcingSignal>;    Update: Partial<SourcingSignal> };
-      lp_relationships:   { Row: LpRelationship;    Insert: Partial<LpRelationship>;    Update: Partial<LpRelationship> };
-      chat_sessions:      { Row: { id: string; title: string; created_by: string | null; created_at: string; updated_at: string }; Insert: Partial<{ id: string; title: string; created_by: string | null }>; Update: Partial<{ title: string }> };
-      chat_messages:      { Row: { id: string; session_id: string; role: "user" | "assistant"; content: string; context_used: string[] | null; created_at: string }; Insert: Partial<{ session_id: string; role: "user" | "assistant"; content: string; context_used: string[] | null }>; Update: never };
+      profiles:           { Row: Profile;          Insert: Partial<Profile>;          Update: Partial<Profile>;          Relationships: [] };
+      companies:          { Row: Company;           Insert: Partial<Company>;           Update: Partial<Company>;           Relationships: [] };
+      contacts:           { Row: Contact;           Insert: Partial<Contact>;           Update: Partial<Contact>;           Relationships: [] };
+      interactions:       { Row: Interaction;       Insert: Partial<Interaction>;       Update: Partial<Interaction>;       Relationships: [] };
+      deals:              { Row: Deal;              Insert: Partial<Deal>;              Update: Partial<Deal>;              Relationships: [] };
+      documents:          { Row: { id: string; company_id: string | null; name: string; type: string | null; file_url: string | null; storage_path: string | null; ai_summary: string | null; created_at: string }; Insert: Partial<{ company_id: string | null; name: string; type: string | null; file_url: string | null; storage_path: string | null; ai_summary: string | null }>; Update: Partial<{ name: string; type: string | null; file_url: string | null; ai_summary: string | null }>; Relationships: [] };
+      ic_memos:           { Row: IcMemo;            Insert: Partial<IcMemo>;            Update: Partial<IcMemo>;            Relationships: [] };
+      kpi_templates:      { Row: KpiTemplate;       Insert: Partial<KpiTemplate>;       Update: Partial<KpiTemplate>;       Relationships: [] };
+      kpi_entries:        { Row: KpiEntry;          Insert: Partial<KpiEntry>;          Update: Partial<KpiEntry>;          Relationships: [] };
+      sourcing_signals:   { Row: SourcingSignal;    Insert: Partial<SourcingSignal>;    Update: Partial<SourcingSignal>;    Relationships: [] };
+      lp_relationships:   { Row: LpRelationship;    Insert: Partial<LpRelationship>;    Update: Partial<LpRelationship>;    Relationships: [] };
+      chat_sessions:      { Row: { id: string; title: string; created_by: string | null; created_at: string; updated_at: string }; Insert: Partial<{ id: string; title: string; created_by: string | null }>; Update: Partial<{ title: string }>; Relationships: [] };
+      chat_messages:      { Row: { id: string; session_id: string; role: "user" | "assistant"; content: string; context_used: string[] | null; created_at: string }; Insert: Partial<{ session_id: string; role: "user" | "assistant"; content: string; context_used: string[] | null }>; Update: never; Relationships: [] };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 };
