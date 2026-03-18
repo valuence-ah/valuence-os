@@ -4,7 +4,7 @@
 // Streams responses in real-time. Uses Vercel AI SDK useChat hook.
 // Suggested prompts to help users get started.
 
-import { useChat } from "ai/react";
+import { useChat } from "@ai-sdk/react";
 import { useEffect, useRef } from "react";
 import { Send, Sparkles, RefreshCw, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
