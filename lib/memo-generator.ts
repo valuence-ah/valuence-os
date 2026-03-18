@@ -1,11 +1,10 @@
 // ─── Shared IC Memo Generator ─────────────────────────────────────────────────
 // Used by both /api/memos/generate (user-triggered) and
-// /api/webhooks/generate-memo (Make.com automation).
+// /api/webhooks/generate-memo (automation).
 
-import Anthropic from "@anthropic-ai/sdk";
+import { generateText } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
 import type { SupabaseClient } from "@supabase/supabase-js";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 export async function generateMemo(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,9 +65,8 @@ ${documents?.map((d: { name: string; type: string; ai_summary?: string }) =>
 ).join("\n") || "None uploaded"}
 ${extraContext ? `\nADDITIONAL CONTEXT (from deck / transcript):\n${extraContext.slice(0, 3000)}` : ""}`;
 
-  const message = await anthropic.messages.create({
-    model: "claude-opus-4-5",
-    max_tokens: 4096,
+  const { text } = await generateText({
+    model: anthropic("claude-opus-4-5"),
     system: `You are a senior venture capital analyst at Valuence Ventures, a deeptech fund focused on cleantech, techbio, and advanced materials at pre-seed and seed stage.
 
 Write a comprehensive IC (Investment Committee) memo based on the provided company data, meeting notes, transcripts, and deck. Be analytical, objective, and specific. Use Valuence's focus areas to evaluate fit.
@@ -91,7 +89,6 @@ Return ONLY a valid JSON object with these exact keys (no markdown, no extra tex
     messages: [{ role: "user", content: `Write an IC memo for this company:\n\n${context}` }],
   });
 
-  const text = message.content[0].type === "text" ? message.content[0].text : "{}";
   const clean = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
   let sections: Record<string, string>;

@@ -9,13 +9,14 @@ import { formatCurrency, formatDate, COMPANY_TYPE_COLORS, DEAL_STAGE_COLORS, DEA
 import { Globe, Linkedin, ExternalLink, MapPin, Calendar, DollarSign } from "lucide-react";
 import Link from "next/link";
 import { CompanyDetailClient } from "@/components/crm/company-detail-client";
+import type { Company, Contact, Deal } from "@/lib/types";
 
 export default async function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
   const [{ data: company }, { data: contacts }, { data: interactions }, { data: deals }] = await Promise.all([
-    supabase.from("companies").select("*").eq("id", id).single(),
+    supabase.from("companies").select("*").eq("id", id).single() as unknown as Promise<{ data: Company | null; error: unknown }>,
     supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }),
     supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(10),
     supabase.from("deals").select("*").eq("company_id", id).order("created_at", { ascending: false }),
