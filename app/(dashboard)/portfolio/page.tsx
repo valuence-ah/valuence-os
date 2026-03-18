@@ -18,11 +18,11 @@ export default async function PortfolioPage() {
     .order("name") as unknown as Promise<{ data: import("@/lib/types").Company[] | null; error: unknown }>);
 
   // Get latest KPIs for portfolio companies
-  const { data: kpiEntries } = await supabase
+  const { data: kpiEntries } = await (supabase
     .from("kpi_entries")
     .select("*")
     .in("company_id", portfolioCompanies?.map(c => c.id) ?? [])
-    .order("period_end", { ascending: false });
+    .order("period_end", { ascending: false }) as unknown as Promise<{ data: import("@/lib/types").KpiEntry[] | null; error: unknown }>);
 
   // Group latest KPIs by company
   const latestKpis: Record<string, Record<string, { value: number; unit: string | null }>> = {};
