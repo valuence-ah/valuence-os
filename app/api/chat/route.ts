@@ -101,5 +101,5 @@ INSTRUCTIONS:
     maxOutputTokens: 2048,
   });
 
-  return result.toDataStreamResponse();
+  return result.toTextStreamResponse();
 }
