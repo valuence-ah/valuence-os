@@ -1,27 +1,29 @@
 "use client";
 // ─── CRM Companies View ────────────────────────────────────────────────────────
-// Unified table for all 6 CRM views with filters, sortable columns, and a
-// "Customize" panel where users can toggle which columns are visible.
-// Column visibility is persisted to localStorage per view.
+// Unified table for all 6 CRM views with filters, sortable + resizable columns,
+// and a "Customize" panel. Column visibility, order, and widths are persisted to
+// localStorage per view so each view has an independent configuration.
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, CompanyType } from "@/lib/types";
 import { cn, formatCurrency, formatDate, truncate } from "@/lib/utils";
 import {
   Plus, Search, ExternalLink, ChevronUp, ChevronDown,
-  ArrowUpDown, X, Settings2, GripVertical, RotateCcw,
+  ArrowUpDown, X, Settings2, RotateCcw,
 } from "lucide-react";
 
 export type CrmView = "pipeline" | "lps" | "funds" | "strategic" | "other" | "all";
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 
-type ColumnKey =
-  | "type" | "deal_status" | "sectors" | "stage"
-  | "aum" | "funding_raised" | "location"
-  | "last_contact_date" | "website" | "source" | "created_at";
+export type ColumnKey =
+  | "type" | "deal_status" | "sectors" | "sub_type" | "stage"
+  | "aum" | "funding_raised" | "last_funding_date"
+  | "location" | "last_contact_date" | "first_contact_date" | "created_at"
+  | "website" | "linkedin_url" | "source"
+  | "description" | "tags" | "notes" | "lp_type" | "fund_focus";
 
 type SortKey = "name" | "updated_at" | "last_contact_date" | "funding_raised" | "aum" | "created_at";
 type SortDir = "asc" | "desc";
@@ -29,8 +31,9 @@ type SortDir = "asc" | "desc";
 interface ColumnDef {
   key: ColumnKey;
   label: string;
+  group: "core" | "financial" | "dates" | "links" | "extra";
   sortKey?: SortKey;
-  minWidth?: string;
+  defaultWidth: number;
   render: (c: Company) => React.ReactNode;
 }
 
@@ -60,10 +63,10 @@ const TYPE_LABEL: Record<string, string> = {
   government: "Government", other: "Other",
 };
 
-// All possible columns (rendered as cells)
+// All possible columns (every view can access all of these)
 const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
   type: {
-    key: "type", label: "Type", minWidth: "100px",
+    key: "type", label: "Type", group: "core", defaultWidth: 110,
     render: c => (
       <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium", TYPE_BADGE[c.type] ?? "bg-slate-50 text-slate-600")}>
         {TYPE_LABEL[c.type] ?? c.type}
@@ -71,7 +74,7 @@ const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
     ),
   },
   deal_status: {
-    key: "deal_status", label: "Status", minWidth: "110px",
+    key: "deal_status", label: "Status", group: "core", defaultWidth: 115,
     render: c => c.deal_status
       ? <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium", DEAL_STATUS_BADGE[c.deal_status] ?? "bg-slate-50 text-slate-600")}>
           {DEAL_STATUS_LABEL[c.deal_status] ?? c.deal_status}
@@ -79,7 +82,7 @@ const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
       : <span className="text-slate-300 text-xs">—</span>,
   },
   sectors: {
-    key: "sectors", label: "Sectors", minWidth: "140px",
+    key: "sectors", label: "Sectors", group: "core", defaultWidth: 160,
     render: c => (
       <div className="flex flex-wrap gap-1">
         {(c.sectors ?? []).slice(0, 2).map(s => (
@@ -90,66 +93,129 @@ const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
       </div>
     ),
   },
+  sub_type: {
+    key: "sub_type", label: "Sub-type", group: "core", defaultWidth: 120,
+    render: c => c.sub_type
+      ? <span className="text-xs text-slate-500 capitalize">{c.sub_type.replace(/_/g, " ")}</span>
+      : <span className="text-slate-300 text-xs">—</span>,
+  },
   stage: {
-    key: "stage", label: "Stage", minWidth: "90px",
+    key: "stage", label: "Stage", group: "core", defaultWidth: 100,
     render: c => c.stage
       ? <span className="bg-slate-100 text-slate-600 text-xs px-1.5 py-0.5 rounded capitalize">{c.stage.replace(/_/g, " ")}</span>
       : <span className="text-slate-300 text-xs">—</span>,
   },
   aum: {
-    key: "aum", label: "AUM", sortKey: "aum", minWidth: "110px",
+    key: "aum", label: "AUM", group: "financial", sortKey: "aum", defaultWidth: 120,
     render: c => c.aum
       ? <span className="text-sm text-slate-700">{formatCurrency(c.aum)}</span>
       : <span className="text-slate-300 text-xs">—</span>,
   },
   funding_raised: {
-    key: "funding_raised", label: "Total Raised", sortKey: "funding_raised", minWidth: "120px",
+    key: "funding_raised", label: "Total Raised", group: "financial", sortKey: "funding_raised", defaultWidth: 130,
     render: c => c.funding_raised
       ? <span className="text-sm text-slate-700">{formatCurrency(c.funding_raised)}</span>
       : <span className="text-slate-300 text-xs">—</span>,
   },
+  last_funding_date: {
+    key: "last_funding_date", label: "Last Funding", group: "financial", defaultWidth: 115,
+    render: c => c.last_funding_date
+      ? <span className="text-xs text-slate-400 whitespace-nowrap">{formatDate(c.last_funding_date)}</span>
+      : <span className="text-slate-300 text-xs">—</span>,
+  },
   location: {
-    key: "location", label: "Location", minWidth: "130px",
+    key: "location", label: "Location", group: "core", defaultWidth: 150,
     render: c => {
       const loc = [c.location_city, c.location_country].filter(Boolean).join(", ");
       return loc ? <span className="text-sm text-slate-500">{loc}</span> : <span className="text-slate-300 text-xs">—</span>;
     },
   },
   last_contact_date: {
-    key: "last_contact_date", label: "Last Contact", sortKey: "last_contact_date", minWidth: "110px",
+    key: "last_contact_date", label: "Last Contact", group: "dates", sortKey: "last_contact_date", defaultWidth: 120,
     render: c => c.last_contact_date
       ? <span className="text-xs text-slate-400 whitespace-nowrap">{formatDate(c.last_contact_date)}</span>
       : <span className="text-slate-300 text-xs">—</span>,
   },
+  first_contact_date: {
+    key: "first_contact_date", label: "First Contact", group: "dates", defaultWidth: 120,
+    render: c => c.first_contact_date
+      ? <span className="text-xs text-slate-400 whitespace-nowrap">{formatDate(c.first_contact_date)}</span>
+      : <span className="text-slate-300 text-xs">—</span>,
+  },
+  created_at: {
+    key: "created_at", label: "Date Added", group: "dates", sortKey: "created_at", defaultWidth: 110,
+    render: c => <span className="text-xs text-slate-400 whitespace-nowrap">{formatDate(c.created_at)}</span>,
+  },
   website: {
-    key: "website", label: "Website", minWidth: "80px",
+    key: "website", label: "Website", group: "links", defaultWidth: 150,
     render: c => c.website
       ? <a href={c.website} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-          className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 truncate max-w-[120px]">
+          className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 truncate max-w-[130px]">
           <ExternalLink size={12} />
           {c.website.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}
         </a>
       : <span className="text-slate-300 text-xs">—</span>,
   },
+  linkedin_url: {
+    key: "linkedin_url", label: "LinkedIn", group: "links", defaultWidth: 90,
+    render: c => c.linkedin_url
+      ? <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+          className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700">
+          <ExternalLink size={12} /> Profile
+        </a>
+      : <span className="text-slate-300 text-xs">—</span>,
+  },
   source: {
-    key: "source", label: "Source", minWidth: "100px",
+    key: "source", label: "Source", group: "extra", defaultWidth: 110,
     render: c => c.source
       ? <span className="text-xs text-slate-500">{c.source}</span>
       : <span className="text-slate-300 text-xs">—</span>,
   },
-  created_at: {
-    key: "created_at", label: "Date Added", sortKey: "created_at", minWidth: "100px",
-    render: c => <span className="text-xs text-slate-400 whitespace-nowrap">{formatDate(c.created_at)}</span>,
+  lp_type: {
+    key: "lp_type", label: "LP Type", group: "extra", defaultWidth: 120,
+    render: c => c.lp_type
+      ? <span className="text-xs text-slate-500 capitalize">{c.lp_type.replace(/_/g, " ")}</span>
+      : <span className="text-slate-300 text-xs">—</span>,
+  },
+  fund_focus: {
+    key: "fund_focus", label: "Fund Focus", group: "extra", defaultWidth: 140,
+    render: c => c.fund_focus
+      ? <span className="text-xs text-slate-500">{truncate(c.fund_focus, 40)}</span>
+      : <span className="text-slate-300 text-xs">—</span>,
+  },
+  description: {
+    key: "description", label: "Description", group: "extra", defaultWidth: 200,
+    render: c => c.description
+      ? <span className="text-xs text-slate-500">{truncate(c.description, 60)}</span>
+      : <span className="text-slate-300 text-xs">—</span>,
+  },
+  tags: {
+    key: "tags", label: "Tags", group: "extra", defaultWidth: 150,
+    render: c => (c.tags ?? []).length > 0
+      ? <div className="flex flex-wrap gap-1">
+          {(c.tags ?? []).slice(0, 3).map(t => (
+            <span key={t} className="bg-violet-50 text-violet-700 text-xs px-1.5 py-0.5 rounded border border-violet-100">{t}</span>
+          ))}
+          {(c.tags?.length ?? 0) > 3 && <span className="text-slate-400 text-xs">+{(c.tags?.length ?? 0) - 3}</span>}
+        </div>
+      : <span className="text-slate-300 text-xs">—</span>,
+  },
+  notes: {
+    key: "notes", label: "Notes", group: "extra", defaultWidth: 200,
+    render: c => c.notes
+      ? <span className="text-xs text-slate-500">{truncate(c.notes, 60)}</span>
+      : <span className="text-slate-300 text-xs">—</span>,
   },
 };
 
-// ── Per-view configuration ─────────────────────────────────────────────────────
+const ALL_COLS = Object.keys(ALL_COLUMN_DEFS) as ColumnKey[];
+
+// ── Per-view default configuration ────────────────────────────────────────────
 
 interface ViewConfig {
   emptyText: string;
   defaultType: CompanyType;
   addLabel: string;
-  availableCols: ColumnKey[];
   defaultCols: ColumnKey[];
   sortKeys: { key: SortKey; label: string }[];
   filters: ("deal_status" | "sector" | "stage" | "sub_type" | "type")[];
@@ -159,8 +225,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   pipeline: {
     emptyText: "No startups in the pipeline yet.",
     defaultType: "startup", addLabel: "Add Startup",
-    availableCols: ["deal_status", "sectors", "stage", "funding_raised", "location", "last_contact_date", "website", "source", "created_at"],
-    defaultCols:   ["deal_status", "sectors", "stage", "location", "last_contact_date"],
+    defaultCols: ["deal_status", "sectors", "stage", "location", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "updated_at", label: "Updated" },
       { key: "last_contact_date", label: "Last Contact" }, { key: "funding_raised", label: "Funding" },
@@ -170,8 +235,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   lps: {
     emptyText: "No limited partners yet.",
     defaultType: "lp", addLabel: "Add LP",
-    availableCols: ["aum", "location", "last_contact_date", "website", "source", "created_at"],
-    defaultCols:   ["aum", "location", "last_contact_date"],
+    defaultCols: ["aum", "lp_type", "location", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "aum", label: "AUM" },
       { key: "last_contact_date", label: "Last Contact" },
@@ -181,8 +245,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   funds: {
     emptyText: "No funds yet.",
     defaultType: "fund", addLabel: "Add Fund",
-    availableCols: ["location", "last_contact_date", "website", "source", "created_at"],
-    defaultCols:   ["location", "last_contact_date"],
+    defaultCols: ["fund_focus", "location", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "last_contact_date", label: "Last Contact" },
     ],
@@ -191,8 +254,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   strategic: {
     emptyText: "No strategic partners yet.",
     defaultType: "ecosystem_partner", addLabel: "Add Company",
-    availableCols: ["type", "location", "last_contact_date", "website", "source", "created_at"],
-    defaultCols:   ["type", "location", "last_contact_date"],
+    defaultCols: ["type", "location", "last_contact_date", "website"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "last_contact_date", label: "Last Contact" },
     ],
@@ -201,8 +263,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   other: {
     emptyText: "No other companies yet.",
     defaultType: "government", addLabel: "Add Company",
-    availableCols: ["type", "location", "last_contact_date", "website", "source", "created_at"],
-    defaultCols:   ["type", "location", "last_contact_date"],
+    defaultCols: ["type", "location", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "last_contact_date", label: "Last Contact" },
     ],
@@ -211,8 +272,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   all: {
     emptyText: "No companies yet.",
     defaultType: "startup", addLabel: "Add Company",
-    availableCols: ["type", "deal_status", "sectors", "stage", "aum", "funding_raised", "location", "last_contact_date", "website", "source", "created_at"],
-    defaultCols:   ["type", "deal_status", "sectors", "location", "last_contact_date"],
+    defaultCols: ["type", "deal_status", "sectors", "location", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "updated_at", label: "Updated" },
       { key: "last_contact_date", label: "Last Contact" },
@@ -255,6 +315,15 @@ const FORM_SECTORS = [
   "Carbon Capture", "Climate Tech", "Synthetic Biology", "Agtech", "Other",
 ];
 
+// Column groups for the customize panel
+const COL_GROUPS: { key: ColumnDef["group"]; label: string }[] = [
+  { key: "core",      label: "Core Fields" },
+  { key: "financial", label: "Financial" },
+  { key: "dates",     label: "Dates" },
+  { key: "links",     label: "Links" },
+  { key: "extra",     label: "Extra" },
+];
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface Props {
@@ -267,29 +336,66 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
   const supabase = createClient();
   const cfg      = VIEW_CONFIG[view];
 
-  // ── Column visibility (persisted to localStorage) ──────────────────────────
-  const storageKey = `crm_cols_${view}`;
+  // ── localStorage keys ──────────────────────────────────────────────────────
+  const colsKey   = `crm_cols_${view}`;
+  const widthsKey = `crm_widths_${view}`;
 
+  // ── Column visibility (per view, persisted) ────────────────────────────────
   const [visibleCols, setVisibleCols] = useState<ColumnKey[]>(cfg.defaultCols);
-  const [colsLoaded, setColsLoaded]   = useState(false);
+  const [colsLoaded,  setColsLoaded]  = useState(false);
+
+  // ── Column widths (per view, persisted) ───────────────────────────────────
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed: ColumnKey[] = JSON.parse(saved);
-        // Only keep cols that are still available for this view
-        const valid = parsed.filter(k => cfg.availableCols.includes(k));
-        if (valid.length > 0) { setVisibleCols(valid); }
+      const savedCols = localStorage.getItem(colsKey);
+      if (savedCols) {
+        const parsed: ColumnKey[] = JSON.parse(savedCols);
+        const valid = parsed.filter(k => ALL_COLS.includes(k));
+        if (valid.length > 0) setVisibleCols(valid);
       }
+      const savedWidths = localStorage.getItem(widthsKey);
+      if (savedWidths) setColWidths(JSON.parse(savedWidths));
     } catch { /* ignore */ }
     setColsLoaded(true);
-  }, [storageKey, cfg.availableCols]);
+  }, [colsKey, widthsKey]);
 
   const saveVisibleCols = useCallback((cols: ColumnKey[]) => {
     setVisibleCols(cols);
-    try { localStorage.setItem(storageKey, JSON.stringify(cols)); } catch { /* ignore */ }
-  }, [storageKey]);
+    try { localStorage.setItem(colsKey, JSON.stringify(cols)); } catch { /* ignore */ }
+  }, [colsKey]);
+
+  const saveColWidths = useCallback((widths: Record<string, number>) => {
+    setColWidths(widths);
+    try { localStorage.setItem(widthsKey, JSON.stringify(widths)); } catch { /* ignore */ }
+  }, [widthsKey]);
+
+  // ── Column resize via drag ─────────────────────────────────────────────────
+  const resizeRef = useRef<{ key: string; startX: number; startW: number } | null>(null);
+
+  function startResize(e: React.MouseEvent<HTMLDivElement>, colKey: string, currentW: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeRef.current = { key: colKey, startX: e.clientX, startW: currentW };
+
+    function onMove(ev: MouseEvent) {
+      if (!resizeRef.current) return;
+      const newW = Math.max(60, resizeRef.current.startW + (ev.clientX - resizeRef.current.startX));
+      setColWidths(prev => ({ ...prev, [resizeRef.current!.key]: newW }));
+    }
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      setColWidths(prev => {
+        try { localStorage.setItem(widthsKey, JSON.stringify(prev)); } catch { /* ignore */ }
+        return prev;
+      });
+      resizeRef.current = null;
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [companies, setCompanies]   = useState<Company[]>(initialCompanies);
@@ -349,24 +455,36 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
     else { setSortKey(key); setSortDir("asc"); }
   }
 
-  function ThSort({ label, sk, className }: { label: string; sk?: SortKey; className?: string }) {
-    if (!sk) return (
-      <th className={cn("px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap", className)}>
-        {label}
-      </th>
-    );
-    const active = sortKey === sk;
+  // ── Column header with resize handle ──────────────────────────────────────
+  function ThCell({ colKey, label, sk }: { colKey: string; label: string; sk?: SortKey }) {
+    const w = colWidths[colKey] ?? ALL_COLUMN_DEFS[colKey as ColumnKey]?.defaultWidth ?? 120;
+    const active = sk && sortKey === sk;
     return (
-      <th className={cn("px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap", className)}>
-        <button onClick={() => handleSort(sk)} className="flex items-center gap-1 group hover:text-slate-800 transition-colors">
-          {label}
-          {active
-            ? sortDir === "asc" ? <ChevronUp size={12} className="text-blue-500" /> : <ChevronDown size={12} className="text-blue-500" />
-            : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-40 transition-opacity" />}
-        </button>
+      <th
+        className="relative group/th px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap select-none"
+        style={{ width: w, minWidth: w }}
+      >
+        {sk ? (
+          <button onClick={() => handleSort(sk)} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
+            {label}
+            {active
+              ? sortDir === "asc" ? <ChevronUp size={12} className="text-blue-500" /> : <ChevronDown size={12} className="text-blue-500" />
+              : <ArrowUpDown size={12} className="opacity-0 group-hover/th:opacity-40 transition-opacity" />}
+          </button>
+        ) : (
+          <span>{label}</span>
+        )}
+        {/* Resize handle */}
+        <div
+          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize opacity-0 group-hover/th:opacity-100 hover:bg-blue-300 transition-opacity z-10"
+          onMouseDown={e => startResize(e, colKey, w)}
+        />
       </th>
     );
   }
+
+  // Company name column width
+  const nameColW = colWidths["__name__"] ?? 200;
 
   // ── Form helpers ───────────────────────────────────────────────────────────
   function setField(k: keyof Company, v: unknown) { setForm(p => ({ ...p, [k]: v })); }
@@ -394,7 +512,7 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
     }
   }
 
-  // ── Customize: toggle a column on/off ─────────────────────────────────────
+  // ── Customize: toggle a column ─────────────────────────────────────────────
   function toggleCol(key: ColumnKey) {
     saveVisibleCols(
       visibleCols.includes(key)
@@ -403,7 +521,6 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
     );
   }
 
-  // Move column up/down in the order
   function moveCol(key: ColumnKey, dir: -1 | 1) {
     const idx = visibleCols.indexOf(key);
     if (idx < 0) return;
@@ -415,7 +532,7 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
-  if (!colsLoaded) return null; // avoid hydration mismatch
+  if (!colsLoaded) return null;
 
   return (
     <div className="flex-1 overflow-auto p-6 space-y-4">
@@ -454,8 +571,6 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
 
         {/* Row 2: filters + sort + count */}
         <div className="flex flex-wrap items-center gap-2">
-
-          {/* Pipeline filters */}
           {cfg.filters.includes("deal_status") && (
             <select value={fStatus} onChange={e => setFStatus(e.target.value)}
               className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400">
@@ -493,8 +608,7 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
             </select>
           )}
 
-          {/* Sort */}
-          {(cfg.filters.length > 0) && <div className="h-4 w-px bg-slate-200 mx-0.5" />}
+          {cfg.filters.length > 0 && <div className="h-4 w-px bg-slate-200 mx-0.5" />}
           <span className="text-xs text-slate-400">Sort:</span>
           {cfg.sortKeys.map(({ key, label }) => {
             const active = sortKey === key;
@@ -509,7 +623,6 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
             );
           })}
 
-          {/* Clear filters */}
           {activeFilters > 0 && (
             <button onClick={() => { setFStatus(""); setFSector(""); setFStage(""); setFSubType(""); setFType(""); }}
               className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 ml-1 transition-colors">
@@ -524,15 +637,41 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
       {/* ── Table ── */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table
+            className="border-collapse"
+            style={{ tableLayout: "fixed", width: "max-content", minWidth: "100%" }}
+          >
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <ThSort label="Company" sk="name" className="min-w-[180px]" />
+                {/* Company name column — also resizable */}
+                <th
+                  className="relative group/th px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap select-none"
+                  style={{ width: nameColW, minWidth: nameColW }}
+                >
+                  <button onClick={() => handleSort("name")} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
+                    Company
+                    {sortKey === "name"
+                      ? sortDir === "asc" ? <ChevronUp size={12} className="text-blue-500" /> : <ChevronDown size={12} className="text-blue-500" />
+                      : <ArrowUpDown size={12} className="opacity-0 group-hover/th:opacity-40 transition-opacity" />}
+                  </button>
+                  <div
+                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize opacity-0 group-hover/th:opacity-100 hover:bg-blue-300 transition-opacity z-10"
+                    onMouseDown={e => startResize(e, "__name__", nameColW)}
+                  />
+                </th>
+
                 {visibleCols.map(key => {
                   const def = ALL_COLUMN_DEFS[key];
-                  return <ThSort key={key} label={def.label} sk={def.sortKey} className={`min-w-[${def.minWidth ?? "100px"}]`} />;
+                  return (
+                    <ThCell
+                      key={key}
+                      colKey={key}
+                      label={def.label}
+                      sk={def.sortKey}
+                    />
+                  );
                 })}
-                <th className="w-8" />
+                <th className="w-8 min-w-8" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -546,18 +685,26 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
                 <tr key={c.id}
                   className="hover:bg-slate-50 cursor-pointer transition-colors"
                   onClick={() => router.push(`/crm/companies/${c.id}`)}>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900 text-sm">{c.name}</div>
+                  <td className="px-4 py-3" style={{ width: nameColW, minWidth: nameColW }}>
+                    <div className="font-medium text-slate-900 text-sm truncate">{c.name}</div>
                     {c.description && (
-                      <div className="text-xs text-slate-400 mt-0.5 max-w-xs">{truncate(c.description, 55)}</div>
+                      <div className="text-xs text-slate-400 mt-0.5 truncate">{truncate(c.description, 55)}</div>
                     )}
                   </td>
-                  {visibleCols.map(key => (
-                    <td key={key} className="px-4 py-3" onClick={key === "website" ? e => e.stopPropagation() : undefined}>
-                      {ALL_COLUMN_DEFS[key].render(c)}
-                    </td>
-                  ))}
-                  <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                  {visibleCols.map(key => {
+                    const w = colWidths[key] ?? ALL_COLUMN_DEFS[key].defaultWidth;
+                    return (
+                      <td
+                        key={key}
+                        className="px-4 py-3 overflow-hidden"
+                        style={{ width: w, minWidth: w, maxWidth: w }}
+                        onClick={key === "website" || key === "linkedin_url" ? e => e.stopPropagation() : undefined}
+                      >
+                        {ALL_COLUMN_DEFS[key].render(c)}
+                      </td>
+                    );
+                  })}
+                  <td className="px-3 py-3 w-8" onClick={e => e.stopPropagation()}>
                     {c.website && (
                       <a href={c.website} target="_blank" rel="noopener noreferrer"
                         className="text-slate-300 hover:text-blue-500 transition-colors">
@@ -575,78 +722,74 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
       {/* ── Customize panel (slide-in from right) ── */}
       {showCustomize && (
         <>
-          {/* Backdrop */}
           <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setShowCustomize(false)} />
-
-          {/* Panel */}
           <div className="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
               <div>
                 <h3 className="text-sm font-semibold text-slate-900">Customize Columns</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Choose which fields to show</p>
+                <p className="text-xs text-slate-500 mt-0.5">Toggle fields · drag edges to resize</p>
               </div>
               <button onClick={() => setShowCustomize(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <X size={18} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-3">
-              {/* Always-on columns note */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
               <div className="bg-slate-50 rounded-lg px-3 py-2.5 text-xs text-slate-500">
                 <span className="font-medium text-slate-700">Company Name</span> is always shown.
+                Drag the right edge of any column header to resize.
               </div>
 
-              {/* Column toggles */}
-              <div className="space-y-1">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Available Columns</p>
-
-                {cfg.availableCols.map(key => {
-                  const def = ALL_COLUMN_DEFS[key];
-                  const isOn = visibleCols.includes(key);
-                  const idx  = visibleCols.indexOf(key);
-                  return (
-                    <div key={key}
-                      className={cn("flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all",
-                        isOn ? "bg-blue-50 border-blue-200" : "bg-white border-slate-200 hover:border-slate-300")}>
-                      {/* Toggle */}
-                      <button onClick={() => toggleCol(key)}
-                        className={cn("w-9 h-5 rounded-full flex-shrink-0 relative transition-colors",
-                          isOn ? "bg-blue-600" : "bg-slate-200")}>
-                        <span className={cn("absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all",
-                          isOn ? "left-[18px]" : "left-0.5")} />
-                      </button>
-
-                      {/* Label */}
-                      <span className={cn("flex-1 text-sm font-medium", isOn ? "text-blue-900" : "text-slate-600")}>
-                        {def.label}
-                      </span>
-
-                      {/* Reorder arrows (only when visible) */}
-                      {isOn && (
-                        <div className="flex flex-col gap-0.5">
-                          <button onClick={() => moveCol(key, -1)} disabled={idx === 0}
-                            className="text-slate-300 hover:text-slate-600 disabled:opacity-20 transition-colors">
-                            <ChevronUp size={13} />
-                          </button>
-                          <button onClick={() => moveCol(key, 1)} disabled={idx === visibleCols.length - 1}
-                            className="text-slate-300 hover:text-slate-600 disabled:opacity-20 transition-colors">
-                            <ChevronDown size={13} />
-                          </button>
-                        </div>
-                      )}
+              {COL_GROUPS.map(group => {
+                const groupCols = ALL_COLS.filter(k => ALL_COLUMN_DEFS[k].group === group.key);
+                return (
+                  <div key={group.key}>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{group.label}</p>
+                    <div className="space-y-1">
+                      {groupCols.map(key => {
+                        const def = ALL_COLUMN_DEFS[key];
+                        const isOn = visibleCols.includes(key);
+                        const idx  = visibleCols.indexOf(key);
+                        return (
+                          <div key={key}
+                            className={cn("flex items-center gap-3 px-3 py-2 rounded-lg border transition-all",
+                              isOn ? "bg-blue-50 border-blue-200" : "bg-white border-slate-200 hover:border-slate-300")}>
+                            <button onClick={() => toggleCol(key)}
+                              className={cn("w-9 h-5 rounded-full flex-shrink-0 relative transition-colors",
+                                isOn ? "bg-blue-600" : "bg-slate-200")}>
+                              <span className={cn("absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all",
+                                isOn ? "left-[18px]" : "left-0.5")} />
+                            </button>
+                            <span className={cn("flex-1 text-sm font-medium", isOn ? "text-blue-900" : "text-slate-600")}>
+                              {def.label}
+                            </span>
+                            {isOn && (
+                              <div className="flex flex-col gap-0.5">
+                                <button onClick={() => moveCol(key, -1)} disabled={idx === 0}
+                                  className="text-slate-300 hover:text-slate-600 disabled:opacity-20 transition-colors">
+                                  <ChevronUp size={13} />
+                                </button>
+                                <button onClick={() => moveCol(key, 1)} disabled={idx === visibleCols.length - 1}
+                                  className="text-slate-300 hover:text-slate-600 disabled:opacity-20 transition-colors">
+                                  <ChevronDown size={13} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Footer */}
             <div className="px-5 py-4 border-t border-slate-200 flex gap-3">
               <button
-                onClick={() => saveVisibleCols(cfg.defaultCols)}
+                onClick={() => { saveVisibleCols(cfg.defaultCols); saveColWidths({}); }}
                 className="flex items-center gap-2 flex-1 justify-center py-2 border border-slate-200 text-slate-600 text-sm rounded-lg hover:bg-slate-50 transition-colors"
               >
-                <RotateCcw size={13} /> Reset to default
+                <RotateCcw size={13} /> Reset all
               </button>
               <button
                 onClick={() => setShowCustomize(false)}

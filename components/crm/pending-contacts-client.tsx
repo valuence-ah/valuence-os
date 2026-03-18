@@ -1,12 +1,13 @@
 "use client";
-// ─── Pending Contacts Client ──────────────────────────────────────────────────
-// Displays contacts with status = "pending" (created by Make.com automations).
-// User fills in type, title, city, country, then confirms → sets status = active.
+// ─── New Contacts Client ───────────────────────────────────────────────────────
+// Displays contacts that are missing Contact Type OR Location (Country).
+// User fills in type, title, city, country, then confirms → sets status = active
+// and location fields; also updates the linked company's type to match.
 // Or discards → deletes the contact.
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Contact, ContactType } from "@/lib/types";
+import type { Contact, ContactType, CompanyType } from "@/lib/types";
 import { getInitials, formatDate } from "@/lib/utils";
 import { Check, X, Mail, Phone, ExternalLink, Building2, UserPlus } from "lucide-react";
 
@@ -29,6 +30,16 @@ const CONTACT_TYPE_OPTIONS: { value: ContactType; label: string }[] = [
   { value: "other",             label: "Other" },
 ];
 
+// Maps contact type → company type for auto-routing
+const CONTACT_TO_COMPANY_TYPE: Partial<Record<ContactType, CompanyType>> = {
+  founder:           "startup",
+  lp:                "lp",
+  fund_manager:      "fund",
+  corporate:         "corporate",
+  ecosystem_partner: "ecosystem_partner",
+  government:        "government",
+};
+
 interface EditState {
   type: ContactType;
   title: string;
@@ -46,8 +57,8 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
       init[c.id] = {
         type:             c.type as ContactType,
         title:            c.title ?? "",
-        location_city:    "",
-        location_country: "",
+        location_city:    c.location_city ?? "",
+        location_country: c.location_country ?? "",
         company_id:       c.company_id ?? "",
       };
     });
@@ -62,30 +73,43 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
   async function confirm(contact: PendingContact) {
     setProcessing(prev => new Set(prev).add(contact.id));
     const edit = edits[contact.id];
+    const resolvedCompanyId = edit.company_id || contact.company_id || null;
 
-    const { error } = await supabase
+    // 1. Update the contact with proper location columns + type + status
+    const { error: contactErr } = await supabase
       .from("contacts")
       .update({
-        status:     "active",
-        type:       edit.type,
-        title:      edit.title || contact.title,
-        company_id: edit.company_id || contact.company_id || null,
-        // Store city/country in notes if no dedicated field
-        notes: [
-          contact.notes,
-          edit.location_city    ? `City: ${edit.location_city}`    : "",
-          edit.location_country ? `Country: ${edit.location_country}` : "",
-        ].filter(Boolean).join(" | ") || null,
+        status:           "active",
+        type:             edit.type,
+        title:            edit.title || contact.title || null,
+        company_id:       resolvedCompanyId,
+        location_city:    edit.location_city    || null,
+        location_country: edit.location_country || null,
       })
       .eq("id", contact.id);
 
-    setProcessing(prev => { const s = new Set(prev); s.delete(contact.id); return s; });
-
-    if (!error) {
-      setContacts(prev => prev.filter(c => c.id !== contact.id));
-    } else {
-      alert(error.message);
+    if (contactErr) {
+      setProcessing(prev => { const s = new Set(prev); s.delete(contact.id); return s; });
+      alert(contactErr.message);
+      return;
     }
+
+    // 2. Auto-route: update the linked company's type if a mapping exists
+    const targetCompanyType = CONTACT_TO_COMPANY_TYPE[edit.type];
+    if (resolvedCompanyId && targetCompanyType) {
+      // Only update if company is currently "other" (i.e. not yet classified)
+      const linkedCompany = companies.find(co => co.id === resolvedCompanyId)
+        ?? contact.company;
+      if (linkedCompany && linkedCompany.type === "other") {
+        await supabase
+          .from("companies")
+          .update({ type: targetCompanyType })
+          .eq("id", resolvedCompanyId);
+      }
+    }
+
+    setProcessing(prev => { const s = new Set(prev); s.delete(contact.id); return s; });
+    setContacts(prev => prev.filter(c => c.id !== contact.id));
   }
 
   async function discard(id: string) {
@@ -101,8 +125,8 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center text-slate-400">
           <UserPlus size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm font-medium">No pending contacts</p>
-          <p className="text-xs mt-1">New contacts from emails will appear here automatically.</p>
+          <p className="text-sm font-medium">No new contacts</p>
+          <p className="text-xs mt-1">Contacts missing a type or country will appear here for review.</p>
         </div>
       </div>
     );
@@ -111,13 +135,14 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
   return (
     <div className="flex-1 overflow-auto p-6">
       <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700">
-        <strong>{contacts.length} contact{contacts.length !== 1 ? "s" : ""}</strong> captured automatically from email.
+        <strong>{contacts.length} contact{contacts.length !== 1 ? "s" : ""}</strong> need enrichment.
         Fill in the type, title, and location, then click <strong>Confirm</strong> to add to your CRM.
+        The linked company will be auto-routed to the correct section.
       </div>
 
       <div className="space-y-3">
         {contacts.map(c => {
-          const edit = edits[c.id] ?? { type: "other", title: "", location_city: "", location_country: "", company_id: "" };
+          const edit = edits[c.id] ?? { type: "other" as ContactType, title: "", location_city: "", location_country: "", company_id: "" };
           const busy = processing.has(c.id);
 
           return (
@@ -214,9 +239,9 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
                       />
                     </div>
 
-                    {/* Country */}
+                    {/* Country * */}
                     <div>
-                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Country</label>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Country *</label>
                       <input
                         className="input text-xs"
                         placeholder="e.g. Singapore"

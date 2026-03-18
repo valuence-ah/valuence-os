@@ -69,6 +69,8 @@ export interface Contact {
   relationship_strength: "strong" | "medium" | "weak" | "new" | null;
   is_primary_contact: boolean;
   last_contact_date: string | null;
+  location_city: string | null;
+  location_country: string | null;
   notes: string | null;
   tags: string[] | null;
   status: ContactStatus;
