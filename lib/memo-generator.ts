@@ -4,11 +4,9 @@
 
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 export async function generateMemo(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: SupabaseClient<any>,
+  supabase: any,
   company_id: string,
   created_by?: string | null,
   extraContext?: string          // optional: deck content, transcript text, etc.
