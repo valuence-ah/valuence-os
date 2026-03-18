@@ -10,7 +10,23 @@
       "Bash(ls \"C:/Users/sh225/Valuence OS/app/\\(dashboard\\)/crm\")",
       "Bash(ls \"C:/Users/sh225/Valuence OS/app/\\(dashboard\\)/pipeline\")",
       "Bash(ls \"C:/Users/sh225/Valuence OS/app/\\(dashboard\\)/crm/contacts\")",
-      "mcp__518fd9c7-9e4a-4805-8c84-8f4f11635e15__apply_migration"
+      "mcp__518fd9c7-9e4a-4805-8c84-8f4f11635e15__apply_migration",
+      "Bash(timeout /t 30 /nobreak)",
+      "Bash(find 'C:/Users/sh225/Valuence OS/app' -type f -name *.ts -o -name *.tsx)",
+      "Bash(node -e \"require\\(''@ai-sdk/react''\\)\")",
+      "Bash(findstr /i \"ai-sdk\\\\|\"\"ai\"\"\")",
+      "Bash(npx tsc:*)",
+      "Bash(npx next:*)",
+      "Bash(grep -r \"export.*UseChatHelpers\\\\|append\\\\|input\\\\|handleSubmit\\\\|sendMessage\" 'C:/Users/sh225/Valuence OS/node_modules/@ai-sdk/react/dist' --include=*.d.ts)",
+      "Bash(grep -r \"sendMessage\\\\|ChatStatus\\\\|status.*string\\\\|status.*ChatStatus\" 'C:/Users/sh225/Valuence OS/node_modules/ai/dist' --include=*.d.ts)",
+      "Bash(grep -r \"sendMessage\\\\|class AbstractChat\" 'C:/Users/sh225/Valuence OS/node_modules/@ai-sdk/ui-utils/dist' --include=*.d.ts)",
+      "Bash(find 'C:/Users/sh225/Valuence OS/node_modules/@ai-sdk' -name *.d.ts)",
+      "Bash(xargs grep:*)",
+      "Bash(find 'C:/Users/sh225/Valuence OS/node_modules/ai' -name *.d.ts)",
+      "Bash(node -e \"const {AbstractChat} = require\\(''ai''\\); console.log\\(Object.keys\\(AbstractChat?.prototype || {}\\)\\)\")",
+      "Bash(node -e \":*)",
+      "Bash(grep -rn 'class AbstractChat' 'C:/Users/sh225/Valuence OS/node_modules/ai' --include=*.d.ts)",
+      "Bash(find 'C:/Users/sh225/Valuence OS/node_modules/ai' -name *.d.ts -o -name *.d.mts)"
     ]
   }
 }

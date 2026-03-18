@@ -11,12 +11,12 @@ export const metadata = { title: "Other" };
 export default async function OtherPage() {
   const supabase = await createClient();
 
-  const { data: companies } = await (supabase
+  const { data: companies } = (await supabase
     .from("companies")
     .select("*")
     .in("type", ["government", "other"])
     .order("name", { ascending: true })
-    as unknown as Promise<{ data: Company[] | null; error: unknown }>);
+  ) as unknown as { data: Company[] | null; error: unknown };
 
   return (
     <div className="flex flex-col h-full">

@@ -260,20 +260,13 @@ async function importCompanies(
 
   const nameToId     = new Map<string, string>(existingByName);
   const recordIdToId = new Map<string, string>();
-  const toInsert: Record<string, unknown>[] = [];
+  const toInsert:  Record<string, unknown>[] = [];
+  const toUpdate:  { id: string; fields: Record<string, unknown> }[] = [];
   const rowsForMemos: Record<string, string>[] = [];
 
   for (const row of deduped) {
     const name = col(row, "Company").trim();
     const nameLower = name.toLowerCase();
-
-    // If already exists, just map the Record ID
-    if (existingByName.has(nameLower)) {
-      const id = existingByName.get(nameLower)!;
-      const recId = col(row, "Record ID");
-      if (recId) recordIdToId.set(recId, id);
-      continue;
-    }
 
     const statusRaw = col(row, "Status").trim();
     const sectorRaw = col(row, "Sector").trim().toLowerCase();
@@ -289,14 +282,18 @@ async function importCompanies(
     const website  = col(row, "Website").trim() ||
                      (domain ? (domain.startsWith("http") ? domain : `https://${domain}`) : null);
 
-    const record: Record<string, unknown> = {
-      name,
+    const subSectorRaw = col(row, "Sub-sector").trim();
+
+    // Build the full field payload (same shape for insert and update)
+    const fields: Record<string, unknown> = {
       type:               inferCompanyType(row),
       deal_status:        dealStatus,
       description:        col(row, "Company Description") || null,
       website:            website || null,
-      sub_type:           VALID_SECTORS.has(col(row, "Sub-sector").toLowerCase()) ? null
-                          : (col(row, "Sub-sector") || null),
+      // sub_type stores sub-sector text (if it's not itself a sector name)
+      sub_type:           VALID_SECTORS.has(subSectorRaw.toLowerCase())
+                            ? subSectorRaw || null   // keep it if it IS a sector (e.g. "SynBio" is a sub-sector)
+                            : (subSectorRaw || null),
       sectors:            VALID_SECTORS.has(sectorRaw) ? [sectorRaw] : [],
       stage:              col(row, "Investment Round")?.toLowerCase().replace(/\s+/g, "_") || null,
       location_city:      col(row, "Location (City)") || null,
@@ -309,26 +306,50 @@ async function importCompanies(
       last_contact_date:  lastContact,
       notes:              col(row, "Notes") || null,
       tags:               splitMulti(col(row, "Key Words (AI)")).length > 0
-                          ? splitMulti(col(row, "Key Words (AI)"))
-                          : null,
+                            ? splitMulti(col(row, "Key Words (AI)"))
+                            : null,
     };
-
-    toInsert.push(record);
 
     // Save row for memo creation later
     const memo = col(row, "AI-Generated Memo").trim();
     if (memo.length > 100 && !memo.includes("@")) {
       rowsForMemos.push({ name, memo });
     }
+
+    if (existingByName.has(nameLower)) {
+      // Company already in DB — queue an UPDATE to backfill all fields
+      const id = existingByName.get(nameLower)!;
+      const recId = col(row, "Record ID");
+      if (recId) recordIdToId.set(recId, id);
+      toUpdate.push({ id, fields });
+    } else {
+      // Brand new company — queue an INSERT
+      toInsert.push({ name, ...fields });
+    }
   }
 
   console.log(`    Inserting ${toInsert.length} new companies…`);
+  console.log(`    Updating  ${toUpdate.length} existing companies with CSV fields…`);
+
   if (DRY_RUN) {
-    console.log("    [DRY RUN] Sample:", toInsert.slice(0, 3).map(r => r["name"]));
+    console.log("    [DRY RUN] Sample inserts:", toInsert.slice(0, 3).map(r => r["name"]));
+    console.log("    [DRY RUN] Sample updates:", toUpdate.slice(0, 3).map(u => u.id));
   } else {
-    // Insert and then fetch IDs
+    // Insert new companies
     const { inserted, errors } = await batchInsert("companies", toInsert);
     console.log(`    ✅  Inserted: ${inserted}, Errors: ${errors}`);
+
+    // Update existing companies in batches of BATCH_SIZE
+    let updated = 0; let updateErrors = 0;
+    for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+      const batch = toUpdate.slice(i, i + BATCH_SIZE);
+      for (const { id, fields } of batch) {
+        const { error } = await supabase.from("companies").update(fields).eq("id", id);
+        if (error) { updateErrors++; }
+        else { updated++; }
+      }
+    }
+    console.log(`    ✅  Updated: ${updated}, Update Errors: ${updateErrors}`);
 
     // Fetch all company IDs (including newly inserted)
     const { data: allCompanies } = await supabase.from("companies").select("id, name");

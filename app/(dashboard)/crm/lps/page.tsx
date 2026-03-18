@@ -10,12 +10,12 @@ export const metadata = { title: "Limited Partners" };
 export default async function LpsPage() {
   const supabase = await createClient();
 
-  const { data: companies } = await (supabase
+  const { data: companies } = (await supabase
     .from("companies")
     .select("*")
     .eq("type", "lp")
     .order("name", { ascending: true })
-    as unknown as Promise<{ data: Company[] | null; error: unknown }>);
+  ) as unknown as { data: Company[] | null; error: unknown };
 
   return (
     <div className="flex flex-col h-full">

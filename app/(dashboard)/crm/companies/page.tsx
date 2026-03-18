@@ -10,11 +10,11 @@ export const metadata = { title: "All Companies" };
 export default async function AllCompaniesPage() {
   const supabase = await createClient();
 
-  const { data: companies } = await (supabase
+  const { data: companies } = (await supabase
     .from("companies")
     .select("*")
     .order("updated_at", { ascending: false })
-    as unknown as Promise<{ data: Company[] | null; error: unknown }>);
+  ) as unknown as { data: Company[] | null; error: unknown };
 
   return (
     <div className="flex flex-col h-full">
