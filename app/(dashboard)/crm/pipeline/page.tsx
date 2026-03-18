@@ -1,10 +1,10 @@
 // ─── Pipeline /crm/pipeline ───────────────────────────────────────────────────
-// Startups tracked in the deal pipeline, with filters, sorting, and column customization.
+// Split-pane view: left = scrollable startup list, right = full company detail.
 // Includes the Valuence AI floating chat widget for pipeline intelligence.
 
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
-import { CompaniesViewClient } from "@/components/crm/companies-view-client";
+import { PipelineClient } from "@/components/crm/pipeline-client";
 import { PipelineChatWidget } from "@/components/crm/pipeline-chat-widget";
 import type { Company } from "@/lib/types";
 
@@ -23,7 +23,7 @@ export default async function PipelinePage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Pipeline" subtitle={`${companies?.length ?? 0} startups`} />
-      <CompaniesViewClient initialCompanies={companies ?? []} view="pipeline" />
+      <PipelineClient initialCompanies={companies ?? []} />
       {/* Floating Valuence AI chat — position: fixed, renders above page content */}
       <PipelineChatWidget />
     </div>
