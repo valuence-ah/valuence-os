@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       {
         cookies: {
           getAll()         { return cookieStore.getAll(); },
-          setAll(list)     { list.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); },
+          setAll(list: { name: string; value: string; options?: object }[]) { list.forEach(({ name, value, options }) => cookieStore.set(name, value, options as Parameters<typeof cookieStore.set>[2])); },
         },
       }
     );
