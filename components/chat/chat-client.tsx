@@ -5,7 +5,7 @@
 // Suggested prompts to help users get started.
 
 import { useChat } from "@ai-sdk/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Send, Sparkles, RefreshCw, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,8 +20,9 @@ const SUGGESTED_PROMPTS = [
 
 export function ChatClient() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [input, setInput] = useState("");
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setInput, reload, error } = useChat({
+  const { messages, append, isLoading, reload, error } = useChat({
     api: "/api/chat",
     initialMessages: [],
   });
@@ -33,6 +34,14 @@ export function ChatClient() {
 
   function handleSuggestedPrompt(prompt: string) {
     setInput(prompt);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const text = input.trim();
+    if (!text || isLoading) return;
+    setInput("");
+    await append({ role: "user", content: text });
   }
 
   const showWelcome = messages.length === 0;
@@ -97,7 +106,11 @@ export function ChatClient() {
                   )}
                 >
                   {/* Preserve line breaks and basic markdown */}
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                  <div className="whitespace-pre-wrap">
+                    {msg.parts
+                      ? msg.parts.map((p: { type: string; text?: string }, i: number) => p.type === "text" ? <span key={i}>{p.text}</span> : null)
+                      : (msg as { content?: string }).content}
+                  </div>
                 </div>
               </div>
             ))}
@@ -145,7 +158,7 @@ export function ChatClient() {
                        resize-none max-h-32 min-h-[48px]"
             placeholder="Ask anything about your fund…"
             value={input}
-            onChange={handleInputChange}
+            onChange={e => setInput(e.target.value)}
             rows={1}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
