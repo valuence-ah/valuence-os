@@ -27,8 +27,8 @@ export default async function DashboardPage() {
     supabase.from("sourcing_signals").select("*", { count: "exact", head: true }).eq("status", "new"),
     supabase.from("ic_memos").select("*", { count: "exact", head: true }),
     supabase.from("deals").select("*, company:companies(name, sectors)").neq("stage", "passed").order("created_at", { ascending: false }).limit(6),
-    supabase.from("companies").select("id, name, type, deal_status, sectors, created_at").order("created_at", { ascending: false }).limit(5),
-    supabase.from("lp_relationships").select("committed_amount, stage").neq("stage", "passed"),
+    supabase.from("companies").select("id, name, type, deal_status, sectors, created_at").order("created_at", { ascending: false }).limit(5) as unknown as Promise<{ data: { id: string; name: string; type: string; deal_status: string | null; sectors: string[] | null; created_at: string }[] | null; error: unknown }>,
+    supabase.from("lp_relationships").select("committed_amount, stage").neq("stage", "passed") as unknown as Promise<{ data: { committed_amount: number | null; stage: string | null }[] | null; error: unknown }>,
   ]);
 
   // Calculate pipeline stats

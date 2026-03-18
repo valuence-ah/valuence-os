@@ -22,7 +22,7 @@ export default async function CrmPage() {
   const supabase = await createClient();
 
   const [{ data: typeBreakdown }, { count: contactCount }] = await Promise.all([
-    supabase.from("companies").select("type").neq("type", null),
+    supabase.from("companies").select("type").neq("type", null) as unknown as Promise<{ data: { type: string }[] | null; error: unknown }>,
     supabase.from("contacts").select("*", { count: "exact", head: true }),
   ]);
 

@@ -15,11 +15,11 @@ export default async function LpPage() {
     .order("updated_at", { ascending: false });
 
   // LP companies list for adding new
-  const { data: lpCompanies } = await supabase
+  const { data: lpCompanies } = await (supabase
     .from("companies")
     .select("id, name, aum, lp_type")
     .eq("type", "lp")
-    .order("name");
+    .order("name") as unknown as Promise<{ data: { id: string; name: string; aum: number | null; lp_type: string | null }[] | null; error: unknown }>);
 
   return (
     <div className="flex flex-col h-full">
