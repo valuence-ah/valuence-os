@@ -1,6 +1,7 @@
 // ─── Dashboard Home Page ──────────────────────────────────────────────────────
 // The first thing you see after logging in.
 // Shows fund-level KPIs: pipeline count, portfolio count, LP commitments, recent activity.
+// v2
 
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
