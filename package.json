@@ -9,12 +9,12 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.58",
+    "@ai-sdk/anthropic": "^1.2.12",
     "@ai-sdk/react": "^3.0.118",
     "@anthropic-ai/sdk": "^0.79.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.1",
-    "ai": "^6.0.116",
+    "ai": "^4.3.19",
     "autoprefixer": "^10.4.27",
     "clsx": "^2.1.1",
     "dotenv": "^17.3.1",

@@ -98,8 +98,8 @@ INSTRUCTIONS:
     system: systemPrompt,
     messages,
     temperature: 0.3,
-    maxOutputTokens: 2048,
+    maxTokens: 2048,
   });
 
-  return result.toTextStreamResponse();
+  return result.toDataStreamResponse();
 }
