@@ -5,6 +5,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
 import { formatCurrency, formatDate, DEAL_STAGE_COLORS, DEAL_STAGE_LABELS } from "@/lib/utils";
+import type { Deal } from "@/lib/types";
 import { TrendingUp, Users, Wallet, Radar, FileText, BarChart3 } from "lucide-react";
 
 export const metadata = { title: "Dashboard" };
@@ -26,7 +27,7 @@ export default async function DashboardPage() {
     supabase.from("contacts").select("*", { count: "exact", head: true }),
     supabase.from("sourcing_signals").select("*", { count: "exact", head: true }).eq("status", "new"),
     supabase.from("ic_memos").select("*", { count: "exact", head: true }),
-    supabase.from("deals").select("*, company:companies(name, sectors)").neq("stage", "passed").order("created_at", { ascending: false }).limit(6),
+    supabase.from("deals").select("*, company:companies(name, sectors)").neq("stage", "passed").order("created_at", { ascending: false }).limit(6) as unknown as Promise<{ data: (Deal & { company?: { name: string; sectors: string[] | null } | null })[] | null; error: unknown }>,
     supabase.from("companies").select("id, name, type, deal_status, sectors, created_at").order("created_at", { ascending: false }).limit(5) as unknown as Promise<{ data: { id: string; name: string; type: string; deal_status: string | null; sectors: string[] | null; created_at: string }[] | null; error: unknown }>,
     supabase.from("lp_relationships").select("committed_amount, stage").neq("stage", "passed") as unknown as Promise<{ data: { committed_amount: number | null; stage: string | null }[] | null; error: unknown }>,
   ]);
