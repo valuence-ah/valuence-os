@@ -1,26 +1,27 @@
-// ─── Funds /crm/funds ─────────────────────────────────────────────────────────
+// ─── Companies (Strategic Partners) /crm/strategic ───────────────────────────
+// Ecosystem partners and corporates.
 
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
 import { CompaniesViewClient } from "@/components/crm/companies-view-client";
 import type { Company } from "@/lib/types";
 
-export const metadata = { title: "Funds" };
+export const metadata = { title: "Companies" };
 
-export default async function FundsPage() {
+export default async function StrategicPage() {
   const supabase = await createClient();
 
   const { data: companies } = await (supabase
     .from("companies")
     .select("*")
-    .eq("type", "fund")
+    .in("type", ["ecosystem_partner", "corporate"])
     .order("name", { ascending: true })
     as unknown as Promise<{ data: Company[] | null; error: unknown }>);
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Funds" subtitle={`${companies?.length ?? 0} funds`} />
-      <CompaniesViewClient initialCompanies={companies ?? []} view="funds" />
+      <Header title="Companies" subtitle={`${companies?.length ?? 0} strategic partners`} />
+      <CompaniesViewClient initialCompanies={companies ?? []} view="strategic" />
     </div>
   );
 }

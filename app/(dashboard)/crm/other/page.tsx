@@ -1,26 +1,27 @@
-// ─── Funds /crm/funds ─────────────────────────────────────────────────────────
+// ─── Other /crm/other ─────────────────────────────────────────────────────────
+// Government bodies and other organisations.
 
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
 import { CompaniesViewClient } from "@/components/crm/companies-view-client";
 import type { Company } from "@/lib/types";
 
-export const metadata = { title: "Funds" };
+export const metadata = { title: "Other" };
 
-export default async function FundsPage() {
+export default async function OtherPage() {
   const supabase = await createClient();
 
   const { data: companies } = await (supabase
     .from("companies")
     .select("*")
-    .eq("type", "fund")
+    .in("type", ["government", "other"])
     .order("name", { ascending: true })
     as unknown as Promise<{ data: Company[] | null; error: unknown }>);
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Funds" subtitle={`${companies?.length ?? 0} funds`} />
-      <CompaniesViewClient initialCompanies={companies ?? []} view="funds" />
+      <Header title="Other" subtitle={`${companies?.length ?? 0} companies`} />
+      <CompaniesViewClient initialCompanies={companies ?? []} view="other" />
     </div>
   );
 }

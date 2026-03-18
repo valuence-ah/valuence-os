@@ -1,39 +1,25 @@
-// ─── Companies List Page /crm/companies ──────────────────────────────────────
-// Filterable, searchable table of all companies (startups, LPs, corporates, etc.)
-// "Add Company" button opens a modal form.
+// ─── All Companies /crm/companies ─────────────────────────────────────────────
 
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
-import { CompaniesClient } from "@/components/crm/companies-client";
+import { CompaniesViewClient } from "@/components/crm/companies-view-client";
+import type { Company } from "@/lib/types";
 
-export const metadata = { title: "Companies" };
+export const metadata = { title: "All Companies" };
 
-export default async function CompaniesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ type?: string; status?: string; q?: string }>;
-}) {
-  const params = await searchParams;
+export default async function AllCompaniesPage() {
   const supabase = await createClient();
 
-  let query = supabase
+  const { data: companies } = await (supabase
     .from("companies")
     .select("*")
-    .order("updated_at", { ascending: false });
-
-  if (params.type)   query = query.eq("type", params.type);
-  if (params.status) query = query.eq("deal_status", params.status);
-
-  const { data: companies } = await query;
+    .order("updated_at", { ascending: false })
+    as unknown as Promise<{ data: Company[] | null; error: unknown }>);
 
   return (
     <div className="flex flex-col h-full">
-      <Header
-        title="Companies"
-        subtitle={`${companies?.length ?? 0} total`}
-      />
-      {/* Pass data to the client component which handles search + add modal */}
-      <CompaniesClient initialCompanies={companies ?? []} initialFilter={params.type ?? "all"} />
+      <Header title="All Companies" subtitle={`${companies?.length ?? 0} total`} />
+      <CompaniesViewClient initialCompanies={companies ?? []} view="all" />
     </div>
   );
 }
