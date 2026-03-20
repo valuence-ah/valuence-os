@@ -8,21 +8,40 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export const maxDuration = 60;
+
 function extractDomain(website: string): string | null {
   try {
     const url = new URL(website.startsWith("http") ? website : `https://${website}`);
-    return url.hostname.replace(/^www\./, "");
+    let host = url.hostname.replace(/^www\./, "");
+    // Strip common non-root subdomains (mail., app., etc.) to get root domain
+    const parts = host.split(".");
+    if (parts.length > 2) {
+      const sub = parts[0];
+      const nonRoot = ["mail", "app", "docs", "help", "support", "blog", "careers", "jobs"];
+      if (nonRoot.includes(sub)) host = parts.slice(1).join(".");
+    }
+    return host;
   } catch {
     return null;
   }
 }
 
 async function tryClearbit(domain: string): Promise<string | null> {
-  try {
-    const url = `https://logo.clearbit.com/${domain}`;
-    const res = await fetch(url, { method: "HEAD", redirect: "follow" });
-    if (res.ok) return url;
-  } catch {}
+  const candidates = [domain, `www.${domain}`];
+  for (const d of candidates) {
+    try {
+      const url = `https://logo.clearbit.com/${d}`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { "User-Agent": "Mozilla/5.0" },
+        redirect: "follow",
+      });
+      if (res.ok && res.headers.get("content-type")?.startsWith("image")) {
+        return `https://logo.clearbit.com/${domain}`;
+      }
+    } catch {}
+  }
   return null;
 }
 
