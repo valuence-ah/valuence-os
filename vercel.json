@@ -1,8 +1,6 @@
 {
   "framework": "nextjs",
   "crons": [
-    { "path": "/api/cron/check-inbox", "schedule": "*/15 * * * *" },
-    { "path": "/api/cron/check-deals", "schedule": "*/15 * * * *" },
     { "path": "/api/agents/run-all", "schedule": "0 8 * * *" }
   ]
 }
