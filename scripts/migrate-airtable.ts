@@ -273,7 +273,7 @@ async function importCompanies(
   const nameToId     = new Map<string, string>();
   const recordIdToId = new Map<string, string>();
   const toInsert: Record<string, unknown>[] = [];
-  const memoRows: Array<{ name: string; memo: string; recordId: string }> = [];
+  const memoRows: Array<{ name: string; memo: string }> = [];
 
   for (const row of deduped) {
     const name     = col(row, "Company").trim();
@@ -334,7 +334,7 @@ async function importCompanies(
     // ── AI Memo ───────────────────────────────────────────────────────────
     const memo = col(row, "AI-Generated Memo").trim();
     if (memo.length > 100 && !memo.includes("@")) {
-      memoRows.push({ name, memo, recordId });
+      memoRows.push({ name, memo });
     }
 
     const fields: Record<string, unknown> = {
