@@ -46,12 +46,7 @@ function CompanyLogo({ company, size = "md" }: { company: Company; size?: "sm" |
   const [imgError, setImgError] = useState(false);
   const sz = size === "sm" ? "w-10 h-10" : "w-12 h-12";
 
-  // Priority: saved logo_url → clearbit → initials
-  const logoSrc = company.logo_url ?? (
-    company.website
-      ? `https://logo.clearbit.com/${company.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "")}`
-      : null
-  );
+  const logoSrc = company.logo_url ?? null;
 
   // Reset error when logo source changes (e.g. after manual save or auto-find)
   useEffect(() => { setImgError(false); }, [logoSrc]);

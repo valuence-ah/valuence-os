@@ -1,10 +1,8 @@
 // ─── Logo Finder ─────────────────────────────────────────────────────────────
 // POST /api/logo-finder/run
-// Finds logos for startups that have a website but no logo_url.
-// Chain: Clearbit → Logo.dev → Claude web_search
+// Finds logos for startups using Logo.dev API.
 
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const maxDuration = 60;
@@ -26,24 +24,6 @@ function extractDomain(website: string): string | null {
   }
 }
 
-async function tryClearbit(domain: string): Promise<string | null> {
-  const candidates = [domain, `www.${domain}`];
-  for (const d of candidates) {
-    try {
-      const url = `https://logo.clearbit.com/${d}`;
-      const res = await fetch(url, {
-        method: "GET",
-        headers: { "User-Agent": "Mozilla/5.0" },
-        redirect: "follow",
-      });
-      if (res.ok && res.headers.get("content-type")?.startsWith("image")) {
-        return `https://logo.clearbit.com/${domain}`;
-      }
-    } catch {}
-  }
-  return null;
-}
-
 async function tryLogoDev(domain: string): Promise<string | null> {
   const token = process.env.LOGO_DEV_TOKEN;
   if (!token) return null;
@@ -54,44 +34,6 @@ async function tryLogoDev(domain: string): Promise<string | null> {
       return url;
     }
   } catch {}
-  return null;
-}
-
-async function tryClaudeWebSearch(name: string, domain: string): Promise<string | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-  try {
-    const client = new Anthropic({ apiKey });
-    const response = await client.messages.create(
-      {
-        model: "claude-sonnet-4-6",
-        max_tokens: 512,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        tools: [{ type: "web_search_20250305" as any, name: "web_search" }],
-        system:
-          'You are a brand asset researcher. Find an official company logo URL (PNG or SVG). Respond ONLY with valid JSON: {"logo_url": "https://...", "confidence": 85}',
-        messages: [
-          {
-            role: "user",
-            content: `Find the official logo URL for "${name}" (domain: ${domain}). Return JSON only.`,
-          },
-        ],
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      { headers: { "anthropic-beta": "web-search-2025-03-05" } } as any
-    );
-
-    const textBlock = response.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") return null;
-    const match = textBlock.text.match(/\{[\s\S]*?\}/);
-    if (!match) return null;
-    const parsed = JSON.parse(match[0]);
-    if (parsed.confidence >= 70 && parsed.logo_url && parsed.logo_url !== "") {
-      return parsed.logo_url as string;
-    }
-  } catch {
-    // web_search beta not available or parse failed — skip
-  }
   return null;
 }
 
@@ -111,9 +53,7 @@ export async function POST(req: NextRequest) {
     }
     const domain = extractDomain(company.website);
     if (!domain) return NextResponse.json({ success: false, message: "Could not parse domain." });
-    let logoUrl = await tryClearbit(domain);
-    if (!logoUrl) logoUrl = await tryLogoDev(domain);
-    if (!logoUrl) logoUrl = await tryClaudeWebSearch(company.name, domain);
+    const logoUrl = await tryLogoDev(domain);
     if (logoUrl) {
       await supabase.from("companies").update({ logo_url: logoUrl }).eq("id", company.id);
       return NextResponse.json({ success: true, logo_url: logoUrl });
@@ -139,12 +79,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const results: {
-    name: string;
-    logo_url?: string;
-    method?: string;
-    skipped?: boolean;
-  }[] = [];
+  const results: { name: string; logo_url?: string; skipped?: boolean }[] = [];
 
   for (const company of companies) {
     const domain = extractDomain(company.website!);
@@ -153,30 +88,16 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    let logoUrl = await tryClearbit(domain);
-    let method = "clearbit";
-
-    if (!logoUrl) {
-      logoUrl = await tryLogoDev(domain);
-      method = "logodev";
-    }
-    if (!logoUrl) {
-      logoUrl = await tryClaudeWebSearch(company.name, domain);
-      method = "claude";
-    }
+    const logoUrl = await tryLogoDev(domain);
 
     if (logoUrl) {
-      await supabase
-        .from("companies")
-        .update({ logo_url: logoUrl })
-        .eq("id", company.id);
-      results.push({ name: company.name, logo_url: logoUrl, method });
+      await supabase.from("companies").update({ logo_url: logoUrl }).eq("id", company.id);
+      results.push({ name: company.name, logo_url: logoUrl });
     } else {
       results.push({ name: company.name, skipped: true });
     }
 
-    // Respect Clearbit rate limits
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 100));
   }
 
   const updated = results.filter((r) => !r.skipped).length;
