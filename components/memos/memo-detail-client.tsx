@@ -4,10 +4,11 @@
 // Allows editing any section inline and updating recommendation/status.
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { IcMemo } from "@/lib/types";
 import { formatDate, cn } from "@/lib/utils";
-import { Edit3, Save, X, CheckCircle, XCircle, AlertCircle, Clock } from "lucide-react";
+import { Edit3, Save, X, CheckCircle, XCircle, AlertCircle, Clock, RefreshCw } from "lucide-react";
 
 const REC_CONFIG = {
   invest:         { label: "Invest",          color: "bg-green-100 text-green-700 border-green-200",  icon: CheckCircle },
@@ -33,10 +34,28 @@ type MemoWithCompany = IcMemo & { company?: { id: string; name: string; type: st
 
 export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) {
   const supabase = createClient();
-  const [memo, setMemo]         = useState(initMemo);
-  const [editingKey, setEditing] = useState<string | null>(null);
-  const [editText, setEditText]  = useState("");
-  const [saving, setSaving]      = useState(false);
+  const router   = useRouter();
+  const [memo, setMemo]           = useState(initMemo);
+  const [editingKey, setEditing]  = useState<string | null>(null);
+  const [editText, setEditText]   = useState("");
+  const [saving, setSaving]       = useState(false);
+  const [regenerating, setRegen]  = useState(false);
+
+  async function handleRegenerate() {
+    if (!memo.company_id) return;
+    setRegen(true);
+    try {
+      const res = await fetch("/api/memos/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: memo.company_id }),
+      });
+      const json = await res.json();
+      if (json.data?.id) router.push(`/memos/${json.data.id}`);
+    } finally {
+      setRegen(false);
+    }
+  }
 
   function startEdit(key: string, currentValue: string | null) {
     setEditing(key);
@@ -104,6 +123,16 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
                 <option value="approved">Approved</option>
                 <option value="rejected">Rejected</option>
               </select>
+              {/* Regenerate */}
+              <button
+                onClick={handleRegenerate}
+                disabled={regenerating}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                title="Regenerate memo with latest company data"
+              >
+                <RefreshCw size={12} className={regenerating ? "animate-spin" : ""} />
+                {regenerating ? "Regenerating…" : "Regenerate"}
+              </button>
             </div>
           </div>
         </div>

@@ -9,17 +9,19 @@ import { formatCurrency, formatDate, COMPANY_TYPE_COLORS, DEAL_STAGE_COLORS, DEA
 import { Globe, Linkedin, ExternalLink, MapPin, Calendar, DollarSign } from "lucide-react";
 import Link from "next/link";
 import { CompanyDetailClient } from "@/components/crm/company-detail-client";
-import type { Company, Contact, Deal } from "@/lib/types";
+import { GenerateMemoButton } from "@/components/crm/generate-memo-button";
+import type { Company, Contact, Deal, IcMemo } from "@/lib/types";
 
 export default async function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: company }, { data: contacts }, { data: interactions }, { data: deals }] = await Promise.all([
+  const [{ data: company }, { data: contacts }, { data: interactions }, { data: deals }, { data: memos }] = await Promise.all([
     supabase.from("companies").select("*").eq("id", id).single() as unknown as Promise<{ data: Company | null; error: unknown }>,
     supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }) as unknown as Promise<{ data: Contact[] | null; error: unknown }>,
     supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(10) as unknown as Promise<{ data: import("@/lib/types").Interaction[] | null; error: unknown }>,
     supabase.from("deals").select("*").eq("company_id", id).order("created_at", { ascending: false }) as unknown as Promise<{ data: Deal[] | null; error: unknown }>,
+    supabase.from("ic_memos").select("id, title, recommendation, status, created_at").eq("company_id", id).order("created_at", { ascending: false }) as unknown as Promise<{ data: Pick<IcMemo, "id" | "title" | "recommendation" | "status" | "created_at">[] | null; error: unknown }>,
   ]);
 
   if (!company) notFound();
@@ -29,12 +31,14 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
       <Header
         title={company.name}
         subtitle={[company.type.replace("_", " "), company.location_city, company.location_country].filter(Boolean).join(" · ")}
+        actions={<GenerateMemoButton companyId={id} />}
       />
       <CompanyDetailClient
         company={company}
         contacts={contacts ?? []}
         interactions={interactions ?? []}
         deals={deals ?? []}
+        memos={memos ?? []}
       />
     </div>
   );

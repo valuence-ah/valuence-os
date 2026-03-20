@@ -14,20 +14,32 @@ import {
 } from "@/lib/utils";
 import {
   Globe, Linkedin, ExternalLink, MapPin, Building2,
-  MessageSquare, Phone, Mail, Plus, ChevronDown,
+  MessageSquare, Phone, Mail, Plus, ChevronDown, FileText,
 } from "lucide-react";
+import Link from "next/link";
+import type { IcMemo } from "@/lib/types";
 
-const TABS = ["Overview", "Contacts", "Interactions", "Deals"] as const;
+const TABS = ["Overview", "Contacts", "Interactions", "Deals", "Memos"] as const;
 type Tab = typeof TABS[number];
+
+type MemoSummary = Pick<IcMemo, "id" | "title" | "recommendation" | "status" | "created_at">;
+
+const REC_COLORS: Record<string, string> = {
+  invest:         "bg-green-100 text-green-700",
+  pass:           "bg-red-100 text-red-600",
+  more_diligence: "bg-yellow-100 text-yellow-700",
+  pending:        "bg-slate-100 text-slate-500",
+};
 
 interface Props {
   company: Company;
   contacts: Contact[];
   interactions: Interaction[];
   deals: Deal[];
+  memos: MemoSummary[];
 }
 
-export function CompanyDetailClient({ company, contacts: initContacts, interactions: initInteractions, deals }: Props) {
+export function CompanyDetailClient({ company, contacts: initContacts, interactions: initInteractions, deals, memos }: Props) {
   const supabase = createClient();
   const [tab, setTab]             = useState<Tab>("Overview");
   const [contacts, setContacts]   = useState(initContacts);
@@ -174,6 +186,7 @@ export function CompanyDetailClient({ company, contacts: initContacts, interacti
             {t}
             {t === "Contacts" && contacts.length > 0 && <span className="ml-1.5 badge bg-slate-100 text-slate-500">{contacts.length}</span>}
             {t === "Interactions" && interactions.length > 0 && <span className="ml-1.5 badge bg-slate-100 text-slate-500">{interactions.length}</span>}
+            {t === "Memos" && memos.length > 0 && <span className="ml-1.5 badge bg-slate-100 text-slate-500">{memos.length}</span>}
           </button>
         ))}
       </div>
@@ -327,6 +340,53 @@ export function CompanyDetailClient({ company, contacts: initContacts, interacti
                     </div>
                   )}
                 </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MEMOS TAB ── */}
+      {tab === "Memos" && (
+        <div className="card">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-800">IC Memos</h3>
+            <Link
+              href="/memos"
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+            >
+              View all memos →
+            </Link>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {memos.length === 0 ? (
+              <div className="px-5 py-8 text-center">
+                <FileText className="mx-auto text-slate-300 mb-2" size={28} />
+                <p className="text-sm text-slate-400">No memos yet.</p>
+                <p className="text-xs text-slate-400 mt-1">Click <strong>Generate IC Memo</strong> in the header to create one.</p>
+              </div>
+            ) : (
+              memos.map(memo => (
+                <Link
+                  key={memo.id}
+                  href={`/memos/${memo.id}`}
+                  className="px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">{memo.title}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{new Date(memo.created_at).toLocaleDateString()}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {memo.recommendation && (
+                      <span className={cn("badge capitalize", REC_COLORS[memo.recommendation] ?? "bg-slate-100 text-slate-500")}>
+                        {memo.recommendation.replace("_", " ")}
+                      </span>
+                    )}
+                    <span className="badge bg-slate-100 text-slate-500 capitalize">
+                      {memo.status.replace("_", " ")}
+                    </span>
+                  </div>
+                </Link>
               ))
             )}
           </div>
