@@ -65,6 +65,7 @@ ${extraContext ? `\nADDITIONAL CONTEXT (from deck / transcript):\n${extraContext
 
   const { text } = await generateText({
     model: anthropic("claude-opus-4-5"),
+    maxTokens: 16000,
     system: `You are a senior venture capital analyst at Valuence Ventures, a deeptech fund focused on cleantech, techbio, and advanced materials at pre-seed and seed stage.
 
 Write a comprehensive IC (Investment Committee) memo based on the provided company data, meeting notes, transcripts, and deck. Be analytical, objective, and specific. Use Valuence's focus areas to evaluate fit.
