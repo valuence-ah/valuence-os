@@ -11,6 +11,7 @@ import Link from "next/link";
 import { CompanyDetailClient } from "@/components/crm/company-detail-client";
 import { GenerateMemoButton } from "@/components/crm/generate-memo-button";
 import { ExaResearchButton } from "@/components/crm/exa-research-button";
+import { FindLogoButton } from "@/components/crm/find-logo-button";
 import type { Company, Contact, Deal, IcMemo } from "@/lib/types";
 
 export default async function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,7 +33,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
       <Header
         title={company.name}
         subtitle={[company.type.replace("_", " "), company.location_city, company.location_country].filter(Boolean).join(" · ")}
-        actions={<div className="flex items-center gap-2"><ExaResearchButton companyId={id} /><GenerateMemoButton companyId={id} /></div>}
+        actions={<div className="flex items-center gap-2"><FindLogoButton companyId={id} /><ExaResearchButton companyId={id} /><GenerateMemoButton companyId={id} /></div>}
       />
       <CompanyDetailClient
         company={company}

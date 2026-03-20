@@ -65,8 +65,29 @@ async function tryClaudeWebSearch(name: string, domain: string): Promise<string 
 }
 
 export async function POST(req: NextRequest) {
-  const { limit = 25 } = await req.json().catch(() => ({}));
+  const { limit = 25, companyId } = await req.json().catch(() => ({}));
   const supabase = createAdminClient();
+
+  // Single company mode
+  if (companyId) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("id, name, website")
+      .eq("id", companyId)
+      .single();
+    if (!company?.website) {
+      return NextResponse.json({ success: false, message: "No website set for this company." });
+    }
+    const domain = extractDomain(company.website);
+    if (!domain) return NextResponse.json({ success: false, message: "Could not parse domain." });
+    let logoUrl = await tryClearbit(domain);
+    if (!logoUrl) logoUrl = await tryClaudeWebSearch(company.name, domain);
+    if (logoUrl) {
+      await supabase.from("companies").update({ logo_url: logoUrl }).eq("id", company.id);
+      return NextResponse.json({ success: true, logo_url: logoUrl });
+    }
+    return NextResponse.json({ success: false, message: "Logo not found." });
+  }
 
   const { data: companies } = await supabase
     .from("companies")
