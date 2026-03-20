@@ -4,7 +4,7 @@
 
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const maxDuration = 45;
 
@@ -53,11 +53,13 @@ type DealRow = {
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
-  const supabase = await createClient();
-
-  // Auth check
-  const { data: { user } } = await supabase.auth.getUser();
+  // Auth check via the regular (anon) server client
+  const { createClient: createServerClient } = await import("@/lib/supabase/server");
+  const authClient = await createServerClient();
+  const { data: { user } } = await authClient.auth.getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
+
+  const supabase = createAdminClient();
 
   // ── Fetch all pipeline data in parallel ───────────────────────────────────
   const [

@@ -1,14 +1,15 @@
 // ─── All Companies /crm/companies ─────────────────────────────────────────────
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
 import { CompaniesViewClient } from "@/components/crm/companies-view-client";
+import { FindLogosButton } from "@/components/crm/find-logos-button";
 import type { Company } from "@/lib/types";
 
 export const metadata = { title: "All Companies" };
 
 export default async function AllCompaniesPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: companies } = (await supabase
     .from("companies")
@@ -19,7 +20,7 @@ export default async function AllCompaniesPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="All Companies" subtitle={`${companies?.length ?? 0} total`} />
+      <Header title="All Companies" subtitle={`${companies?.length ?? 0} total`} actions={<FindLogosButton />} />
       <CompaniesViewClient initialCompanies={companies ?? []} view="all" />
     </div>
   );

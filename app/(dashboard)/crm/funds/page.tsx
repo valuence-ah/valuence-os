@@ -1,6 +1,6 @@
 // ─── Funds /crm/funds ─────────────────────────────────────────────────────────
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
 import { CompaniesViewClient } from "@/components/crm/companies-view-client";
 import type { Company } from "@/lib/types";
@@ -8,7 +8,7 @@ import type { Company } from "@/lib/types";
 export const metadata = { title: "Funds" };
 
 export default async function FundsPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: companies } = (await supabase
     .from("companies")

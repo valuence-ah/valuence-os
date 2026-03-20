@@ -2,7 +2,7 @@
 // Split-pane view: left = scrollable startup list, right = full company detail.
 // Includes the Valuence AI floating chat widget for pipeline intelligence.
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
 import { PipelineClient } from "@/components/crm/pipeline-client";
 import { PipelineChatWidget } from "@/components/crm/pipeline-chat-widget";
@@ -11,7 +11,7 @@ import type { Company } from "@/lib/types";
 export const metadata = { title: "Pipeline" };
 
 export default async function PipelinePage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: companies } = (await supabase
     .from("companies")

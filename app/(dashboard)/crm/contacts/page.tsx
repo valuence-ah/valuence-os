@@ -1,6 +1,6 @@
 // ─── Contacts List Page /crm/contacts ────────────────────────────────────────
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
 import { ContactsClient } from "@/components/crm/contacts-client";
 import Link from "next/link";
@@ -8,7 +8,7 @@ import Link from "next/link";
 export const metadata = { title: "Contacts" };
 
 export default async function ContactsPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const [{ data: contacts }, { count: pendingCount }] = await Promise.all([
     supabase

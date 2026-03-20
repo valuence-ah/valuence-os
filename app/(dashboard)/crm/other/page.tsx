@@ -1,7 +1,7 @@
 // ─── Other /crm/other ─────────────────────────────────────────────────────────
 // Government bodies and other organisations.
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
 import { CompaniesViewClient } from "@/components/crm/companies-view-client";
 import type { Company } from "@/lib/types";
@@ -9,7 +9,7 @@ import type { Company } from "@/lib/types";
 export const metadata = { title: "Other" };
 
 export default async function OtherPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: companies } = (await supabase
     .from("companies")

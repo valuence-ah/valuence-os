@@ -4,14 +4,14 @@
 // contacts. Once confirmed with a type + country, they auto-route to the right
 // CRM view (Pipeline → Startup, LPs → LP, Funds → Fund, etc.).
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
 import { PendingContactsClient } from "@/components/crm/pending-contacts-client";
 
 export const metadata = { title: "New Contacts" };
 
 export default async function PendingContactsPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const [{ data: contacts }, { data: companies }] = await Promise.all([
     // Fetch contacts missing type (still 'other') OR missing country
