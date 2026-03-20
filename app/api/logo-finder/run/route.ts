@@ -1,8 +1,7 @@
 // ─── Logo Finder ─────────────────────────────────────────────────────────────
 // POST /api/logo-finder/run
 // Finds logos for startups that have a website but no logo_url.
-// Primary: Clearbit Logo API (free, covers most tech startups)
-// Fallback: Claude Sonnet with web_search (requires ANTHROPIC_API_KEY)
+// Chain: Clearbit → Logo.dev → Claude web_search
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
@@ -42,6 +41,19 @@ async function tryClearbit(domain: string): Promise<string | null> {
       }
     } catch {}
   }
+  return null;
+}
+
+async function tryLogoDev(domain: string): Promise<string | null> {
+  const token = process.env.LOGO_DEV_TOKEN;
+  if (!token) return null;
+  try {
+    const url = `https://img.logo.dev/${domain}?token=${token}&format=png`;
+    const res = await fetch(url, { method: "GET", redirect: "follow" });
+    if (res.ok && res.headers.get("content-type")?.startsWith("image")) {
+      return url;
+    }
+  } catch {}
   return null;
 }
 
@@ -100,6 +112,7 @@ export async function POST(req: NextRequest) {
     const domain = extractDomain(company.website);
     if (!domain) return NextResponse.json({ success: false, message: "Could not parse domain." });
     let logoUrl = await tryClearbit(domain);
+    if (!logoUrl) logoUrl = await tryLogoDev(domain);
     if (!logoUrl) logoUrl = await tryClaudeWebSearch(company.name, domain);
     if (logoUrl) {
       await supabase.from("companies").update({ logo_url: logoUrl }).eq("id", company.id);
@@ -143,6 +156,10 @@ export async function POST(req: NextRequest) {
     let logoUrl = await tryClearbit(domain);
     let method = "clearbit";
 
+    if (!logoUrl) {
+      logoUrl = await tryLogoDev(domain);
+      method = "logodev";
+    }
     if (!logoUrl) {
       logoUrl = await tryClaudeWebSearch(company.name, domain);
       method = "claude";
