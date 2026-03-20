@@ -5,6 +5,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
 import { SourcingClient } from "@/components/sourcing/sourcing-client";
+import { RunAgentsButton } from "@/components/sourcing/run-agents-button";
 
 export const metadata = { title: "Sourcing" };
 
@@ -19,7 +20,7 @@ export default async function SourcingPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Sourcing Intelligence" subtitle="Signals from arXiv, SBIR, NSF, USPTO, news & more" />
+      <Header title="Sourcing Intelligence" subtitle="Signals from arXiv, SBIR, NSF, USPTO, news & more" actions={<RunAgentsButton />} />
       <SourcingClient initialSignals={signals ?? []} />
     </div>
   );
