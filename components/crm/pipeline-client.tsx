@@ -53,6 +53,9 @@ function CompanyLogo({ company, size = "md" }: { company: Company; size?: "sm" |
       : null
   );
 
+  // Reset error when logo source changes (e.g. after manual save or auto-find)
+  useEffect(() => { setImgError(false); }, [logoSrc]);
+
   if (logoSrc && !imgError) {
     return (
       <img
