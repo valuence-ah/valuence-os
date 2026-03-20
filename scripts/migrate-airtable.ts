@@ -273,7 +273,7 @@ async function importCompanies(
   const nameToId     = new Map<string, string>();
   const recordIdToId = new Map<string, string>();
   const toInsert: Record<string, unknown>[] = [];
-  const memoRows: Array<{ name: string; memo: string }> = [];
+  const memoRows: Array<{ name: string; memo: string; recordId: string }> = [];
 
   for (const row of deduped) {
     const name     = col(row, "Company").trim();
