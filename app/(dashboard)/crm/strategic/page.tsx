@@ -6,7 +6,7 @@ import { Header } from "@/components/layout/header";
 import { CompaniesViewClient } from "@/components/crm/companies-view-client";
 import type { Company } from "@/lib/types";
 
-export const metadata = { title: "Companies" };
+export const metadata = { title: "Strategic" };
 
 export default async function StrategicPage() {
   const supabase = createAdminClient();
@@ -14,14 +14,14 @@ export default async function StrategicPage() {
   const { data: companies } = (await supabase
     .from("companies")
     .select("*")
-    .in("type", ["ecosystem_partner", "corporate"])
+    .contains("types", ["strategic partner"])
     .order("name", { ascending: true })
     .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Companies" subtitle={`${companies?.length ?? 0} strategic partners`} />
+      <Header title="Strategic" subtitle={`${companies?.length ?? 0} partners`} />
       <CompaniesViewClient initialCompanies={companies ?? []} view="strategic" />
     </div>
   );

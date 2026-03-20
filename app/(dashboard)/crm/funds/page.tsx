@@ -13,7 +13,7 @@ export default async function FundsPage() {
   const { data: companies } = (await supabase
     .from("companies")
     .select("*")
-    .eq("type", "fund")
+    .contains("types", ["investor"])
     .order("name", { ascending: true })
     .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };

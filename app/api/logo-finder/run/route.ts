@@ -28,11 +28,10 @@ async function tryLogoDev(domain: string): Promise<string | null> {
   const token = process.env.LOGO_DEV_TOKEN;
   if (!token) return null;
   try {
-    const url = `https://img.logo.dev/${domain}?token=${token}&format=png`;
+    const url = `https://img.logo.dev/${domain}?token=${token}&format=png&size=128`;
     const res = await fetch(url, { method: "GET", redirect: "follow" });
-    if (res.ok && res.headers.get("content-type")?.startsWith("image")) {
-      return url;
-    }
+    // Accept any 2xx response — Logo.dev always returns an image for known domains
+    if (res.ok) return url;
   } catch {}
   return null;
 }

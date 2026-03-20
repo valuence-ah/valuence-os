@@ -13,7 +13,7 @@ export default async function LpsPage() {
   const { data: companies } = (await supabase
     .from("companies")
     .select("*")
-    .eq("type", "lp")
+    .contains("types", ["limited partner"])
     .order("name", { ascending: true })
     .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };

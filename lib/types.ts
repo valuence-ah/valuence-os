@@ -1,7 +1,7 @@
 // ─── TypeScript types mirroring the Supabase database schema ─────────────────
 // These are used throughout the app for type safety.
 
-export type CompanyType = "startup" | "lp" | "corporate" | "ecosystem_partner" | "fund" | "government";
+export type CompanyType = "startup" | "lp" | "limited partner" | "investor" | "strategic partner" | "ecosystem_partner" | "fund" | "corporate" | "government" | "other";
 export type ContactType = "founder" | "lp" | "corporate" | "ecosystem_partner" | "fund_manager" | "government" | "advisor" | "other";
 export type ContactStatus = "active" | "pending";
 export type DealStage = "sourced" | "first_meeting" | "deep_dive" | "ic_memo" | "term_sheet" | "due_diligence" | "closed" | "passed";
@@ -25,6 +25,7 @@ export interface Company {
   id: string;
   name: string;
   type: CompanyType;
+  types: string[] | null;
   sub_type: string | null;
   stage: string | null;
   sectors: string[] | null;

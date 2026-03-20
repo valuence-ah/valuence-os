@@ -5,7 +5,7 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Company, Contact, Interaction, IcMemo, DealStatus } from "@/lib/types";
+import type { Company, Contact, Interaction, IcMemo, DealStatus, CompanyType } from "@/lib/types";
 import { cn, formatDate, formatCurrency, getInitials, truncate } from "@/lib/utils";
 import {
   Search, Plus, ExternalLink, ChevronRight, Pencil, Check, X,
@@ -38,6 +38,10 @@ const SECTOR_OPTIONS = [
   "Cleantech", "Techbio", "Advanced Materials", "Energy Storage", "Carbon Capture",
   "Climate Tech", "Synthetic Biology", "Industrial Biotech", "Agtech",
   "Water Tech", "Circular Economy", "Deep Tech", "Hardware", "Other",
+];
+
+const TYPE_OPTIONS = [
+  "startup", "lp", "investor", "ecosystem_partner", "fund", "corporate", "government", "other",
 ];
 
 // ── Logo / Avatar ─────────────────────────────────────────────────────────────
@@ -295,7 +299,8 @@ export function PipelineClient({ initialCompanies }: Props) {
   // ── Edit handlers ─────────────────────────────────────────────────────────
   function startEdit() {
     if (!selected) return;
-    setEditForm({ ...selected });
+    const types = selected.types?.length ? selected.types : (selected.type ? [selected.type] : []);
+    setEditForm({ ...selected, types });
     setEditing(true);
   }
 
@@ -331,6 +336,13 @@ export function PipelineClient({ initialCompanies }: Props) {
     const lower = s.toLowerCase();
     const curr = (editForm.sectors as string[] ?? []);
     setEF("sectors", curr.includes(lower) ? curr.filter(x => x !== lower) : [...curr, lower]);
+  }
+
+  function toggleType(t: string) {
+    const curr = (editForm.types as string[] ?? []);
+    const next = curr.includes(t) ? curr.filter(x => x !== t) : [...curr, t];
+    setEF("types", next);
+    if (next.length > 0) setEF("type", next[0] as CompanyType);
   }
 
   // ── Add company ───────────────────────────────────────────────────────────
@@ -762,6 +774,26 @@ export function PipelineClient({ initialCompanies }: Props) {
                           active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-300 hover:border-blue-400"
                         )}>
                         {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* ── Type (multi-select chips in edit mode) ── */}
+            {editing && (
+              <section>
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Type</h2>
+                <div className="flex flex-wrap gap-2">
+                  {TYPE_OPTIONS.map(t => {
+                    const active = (editForm.types as string[] ?? []).includes(t);
+                    return (
+                      <button key={t} type="button" onClick={() => toggleType(t)}
+                        className={cn("px-3 py-1 rounded-full text-xs font-medium border transition-all",
+                          active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-300 hover:border-blue-400"
+                        )}>
+                        {t.replace("_", " ")}
                       </button>
                     );
                   })}

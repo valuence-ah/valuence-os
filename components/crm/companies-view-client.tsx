@@ -52,6 +52,7 @@ const TYPE_BADGE: Record<string, string> = {
   startup:           "bg-blue-50 text-blue-700 border border-blue-100",
   lp:                "bg-purple-50 text-purple-700 border border-purple-100",
   fund:              "bg-indigo-50 text-indigo-700 border border-indigo-100",
+  investor:          "bg-indigo-50 text-indigo-700 border border-indigo-100",
   ecosystem_partner: "bg-teal-50 text-teal-700 border border-teal-100",
   corporate:         "bg-orange-50 text-orange-700 border border-orange-100",
   government:        "bg-slate-100 text-slate-600 border border-slate-200",
@@ -59,6 +60,7 @@ const TYPE_BADGE: Record<string, string> = {
 };
 const TYPE_LABEL: Record<string, string> = {
   startup: "Startup", lp: "LP", fund: "Fund",
+  investor: "Investor",
   ecosystem_partner: "Eco Partner", corporate: "Corporate",
   government: "Government", other: "Other",
 };
@@ -66,12 +68,19 @@ const TYPE_LABEL: Record<string, string> = {
 // All possible columns (every view can access all of these)
 const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
   type: {
-    key: "type", label: "Type", group: "core", defaultWidth: 110,
-    render: c => (
-      <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium", TYPE_BADGE[c.type] ?? "bg-slate-50 text-slate-600")}>
-        {TYPE_LABEL[c.type] ?? c.type}
-      </span>
-    ),
+    key: "type", label: "Type", group: "core", defaultWidth: 130,
+    render: c => {
+      const typeList = (c.types && c.types.length > 0) ? c.types : [c.type];
+      return (
+        <div className="flex flex-wrap gap-1">
+          {typeList.map(t => (
+            <span key={t} className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium", TYPE_BADGE[t] ?? "bg-slate-50 text-slate-600")}>
+              {TYPE_LABEL[t] ?? t}
+            </span>
+          ))}
+        </div>
+      );
+    },
   },
   deal_status: {
     key: "deal_status", label: "Status", group: "core", defaultWidth: 115,
