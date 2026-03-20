@@ -10,7 +10,7 @@ import { cn, formatDate, formatCurrency, getInitials, truncate } from "@/lib/uti
 import {
   Search, Plus, ExternalLink, ChevronRight, Pencil, Check, X,
   User, FileText, Link2, MapPin, Calendar, Mail, Phone,
-  Building2, Sparkles, Paperclip, Tag, Upload, Loader2,
+  Building2, Sparkles, Paperclip, Tag, Upload, Loader2, ImageIcon,
 } from "lucide-react";
 
 // ── Status display helpers ────────────────────────────────────────────────────
@@ -42,25 +42,29 @@ const SECTOR_OPTIONS = [
 
 // ── Logo / Avatar ─────────────────────────────────────────────────────────────
 
-function CompanyLogo({ company }: { company: Company }) {
+function CompanyLogo({ company, size = "md" }: { company: Company; size?: "sm" | "md" }) {
   const [imgError, setImgError] = useState(false);
-  const domain = company.website
-    ? company.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
-    : null;
-  const clearbitUrl = domain ? `https://logo.clearbit.com/${domain}` : null;
+  const sz = size === "sm" ? "w-10 h-10" : "w-12 h-12";
 
-  if (clearbitUrl && !imgError) {
+  // Priority: saved logo_url → clearbit → initials
+  const logoSrc = company.logo_url ?? (
+    company.website
+      ? `https://logo.clearbit.com/${company.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "")}`
+      : null
+  );
+
+  if (logoSrc && !imgError) {
     return (
       <img
-        src={clearbitUrl}
+        src={logoSrc}
         alt={company.name}
         onError={() => setImgError(true)}
-        className="w-10 h-10 rounded-lg object-contain bg-white border border-slate-200 p-0.5"
+        className={`${sz} rounded-lg object-contain bg-white border border-slate-200 p-0.5 flex-shrink-0`}
       />
     );
   }
   return (
-    <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+    <div className={`${sz} rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0`}>
       <span className="text-white text-xs font-bold">{getInitials(company.name)}</span>
     </div>
   );
@@ -253,6 +257,12 @@ export function PipelineClient({ initialCompanies }: Props) {
   // Memo generation
   const [generatingMemo, setGeneratingMemo] = useState(false);
 
+  // Logo picker
+  const [showLogoPicker, setShowLogoPicker] = useState(false);
+  const [logoUrlInput, setLogoUrlInput]     = useState("");
+  const [logoFinding, setLogoFinding]       = useState(false);
+  const [logoMsg, setLogoMsg]               = useState<string | null>(null);
+
   // ── Derived ──────────────────────────────────────────────────────────────────
   const selected = companies.find(c => c.id === selectedId) ?? null;
 
@@ -364,6 +374,45 @@ export function PipelineClient({ initialCompanies }: Props) {
     } finally {
       setGeneratingMemo(false);
     }
+  }
+
+  // ── Logo handlers ─────────────────────────────────────────────────────────
+  function applyLogo(companyId: string, url: string) {
+    setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, logo_url: url } : c));
+  }
+
+  async function handleManualLogo() {
+    if (!selected || !logoUrlInput.trim()) return;
+    const url = logoUrlInput.trim();
+    await supabase.from("companies").update({ logo_url: url }).eq("id", selected.id);
+    applyLogo(selected.id, url);
+    setShowLogoPicker(false);
+    setLogoUrlInput("");
+    setLogoMsg(null);
+  }
+
+  async function handleAutoFindLogo() {
+    if (!selected) return;
+    setLogoFinding(true);
+    setLogoMsg(null);
+    try {
+      const res  = await fetch("/api/logo-finder/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: selected.id }),
+      });
+      const data = await res.json();
+      if (data.success && data.logo_url) {
+        applyLogo(selected.id, data.logo_url);
+        setShowLogoPicker(false);
+        setLogoMsg(null);
+      } else {
+        setLogoMsg("Logo not found — try entering a URL manually.");
+      }
+    } catch {
+      setLogoMsg("Error finding logo.");
+    }
+    setLogoFinding(false);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -493,6 +542,69 @@ export function PipelineClient({ initialCompanies }: Props) {
                   Go to Website <ExternalLink size={12} />
                 </a>
               )}
+
+              {/* ── Logo Picker ── */}
+              <div className="relative">
+                <button
+                  onClick={() => { setShowLogoPicker(p => !p); setLogoMsg(null); setLogoUrlInput(""); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                  title="Set company logo"
+                >
+                  <ImageIcon size={12} /> Logo
+                </button>
+
+                {showLogoPicker && (
+                  <div className="absolute right-0 top-9 z-30 w-72 bg-white border border-slate-200 rounded-xl shadow-lg p-4 space-y-3">
+                    <p className="text-xs font-semibold text-slate-700">Set Logo</p>
+
+                    {/* Option 1 — Manual URL */}
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] text-slate-500 font-medium">Paste a logo URL</p>
+                      <div className="flex gap-2">
+                        <input
+                          className="flex-1 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                          placeholder="https://…"
+                          value={logoUrlInput}
+                          onChange={e => setLogoUrlInput(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && handleManualLogo()}
+                        />
+                        <button
+                          onClick={handleManualLogo}
+                          disabled={!logoUrlInput.trim()}
+                          className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-40"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-px bg-slate-100" />
+                      <span className="text-[10px] text-slate-400">or</span>
+                      <div className="flex-1 h-px bg-slate-100" />
+                    </div>
+
+                    {/* Option 2 — Auto-find */}
+                    <button
+                      onClick={handleAutoFindLogo}
+                      disabled={logoFinding}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-100 disabled:opacity-50 transition-colors"
+                    >
+                      {logoFinding
+                        ? <><Loader2 size={12} className="animate-spin" /> Finding logo…</>
+                        : <><Sparkles size={12} /> Auto-find logo</>
+                      }
+                    </button>
+
+                    {logoMsg && <p className="text-[11px] text-slate-500">{logoMsg}</p>}
+
+                    <button onClick={() => setShowLogoPicker(false)} className="text-[11px] text-slate-400 hover:text-slate-600 w-full text-center">
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {editing ? (
                 <div className="flex gap-1.5">
                   <button onClick={cancelEdit} className="flex items-center gap-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50">
