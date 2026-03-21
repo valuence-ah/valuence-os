@@ -546,12 +546,12 @@ export function PipelineClient({ initialCompanies }: Props) {
               <CompanyLogo company={selected} />
               <div>
                 <h1 className="text-lg font-bold text-slate-900">{selected.name}</h1>
-                <div className="flex items-center gap-2 mt-0.5">
+                <div className="flex items-center gap-1.5 mt-0.5">
                   {/* Editable type badge */}
                   <div className="relative" onMouseDown={e => e.stopPropagation()}>
                     <button
                       onClick={() => setShowTypePicker(p => !p)}
-                      className="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-700 text-white hover:bg-slate-600 transition-colors capitalize"
+                      className="inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none bg-slate-700 text-white hover:bg-slate-600 transition-colors capitalize"
                     >
                       {selected.type?.replace(/_/g, " ")}
                     </button>
@@ -577,12 +577,12 @@ export function PipelineClient({ initialCompanies }: Props) {
                     )}
                   </div>
                   {selected.stage && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 capitalize">
+                    <span className="inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none bg-slate-100 text-slate-600 capitalize">
                       {selected.stage.replace("_", " ")}
                     </span>
                   )}
                   {selected.deal_status && (
-                    <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", STATUS_COLORS[selected.deal_status])}>
+                    <span className={cn("inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none", STATUS_COLORS[selected.deal_status])}>
                       {STATUS_LABELS[selected.deal_status]}
                     </span>
                   )}
