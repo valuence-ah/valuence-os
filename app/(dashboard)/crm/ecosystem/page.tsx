@@ -14,7 +14,7 @@ export default async function EcosystemPage() {
   const { data: companies } = (await supabase
     .from("companies")
     .select("*")
-    .contains("types", ["other"])
+    .contains("types", ["strategic partner"])
     .order("name", { ascending: true })
     .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };

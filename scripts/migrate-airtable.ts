@@ -107,44 +107,29 @@ function splitMulti(val: string): string[] {
 
 // ── Type Mapping ──────────────────────────────────────────────────────────────
 
-/**
- * Determine company type from the CSV row.
- * Priority: explicit Type field → checkbox columns → name heuristics → default
- */
+/** Map a single raw type string to the exact value used in the DB */
+function mapSingleType(raw: string): string {
+  const n = raw.toLowerCase().trim();
+  if (n === "startup")                                          return "startup";
+  if (n === "limited partner" || n === "lp")                   return "limited partner";
+  if (n === "investor" || n === "fund" || n === "vc")          return "investor";
+  if (n.includes("strategic") || n.includes("ecosystem") ||
+      n.includes("corporate"))                                  return "strategic partner";
+  return "other";
+}
+
+/** Return all types from a comma-separated Excel "Type" cell */
+function inferCompanyTypes(row: Record<string, string>): string[] {
+  const raw = col(row, "Type").trim();
+  if (!raw) return ["other"];
+  const parts = raw.split(",").map(s => mapSingleType(s.trim())).filter(Boolean);
+  // Deduplicate
+  return [...new Set(parts)];
+}
+
+/** Primary type = first value in the types array */
 function inferCompanyType(row: Record<string, string>): string {
-  const raw  = col(row, "Type");
-  const norm = raw.toLowerCase().replace(/[\s/_-]+/g, "");
-
-  // Explicit Type field
-  if (norm === "startup")                           return "startup";
-  if (norm === "lp" || norm === "limitedpartner")   return "lp";
-  if (norm === "investor" || norm === "fund" || norm === "vcfund" || norm === "vc")
-                                                    return "fund";
-  if (norm.includes("government") || norm.includes("academic") || norm.includes("ministry"))
-                                                    return "government";
-  if (norm.includes("strategic") || norm.includes("corporate") || norm.includes("ecosystem"))
-                                                    return "ecosystem_partner";
-
-  // Checkbox columns (Airtable exports "checked" or the value name)
-  if (col(row, "Startup").trim())                   return "startup";
-  if (col(row, "LP").trim())                        return "lp";
-  if (col(row, "Investor").trim())                  return "fund";
-  if (col(row, "Strategic Partner").trim())         return "ecosystem_partner";
-
-  // Name heuristics
-  const name = col(row, "Company").toLowerCase();
-  const fundKw  = ["capital", " ventures", " fund", "asset management", "family office",
-                   "endowment", "pension", "investments llc", "management llc",
-                   "holdings llc", "partners llc", "equity partners"];
-  const govKw   = ["ministry", "ministerio", " department of", "government of",
-                   "commission", "authority", "bureau of", "agency of"];
-  const ecoKw   = ["accelerator", "incubator", "university", " institute",
-                   " college", "research center", "national lab", "polytechnic"];
-  if (fundKw.some(k => name.includes(k)))           return "fund";
-  if (govKw.some(k => name.includes(k)))            return "government";
-  if (ecoKw.some(k => name.includes(k)))            return "ecosystem_partner";
-
-  return "other";   // catch-all — user can reclassify in CRM
+  return inferCompanyTypes(row)[0] ?? "other";
 }
 
 /** Map Airtable deal Status → DB deal_status enum */
@@ -235,6 +220,29 @@ async function batchInsert(
   return { inserted, errors };
 }
 
+async function batchUpsert(
+  table: string,
+  records: Record<string, unknown>[],
+  conflictColumn: string
+): Promise<{ inserted: number; errors: number }> {
+  if (DRY_RUN) return { inserted: records.length, errors: 0 };
+  let inserted = 0, errors = 0;
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from(table).upsert(batch, { onConflict: conflictColumn, ignoreDuplicates: false });
+    if (error) {
+      console.error(`   ⚠️  Batch upsert error (rows ${i}–${i + batch.length}):`, error.message);
+      for (const rec of batch) {
+        const { error: e2 } = await supabase.from(table).upsert(rec, { onConflict: conflictColumn, ignoreDuplicates: false });
+        if (!e2) inserted++; else errors++;
+      }
+    } else {
+      inserted += batch.length;
+    }
+  }
+  return { inserted, errors };
+}
+
 // ── STEP 1: Import Companies ──────────────────────────────────────────────────
 
 async function importCompanies(
@@ -249,8 +257,18 @@ async function importCompanies(
   // Keep every row that has a real company name
   const valid = rows.filter(r => {
     const name = col(r, "Company").trim();
-    if (!name || name.length < 2 || name.length > 150) return false;
-    if (name.includes("@")) return false;  // accidental email in name column
+    if (!name || name.length < 2 || name.length > 100) return false;
+    if (name.includes("@")) return false;         // accidental email
+    if (/^[-•*–—]/.test(name)) return false;      // starts with dash/bullet (notes)
+    if (/^(Overall|Note|Summary|Analysis|Unicorn|Market |While |The defensibility)/i.test(name)) return false;
+    // Skip sentence-like entries: contain ": " and are long (Field: value notes)
+    if (name.includes(": ") && name.split(" ").length > 5) return false;
+    // Must have at least one other real field (website, description, or type)
+    // to distinguish real companies from stray text rows
+    const type    = col(r, "Type").trim();
+    const website = col(r, "Website", "Domain").trim();
+    const desc    = col(r, "Company Description").trim();
+    if (!type && !website && !desc) return false;
     return true;
   });
 
@@ -329,7 +347,8 @@ async function importCompanies(
     const lpType = col(row, "Stage (LP)").trim() || null;
 
     // ── Type ──────────────────────────────────────────────────────────────
-    const type = inferCompanyType(row);
+    const type  = inferCompanyType(row);
+    const types = inferCompanyTypes(row);
 
     // ── AI Memo ───────────────────────────────────────────────────────────
     const memo = col(row, "AI-Generated Memo").trim();
@@ -340,6 +359,7 @@ async function importCompanies(
     const fields: Record<string, unknown> = {
       name,
       type,
+      types,
       deal_status:        dealStatus,
       description:        col(row, "Company Description") || null,
       website:            website || null,
@@ -366,8 +386,8 @@ async function importCompanies(
   console.log(`    Inserting ${toInsert.length} companies…`);
 
   if (!DRY_RUN) {
-    const { inserted, errors } = await batchInsert("companies", toInsert);
-    console.log(`\n    ✅  Inserted: ${inserted} | Errors: ${errors}`);
+    const { inserted, errors } = await batchUpsert("companies", toInsert, "name");
+    console.log(`\n    ✅  Upserted: ${inserted} | Errors: ${errors}`);
 
     // Fetch all IDs for linking
     const { data: all } = await supabase.from("companies").select("id, name").limit(20000);
