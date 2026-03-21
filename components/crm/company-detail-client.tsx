@@ -48,7 +48,7 @@ export function CompanyDetailClient({ company, contacts: initContacts, interacti
   const [noteText, setNoteText]   = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
-  const [contactForm, setContactForm] = useState<Partial<Contact>>({ type: "founder" });
+  const [contactForm, setContactForm] = useState<Partial<Contact>>({ type: "Founder / Mgmt" as Contact["type"] });
   const [savingContact, setSavingContact] = useState(false);
 
   async function saveNote() {
@@ -75,7 +75,7 @@ export function CompanyDetailClient({ company, contacts: initContacts, interacti
     if (data) {
       setContacts(p => [data, ...p]);
       setShowContactForm(false);
-      setContactForm({ type: "founder" });
+      setContactForm({ type: "Founder / Mgmt" as Contact["type"] });
     }
   }
 
@@ -262,13 +262,16 @@ export function CompanyDetailClient({ company, contacts: initContacts, interacti
               <input className="input" placeholder="Email" type="email" value={contactForm.email ?? ""} onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))} />
               <input className="input" placeholder="Title / Role" value={contactForm.title ?? ""} onChange={e => setContactForm(p => ({ ...p, title: e.target.value }))} />
               <select className="select" value={contactForm.type} onChange={e => setContactForm(p => ({ ...p, type: e.target.value as Contact["type"] }))}>
-                <option value="founder">Founder</option>
-                <option value="lp">LP</option>
-                <option value="corporate">Corporate</option>
-                <option value="ecosystem_partner">Ecosystem Partner</option>
-                <option value="fund_manager">Fund Manager</option>
-                <option value="advisor">Advisor</option>
-                <option value="other">Other</option>
+                <option value="Founder / Mgmt">Founder / Mgmt</option>
+                <option value="Investor">Investor</option>
+                <option value="Limited Partner">Limited Partner</option>
+                <option value="Strategic">Strategic</option>
+                <option value="Ecosystem">Ecosystem</option>
+                <option value="Advisor / KOL">Advisor / KOL</option>
+                <option value="Employee">Employee</option>
+                <option value="Lawyer">Lawyer</option>
+                <option value="Government/Academic">Government/Academic</option>
+                <option value="Other">Other</option>
               </select>
               <select className="select" value={contactForm.relationship_strength ?? ""} onChange={e => setContactForm(p => ({ ...p, relationship_strength: e.target.value as Contact["relationship_strength"] }))}>
                 <option value="">Relationship strength</option>

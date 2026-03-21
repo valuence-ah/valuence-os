@@ -39,20 +39,27 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 // Values match Excel "Investment Round" column
+// Values match Excel "Investment Round" column
 const STAGE_OPTIONS = ["Pre-Seed", "Pre-A", "Seed", "Seed Extension", "Series A", "Series B", "Series C", "Growth"];
-const SECTOR_OPTIONS = [
-  "Cleantech", "Techbio", "Advanced Materials", "Energy Storage", "Carbon Capture",
-  "Climate Tech", "Synthetic Biology", "Industrial Biotech", "Agtech",
-  "Water Tech", "Circular Economy", "Deep Tech", "Hardware", "Other",
+
+// Values match Excel "Sector" column
+const SECTOR_OPTIONS = ["Biotech", "Cleantech", "Other"];
+
+// Values match Excel "Sub-sector" column
+const SUB_SECTOR_OPTIONS = [
+  "Additive / Advanced Manufacturing", "Advanced Diagnostics / Biomarkers",
+  "Advanced Materials", "Air", "Biomanufacturing", "Computing / AI",
+  "Digital Health", "Drug Discovery", "Earth", "Energy Source / Storage",
+  "Food / Ag", "Organomics", "Regenerative / Longevity", "SynBio", "Water / Waste",
 ];
 
+// Values match Excel "Type" column
 const TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: "startup",           label: "Startup" },
-  { value: "limited partner",   label: "Limited Partner" },
-  { value: "investor",          label: "Investor" },
-  { value: "strategic partner", label: "Strategic Partner" },
-  { value: "ecosystem_partner", label: "Ecosystem Partner" },
-  { value: "other",             label: "Other" },
+  { value: "startup",          label: "Startup" },
+  { value: "limited partner",  label: "Limited Partner" },
+  { value: "investor",         label: "Investor" },
+  { value: "strategic partner",label: "Strategic Partner" },
+  { value: "other",            label: "Other" },
 ];
 
 // ── Logo / Avatar ─────────────────────────────────────────────────────────────

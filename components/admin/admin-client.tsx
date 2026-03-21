@@ -181,7 +181,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 150,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<CompanyRow>(["startup","limited partner","investor","strategic partner","ecosystem_partner","other"]),
+        renderEditCell: makeComboEditor<CompanyRow>(["Startup","Limited Partner","Investor","Strategic Partner","Other"]),
       },
       {
         key: "lp_stage",
@@ -197,7 +197,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 130,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<CompanyRow>(["sourced","monitoring","active_deal","portfolio","passed","exited"]),
+        renderEditCell: makeComboEditor<CompanyRow>(["identified_introduced","first_meeting","discussion_in_process","due_diligence","passed","portfolio","tracking_hold","exited"]),
       },
       {
         key: "stage",
@@ -205,7 +205,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 150,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<CompanyRow>(["pre-seed","seed","series_a","series_b","series_c","growth"]),
+        renderEditCell: makeComboEditor<CompanyRow>(["Pre-Seed","Pre-A","Seed","Seed Extension","Series A","Series B","Series C","Growth"]),
       },
       {
         key: "sectors",
@@ -215,7 +215,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         resizable: true,
         renderCell: ({ row }: { row: CompanyRow }) =>
           Array.isArray(row.sectors) ? row.sectors.join(", ") : (row.sectors ?? ""),
-        renderEditCell: makeComboEditor<CompanyRow>(["cleantech","techbio","advanced materials","energy storage","carbon capture","climate tech","synthetic biology","industrial biotech","agtech","water tech","circular economy","deep tech","hardware","other"]),
+        renderEditCell: makeComboEditor<CompanyRow>(["Biotech","Cleantech","Other"]),
       },
       {
         key: "description",
@@ -300,10 +300,15 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       {
         key: "sub_type",
         name: "Sub-sector",
-        width: 140,
+        width: 200,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<CompanyRow>([
+          "Additive / Advanced Manufacturing","Advanced Diagnostics / Biomarkers",
+          "Advanced Materials","Air","Biomanufacturing","Computing / AI",
+          "Digital Health","Drug Discovery","Earth","Energy Source / Storage",
+          "Food / Ag","Organomics","Regenerative / Longevity","SynBio","Water / Waste",
+        ]),
       },
       {
         key: "last_funding_date",
@@ -355,7 +360,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 120,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<CompanyRow>(["family_office","institutional","corporate_vc","foundation","sovereign","hni","other"]),
+        renderEditCell: makeComboEditor<CompanyRow>(["Lead","Initial Meeting","Discussion in Process","Due Diligence","Committed","Passed"]),
       },
       {
         key: "fund_focus",
@@ -466,7 +471,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 130,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<ContactRow>(["founder","lp","corporate","ecosystem_partner","fund_manager","government","advisor","other"]),
+        renderEditCell: makeComboEditor<ContactRow>(["Advisor / KOL","Ecosystem","Employee","Founder / Mgmt","Government/Academic","Investor","Lawyer","Limited Partner","Other","Strategic"]),
       },
       {
         key: "company_name",
