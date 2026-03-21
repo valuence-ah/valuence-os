@@ -40,8 +40,13 @@ const SECTOR_OPTIONS = [
   "Water Tech", "Circular Economy", "Deep Tech", "Hardware", "Other",
 ];
 
-const TYPE_OPTIONS = [
-  "startup", "lp", "investor", "ecosystem_partner", "fund", "corporate", "government", "other",
+const TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "startup",           label: "Startup" },
+  { value: "limited partner",   label: "Limited Partner" },
+  { value: "investor",          label: "Investor" },
+  { value: "strategic partner", label: "Strategic Partner" },
+  { value: "ecosystem_partner", label: "Ecosystem Partner" },
+  { value: "other",             label: "Other" },
 ];
 
 // ── Logo / Avatar ─────────────────────────────────────────────────────────────
@@ -781,19 +786,40 @@ export function PipelineClient({ initialCompanies }: Props) {
               </section>
             )}
 
-            {/* ── Type (multi-select chips in edit mode) ── */}
+            {/* ── Type (dropdown + multi-select chips in edit mode) ── */}
             {editing && (
               <section>
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Type</h2>
+                {/* Quick single-select dropdown — changes the primary type and syncs types array */}
+                <div className="mb-3">
+                  <select
+                    className="select text-sm"
+                    value={editForm.type ?? ""}
+                    onChange={e => {
+                      const val = e.target.value as CompanyType;
+                      setEF("type", val);
+                      // Replace types array so the primary type matches
+                      const curr = (editForm.types as string[] ?? []);
+                      const filtered = curr.filter(x => x !== editForm.type);
+                      setEF("types", [val, ...filtered]);
+                    }}
+                  >
+                    <option value="">Select type</option>
+                    {TYPE_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+                {/* Additional type tags (multi-select chips) */}
                 <div className="flex flex-wrap gap-2">
-                  {TYPE_OPTIONS.map(t => {
-                    const active = (editForm.types as string[] ?? []).includes(t);
+                  {TYPE_OPTIONS.map(o => {
+                    const active = (editForm.types as string[] ?? []).includes(o.value);
                     return (
-                      <button key={t} type="button" onClick={() => toggleType(t)}
+                      <button key={o.value} type="button" onClick={() => toggleType(o.value)}
                         className={cn("px-3 py-1 rounded-full text-xs font-medium border transition-all",
                           active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-300 hover:border-blue-400"
                         )}>
-                        {t.replace("_", " ")}
+                        {o.label}
                       </button>
                     );
                   })}

@@ -2,7 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
-import { CompaniesViewClient } from "@/components/crm/companies-view-client";
+import { FundsViewClient } from "@/components/crm/funds-view-client";
 import type { Company } from "@/lib/types";
 
 export const metadata = { title: "Funds" };
@@ -21,7 +21,7 @@ export default async function FundsPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Funds" subtitle={`${companies?.length ?? 0} funds`} />
-      <CompaniesViewClient initialCompanies={companies ?? []} view="funds" />
+      <FundsViewClient initialCompanies={companies ?? []} />
     </div>
   );
 }

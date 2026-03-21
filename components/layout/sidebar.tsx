@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 const CRM_ITEMS = [
   { href: "/crm/pipeline",  icon: GitBranch,      label: "Pipeline"         },
   { href: "/crm/lps",       icon: Landmark,       label: "Limited Partners" },
-  { href: "/crm/funds",     icon: Briefcase,      label: "Investors"        },
+  { href: "/crm/funds",     icon: Briefcase,      label: "Funds"            },
   { href: "/crm/strategic", icon: Handshake,      label: "Strategic"        },
   { href: "/crm/ecosystem", icon: MoreHorizontal, label: "Ecosystem"        },
   { href: "/crm/companies", icon: Globe,          label: "All Companies"    },
