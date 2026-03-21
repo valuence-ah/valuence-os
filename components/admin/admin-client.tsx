@@ -23,7 +23,7 @@ import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter } from "luci
 // ─── Row types ────────────────────────────────────────────────────────────────
 
 type CompanyRow = Company & { _dirty?: boolean };
-type ContactRow = Contact & { company_name?: string | null; _dirty?: boolean };
+type ContactRow = Contact & { company_name?: string | null; _dirty?: boolean; name?: string };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -96,6 +96,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
     initialContacts.map((c) => ({
       ...c,
       company_name: c.company?.name ?? null,
+      name: [c.first_name, c.last_name].filter(Boolean).join(" "),
     }))
   );
   const [selectedContactRows, setSelectedContactRows] = useState<ReadonlySet<string>>(
@@ -433,20 +434,14 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         frozen: true,
       },
       {
-        key: "first_name",
-        name: "First Name",
-        width: 130,
+        key: "name",
+        name: "Name",
+        width: 200,
         frozen: true,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
-      },
-      {
-        key: "last_name",
-        name: "Last Name",
-        width: 130,
-        sortable: true,
-        resizable: true,
+        renderCell: ({ row }: { row: ContactRow }) =>
+          [row.first_name, row.last_name].filter(Boolean).join(" "),
         renderEditCell: renderTextEditor,
       },
       {
@@ -572,7 +567,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   // ─── Visible columns (apply column picker) ────────────────────────────────
   // Keys that can never be hidden: SelectColumn key and frozen name/first_name
   const FROZEN_COMPANY_KEYS = new Set(["name"]);
-  const FROZEN_CONTACT_KEYS = new Set(["first_name"]);
+  const FROZEN_CONTACT_KEYS = new Set(["name"]);
 
   const companyColumns = useMemo(
     () =>
@@ -649,6 +644,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           const q = search.toLowerCase();
           return contacts.filter(
             (c) =>
+              c.name?.toLowerCase().includes(q) ||
               c.first_name?.toLowerCase().includes(q) ||
               c.last_name?.toLowerCase().includes(q) ||
               c.email?.toLowerCase().includes(q) ||
@@ -738,7 +734,14 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         showToast("Saving…", "saving");
 
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { _dirty, company_name, company, ...fields } = row as ContactRow & { company?: unknown };
+        const { _dirty, company_name, company, name, ...fields } = row as ContactRow & { company?: unknown };
+
+        // Split combined "Name" field back into first_name / last_name
+        if (name !== undefined) {
+          const parts = name.trim().split(/\s+/);
+          fields.first_name = parts[0] ?? "";
+          fields.last_name = parts.slice(1).join(" ") || "";
+        }
 
         const { error } = await supabase
           .from("contacts")
@@ -777,7 +780,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
     showToast("Saving…", "saving");
     const { data, error } = await supabase
       .from("contacts")
-      .insert({ first_name: "New", last_name: "Contact", type: "other", status: "active" })
+      .insert({ first_name: "New", last_name: "Contact", type: "Other", status: "active" })
       .select()
       .single();
 
@@ -785,7 +788,12 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       showToast("Error: " + (error?.message ?? "unknown"), "error");
       return;
     }
-    const row: ContactRow = { ...(data as Contact), company_name: null };
+    const contact = data as Contact;
+    const row: ContactRow = {
+      ...contact,
+      company_name: null,
+      name: [contact.first_name, contact.last_name].filter(Boolean).join(" "),
+    };
     setContacts((prev) => [row, ...prev]);
     showToast("Saved ✓", "saved");
   }
