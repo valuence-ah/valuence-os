@@ -270,6 +270,20 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [logoFinding, setLogoFinding]       = useState(false);
   const [logoMsg, setLogoMsg]               = useState<string | null>(null);
 
+  // Type picker
+  const [showTypePicker, setShowTypePicker] = useState(false);
+
+  // Close type picker when clicking outside
+  useEffect(() => {
+    function handleClickOutside() {
+      setShowTypePicker(false);
+    }
+    if (showTypePicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showTypePicker]);
+
   // ── Derived ──────────────────────────────────────────────────────────────────
   const selected = companies.find(c => c.id === selectedId) ?? null;
 
@@ -543,6 +557,35 @@ export function PipelineClient({ initialCompanies }: Props) {
                       {selected.stage.replace("_", " ")}
                     </span>
                   )}
+                  {/* Editable type badge */}
+                  <div className="relative" onMouseDown={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => setShowTypePicker(p => !p)}
+                      className="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-700 text-white hover:bg-slate-600 transition-colors capitalize"
+                    >
+                      {selected.type?.replace(/_/g, " ")}
+                    </button>
+                    {showTypePicker && (
+                      <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[160px]">
+                        {["startup","limited partner","investor","strategic partner","ecosystem_partner","other"].map(t => (
+                          <button
+                            key={t}
+                            onClick={async () => {
+                              await supabase.from("companies").update({ type: t, types: [t] }).eq("id", selected.id);
+                              setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, type: t as Company["type"], types: [t] } : c));
+                              setShowTypePicker(false);
+                            }}
+                            className={cn(
+                              "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 capitalize transition-colors",
+                              selected.type === t ? "text-blue-600 font-medium" : "text-slate-700"
+                            )}
+                          >
+                            {t.replace(/_/g, " ")}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

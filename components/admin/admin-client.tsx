@@ -11,6 +11,7 @@ import {
   type Column,
   type RowsChangeData,
   type SortColumn,
+  type RenderEditCellProps,
   renderTextEditor,
   SelectColumn,
 } from "react-data-grid";
@@ -43,6 +44,31 @@ function fmtDate(iso: string | null | undefined): string {
 
 type ToastKind = "saving" | "saved" | "error";
 type ToastState = { message: string; type: ToastKind } | null;
+
+// ─── Combo editor factory ─────────────────────────────────────────────────────
+
+function makeComboEditor<TRow>(options: string[]) {
+  return function ComboEditor({ row, column, onRowChange, onClose }: RenderEditCellProps<TRow>) {
+    const listId = `combo-${column.key}`;
+    const val = String((row as Record<string, unknown>)[column.key as string] ?? "");
+    return (
+      <>
+        <input
+          list={listId}
+          defaultValue={val}
+          autoFocus
+          style={{ width: "100%", height: "100%", padding: "0 8px", border: "none", outline: "none", fontSize: "12px", background: "#fff" }}
+          onChange={(e) => onRowChange({ ...row, [column.key]: e.target.value })}
+          onBlur={() => onClose(true)}
+          onKeyDown={(e) => { if (e.key === "Enter") onClose(true); if (e.key === "Escape") onClose(false); }}
+        />
+        <datalist id={listId}>
+          {options.map(o => <option key={o} value={o} />)}
+        </datalist>
+      </>
+    );
+  };
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -155,7 +181,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 150,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<CompanyRow>(["startup","limited partner","investor","strategic partner","ecosystem_partner","other"]),
       },
       {
         key: "lp_stage",
@@ -163,7 +189,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 140,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<CompanyRow>(["Lead","Initial Meeting","Discussion in Process","Due Diligence","Committed","Passed"]),
       },
       {
         key: "deal_status",
@@ -171,7 +197,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 130,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<CompanyRow>(["sourced","monitoring","active_deal","portfolio","passed","exited"]),
       },
       {
         key: "stage",
@@ -179,7 +205,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 150,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<CompanyRow>(["pre-seed","seed","series_a","series_b","series_c","growth"]),
       },
       {
         key: "sectors",
@@ -189,7 +215,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         resizable: true,
         renderCell: ({ row }: { row: CompanyRow }) =>
           Array.isArray(row.sectors) ? row.sectors.join(", ") : (row.sectors ?? ""),
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<CompanyRow>(["cleantech","techbio","advanced materials","energy storage","carbon capture","climate tech","synthetic biology","industrial biotech","agtech","water tech","circular economy","deep tech","hardware","other"]),
       },
       {
         key: "description",
@@ -221,7 +247,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 120,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<CompanyRow>(["USA","UK","Canada","Singapore","South Korea","Japan","Germany","France","Australia","Israel","India","China","Thailand","Malaysia","Brunei","Other"]),
       },
       {
         key: "founded_year",
@@ -329,7 +355,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 120,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<CompanyRow>(["family_office","institutional","corporate_vc","foundation","sovereign","hni","other"]),
       },
       {
         key: "fund_focus",
@@ -440,7 +466,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 130,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<ContactRow>(["founder","lp","corporate","ecosystem_partner","fund_manager","government","advisor","other"]),
       },
       {
         key: "company_name",
@@ -481,7 +507,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 120,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<ContactRow>(["USA","UK","Canada","Singapore","South Korea","Japan","Germany","France","Australia","Israel","India","China","Thailand","Malaysia","Brunei","Other"]),
       },
       {
         key: "notes",
@@ -497,7 +523,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 120,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<ContactRow>(["strong","medium","weak","new"]),
       },
       {
         key: "is_primary_contact",
@@ -523,7 +549,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 100,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        renderEditCell: makeComboEditor<ContactRow>(["active","pending"]),
       },
       {
         key: "created_at",
@@ -835,38 +861,50 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   function FilterField({
     label,
     filterKey,
-    placeholder,
+    options,
     isCompanyTab,
   }: {
     label: string;
     filterKey: string;
-    placeholder?: string;
+    options?: string[];
     isCompanyTab: boolean;
   }) {
     const filters = isCompanyTab ? companyFilters : contactFilters;
     const setFilters = isCompanyTab ? setCompanyFilters : setContactFilters;
+    const sharedStyle = {
+      width: "100%",
+      fontSize: "12px",
+      padding: "5px 8px",
+      border: "1px solid #e2e8f0",
+      borderRadius: "4px",
+      background: "#f8fafc",
+      color: "#1e293b",
+      outline: "none",
+      boxSizing: "border-box" as const,
+    };
     return (
       <div style={{ marginBottom: "10px" }}>
         <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#64748b", textTransform: "uppercase", marginBottom: "3px" }}>
           {label}
         </label>
-        <input
-          type="text"
-          value={filters[filterKey] ?? ""}
-          onChange={(e) => setFilters((prev) => ({ ...prev, [filterKey]: e.target.value }))}
-          placeholder={placeholder ?? `Filter by ${label.toLowerCase()}…`}
-          style={{
-            width: "100%",
-            fontSize: "12px",
-            padding: "5px 8px",
-            border: "1px solid #e2e8f0",
-            borderRadius: "4px",
-            background: "#f8fafc",
-            color: "#1e293b",
-            outline: "none",
-            boxSizing: "border-box",
-          }}
-        />
+        {options ? (
+          <select
+            value={filters[filterKey] ?? ""}
+            onChange={(e) => setFilters((prev) => ({ ...prev, [filterKey]: e.target.value }))}
+            style={sharedStyle}
+          >
+            <option value="">All</option>
+            {options.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        ) : (
+          <input
+            type="text"
+            value={filters[filterKey] ?? ""}
+            onChange={(e) => setFilters((prev) => ({ ...prev, [filterKey]: e.target.value }))}
+            placeholder={`Filter by ${label.toLowerCase()}…`}
+            style={sharedStyle}
+          />
+        )}
       </div>
     );
   }
@@ -969,20 +1007,20 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
 
               {isCompanies ? (
                 <>
-                  <FilterField label="Type" filterKey="type" placeholder="startup, investor, limited partner…" isCompanyTab={true} />
-                  <FilterField label="Deal Status" filterKey="deal_status" placeholder="sourced, active_deal, portfolio…" isCompanyTab={true} />
-                  <FilterField label="Stage / LP Stage" filterKey="stage" placeholder="pre-seed, seed…" isCompanyTab={true} />
-                  <FilterField label="Sector" filterKey="sectors" placeholder="cleantech, techbio…" isCompanyTab={true} />
-                  <FilterField label="Location Country" filterKey="location_country" placeholder="UK, US…" isCompanyTab={true} />
-                  <FilterField label="Source" filterKey="source" placeholder="referral, conference…" isCompanyTab={true} />
+                  <FilterField label="Type" filterKey="type" isCompanyTab={true} options={["startup","limited partner","investor","strategic partner","ecosystem_partner","other"]} />
+                  <FilterField label="Deal Status" filterKey="deal_status" isCompanyTab={true} options={["sourced","monitoring","active_deal","portfolio","passed","exited"]} />
+                  <FilterField label="Stage / LP Stage" filterKey="stage" isCompanyTab={true} options={["pre-seed","seed","series_a","series_b","Lead","Initial Meeting","Discussion in Process","Due Diligence","Committed","Passed"]} />
+                  <FilterField label="Sector" filterKey="sectors" isCompanyTab={true} options={["cleantech","techbio","advanced materials","energy storage","carbon capture","climate tech","synthetic biology","industrial biotech","agtech","water tech","circular economy","deep tech","hardware","other"]} />
+                  <FilterField label="Location Country" filterKey="location_country" isCompanyTab={true} />
+                  <FilterField label="Source" filterKey="source" isCompanyTab={true} />
                 </>
               ) : (
                 <>
-                  <FilterField label="Type" filterKey="type" placeholder="founder, investor…" isCompanyTab={false} />
-                  <FilterField label="Company" filterKey="company_name" placeholder="company name…" isCompanyTab={false} />
-                  <FilterField label="Location Country" filterKey="location_country" placeholder="UK, US…" isCompanyTab={false} />
-                  <FilterField label="Status" filterKey="status" placeholder="active, inactive…" isCompanyTab={false} />
-                  <FilterField label="Relationship" filterKey="relationship_strength" placeholder="strong, warm…" isCompanyTab={false} />
+                  <FilterField label="Type" filterKey="type" isCompanyTab={false} options={["founder","lp","corporate","ecosystem_partner","fund_manager","government","advisor","other"]} />
+                  <FilterField label="Company" filterKey="company_name" isCompanyTab={false} />
+                  <FilterField label="Location Country" filterKey="location_country" isCompanyTab={false} />
+                  <FilterField label="Status" filterKey="status" isCompanyTab={false} options={["active","pending"]} />
+                  <FilterField label="Relationship" filterKey="relationship_strength" isCompanyTab={false} options={["strong","medium","weak","new"]} />
                 </>
               )}
 
