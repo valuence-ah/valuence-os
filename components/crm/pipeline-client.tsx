@@ -548,7 +548,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                 <h1 className="text-lg font-bold text-slate-900">{selected.name}</h1>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   {/* Editable type badge */}
-                  <div className="relative" onMouseDown={e => e.stopPropagation()}>
+                  <div className="relative inline-flex items-center" onMouseDown={e => e.stopPropagation()}>
                     <button
                       onClick={() => setShowTypePicker(p => !p)}
                       className="inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none bg-slate-700 text-white hover:bg-slate-600 transition-colors capitalize"
