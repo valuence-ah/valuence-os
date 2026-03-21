@@ -28,6 +28,7 @@ import {
   Handshake,
   Globe,
   MoreHorizontal,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -174,8 +175,9 @@ export function Sidebar() {
 
       </nav>
 
-      {/* Footer — sign out */}
-      <div className="px-3 py-4 border-t border-[#1e2d4a]">
+      {/* Footer — admin + sign out */}
+      <div className="px-3 py-4 border-t border-[#1e2d4a] space-y-0.5">
+        <NavLink href="/admin" icon={Shield} label="Admin" />
         <button
           onClick={handleSignOut}
           className="nav-item w-full text-left text-red-400 hover:text-red-300 hover:bg-red-900/20"

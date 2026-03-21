@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**" },
     ],
   },
+  transpilePackages: ["react-data-grid"],
 };
 
 export default nextConfig;
