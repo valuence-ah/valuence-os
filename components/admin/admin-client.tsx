@@ -2,19 +2,23 @@
 // ─── Admin Spreadsheet Client ─────────────────────────────────────────────────
 // Embeds a react-data-grid for Companies and Contacts with inline cell editing
 // that saves directly to Supabase on change.
+// Enhanced with: column sorting, column resizing, per-column filter row,
+// column picker, and clear-filters button.
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
   DataGrid,
   type Column,
+  type RenderHeaderCellProps,
   type RowsChangeData,
+  type SortColumn,
   renderTextEditor,
   SelectColumn,
 } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
-import { Search, Plus, Trash2, Shield } from "lucide-react";
+import { Search, Plus, Trash2, Shield, SlidersHorizontal, X } from "lucide-react";
 
 // ─── Row types ────────────────────────────────────────────────────────────────
 
@@ -73,6 +77,33 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
     () => new Set()
   );
 
+  // ── Sort state ───────────────────────────────────────────────────────────
+  const [companySortColumns, setCompanySortColumns] = useState<readonly SortColumn[]>([]);
+  const [contactSortColumns, setContactSortColumns] = useState<readonly SortColumn[]>([]);
+
+  // ── Per-column filter state ───────────────────────────────────────────────
+  const [companyFilters, setCompanyFilters] = useState<Record<string, string>>({});
+  const [contactFilters, setContactFilters] = useState<Record<string, string>>({});
+
+  // ── Column picker state ───────────────────────────────────────────────────
+  const [hiddenCompanyKeys, setHiddenCompanyKeys] = useState<Set<string>>(new Set());
+  const [hiddenContactKeys, setHiddenContactKeys] = useState<Set<string>>(new Set());
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const columnPickerRef = useRef<HTMLDivElement>(null);
+
+  // Close column picker when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (columnPickerRef.current && !columnPickerRef.current.contains(e.target as Node)) {
+        setShowColumnPicker(false);
+      }
+    }
+    if (showColumnPicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showColumnPicker]);
+
   // ── Toast helper ─────────────────────────────────────────────────────────
   function showToast(message: string, type: ToastKind) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -89,7 +120,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   }, []);
 
   // ─── Company columns ───────────────────────────────────────────────────────
-  const companyColumns: Column<CompanyRow>[] = useMemo(
+  const allCompanyColumns: Column<CompanyRow>[] = useMemo(
     () => [
       {
         ...SelectColumn,
@@ -100,113 +131,291 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         name: "Company Name",
         width: 200,
         frozen: true,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}
+              {sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input
+              style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }}
+              placeholder="Filter…"
+              value={companyFilters[column.key as string] ?? ""}
+              onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        ),
       },
       {
         key: "type",
         name: "Type",
         width: 150,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "lp_stage",
         name: "LP Stage",
         width: 140,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "deal_status",
         name: "Deal Status",
         width: 130,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "stage",
         name: "Investment Round",
         width: 150,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "sectors",
         name: "Sectors",
         width: 180,
+        sortable: true,
+        resizable: true,
         renderCell: ({ row }: { row: CompanyRow }) =>
           Array.isArray(row.sectors) ? row.sectors.join(", ") : (row.sectors ?? ""),
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "description",
         name: "Description",
         width: 300,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "website",
         name: "Website",
         width: 180,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "location_city",
         name: "City",
         width: 120,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "location_country",
         name: "Country",
         width: 120,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "founded_year",
         name: "Founded",
         width: 90,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "funding_raised",
         name: "Funding Raised",
         width: 140,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "aum",
         name: "AUM",
         width: 120,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "commitment_goal",
         name: "Commitment Goal",
         width: 150,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "notes",
         name: "Notes",
         width: 250,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "source",
         name: "Source",
         width: 120,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "created_at",
         name: "Created",
         width: 110,
+        sortable: true,
+        resizable: true,
         renderCell: ({ row }: { row: CompanyRow }) => fmtDate(row.created_at),
         editable: false,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<CompanyRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={companyFilters[column.key as string] ?? ""} onChange={(e) => setCompanyFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
     ],
-    []
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [companyFilters]
   );
 
   // ─── Contact columns ───────────────────────────────────────────────────────
-  const contactColumns: Column<ContactRow>[] = useMemo(
+  const allContactColumns: Column<ContactRow>[] = useMemo(
     () => [
       {
         ...SelectColumn,
@@ -217,107 +426,307 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         name: "First Name",
         width: 130,
         frozen: true,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "last_name",
         name: "Last Name",
         width: 130,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "email",
         name: "Email",
         width: 200,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "title",
         name: "Title",
         width: 160,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "type",
         name: "Type",
         width: 130,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "company_name",
         name: "Company",
         width: 160,
         editable: false,
+        sortable: true,
+        resizable: true,
         renderCell: ({ row }: { row: ContactRow }) => row.company_name ?? "",
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "phone",
         name: "Phone",
         width: 130,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "linkedin_url",
         name: "LinkedIn",
         width: 180,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "location_city",
         name: "City",
         width: 120,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "location_country",
         name: "Country",
         width: 120,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "notes",
         name: "Notes",
         width: 250,
+        sortable: true,
+        resizable: true,
         renderEditCell: renderTextEditor,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
       {
         key: "created_at",
         name: "Created",
         width: 110,
+        sortable: true,
+        resizable: true,
         renderCell: ({ row }: { row: ContactRow }) => fmtDate(row.created_at),
         editable: false,
+        renderHeaderCell: ({ column, sortDirection }: RenderHeaderCellProps<ContactRow>) => (
+          <div className="rdg-header-cell-content" style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between", padding: "4px 8px", gap: "2px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", userSelect: "none" }}>
+              {column.name}{sortDirection === "ASC" ? " ↑" : sortDirection === "DESC" ? " ↓" : ""}
+            </span>
+            <input style={{ fontSize: "11px", padding: "1px 4px", border: "1px solid #475569", borderRadius: "3px", background: "#0f172a", color: "#e2e8f0", width: "100%", outline: "none" }} placeholder="Filter…" value={contactFilters[column.key as string] ?? ""} onChange={(e) => setContactFilters((prev) => ({ ...prev, [column.key as string]: e.target.value }))} onClick={(e) => e.stopPropagation()} />
+          </div>
+        ),
       },
     ],
-    []
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [contactFilters]
   );
 
-  // ─── Filtered rows ─────────────────────────────────────────────────────────
+  // ─── Visible columns (apply column picker) ────────────────────────────────
+  // Keys that can never be hidden: SelectColumn key and frozen name/first_name
+  const FROZEN_COMPANY_KEYS = new Set(["name"]);
+  const FROZEN_CONTACT_KEYS = new Set(["first_name"]);
+
+  const companyColumns = useMemo(
+    () =>
+      allCompanyColumns.filter((col) => {
+        const key = col.key as string;
+        // SelectColumn has key "select-row"; never hide it
+        if (key === "select-row") return true;
+        if (FROZEN_COMPANY_KEYS.has(key)) return true;
+        return !hiddenCompanyKeys.has(key);
+      }),
+    [allCompanyColumns, hiddenCompanyKeys]
+  );
+
+  const contactColumns = useMemo(
+    () =>
+      allContactColumns.filter((col) => {
+        const key = col.key as string;
+        if (key === "select-row") return true;
+        if (FROZEN_CONTACT_KEYS.has(key)) return true;
+        return !hiddenContactKeys.has(key);
+      }),
+    [allContactColumns, hiddenContactKeys]
+  );
+
+  // ─── Filtered + sorted rows ───────────────────────────────────────────────
+
   const filteredCompanies = useMemo(() => {
-    if (!search.trim()) return companies;
-    const q = search.toLowerCase();
-    return companies.filter(
-      (c) =>
-        c.name?.toLowerCase().includes(q) ||
-        c.type?.toLowerCase().includes(q) ||
-        c.location_city?.toLowerCase().includes(q) ||
-        c.location_country?.toLowerCase().includes(q) ||
-        c.description?.toLowerCase().includes(q) ||
-        c.notes?.toLowerCase().includes(q)
+    // 1. Global search filter
+    const filtered = !search.trim()
+      ? companies
+      : (() => {
+          const q = search.toLowerCase();
+          return companies.filter(
+            (c) =>
+              c.name?.toLowerCase().includes(q) ||
+              c.type?.toLowerCase().includes(q) ||
+              c.location_city?.toLowerCase().includes(q) ||
+              c.location_country?.toLowerCase().includes(q) ||
+              c.description?.toLowerCase().includes(q) ||
+              c.notes?.toLowerCase().includes(q)
+          );
+        })();
+
+    // 2. Per-column filter
+    const colFiltered = filtered.filter((row) =>
+      Object.entries(companyFilters).every(([key, val]) => {
+        if (!val) return true;
+        const cellVal = String((row as unknown as Record<string, unknown>)[key] ?? "").toLowerCase();
+        return cellVal.includes(val.toLowerCase());
+      })
     );
-  }, [companies, search]);
+
+    // 3. Sort
+    if (companySortColumns.length === 0) return colFiltered;
+    return [...colFiltered].sort((a, b) => {
+      for (const { columnKey, direction } of companySortColumns) {
+        const aVal = String((a as unknown as Record<string, unknown>)[columnKey] ?? "");
+        const bVal = String((b as unknown as Record<string, unknown>)[columnKey] ?? "");
+        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true });
+        if (cmp !== 0) return direction === "ASC" ? cmp : -cmp;
+      }
+      return 0;
+    });
+  }, [companies, search, companyFilters, companySortColumns]);
 
   const filteredContacts = useMemo(() => {
-    if (!search.trim()) return contacts;
-    const q = search.toLowerCase();
-    return contacts.filter(
-      (c) =>
-        c.first_name?.toLowerCase().includes(q) ||
-        c.last_name?.toLowerCase().includes(q) ||
-        c.email?.toLowerCase().includes(q) ||
-        c.title?.toLowerCase().includes(q) ||
-        c.company_name?.toLowerCase().includes(q)
+    // 1. Global search filter
+    const filtered = !search.trim()
+      ? contacts
+      : (() => {
+          const q = search.toLowerCase();
+          return contacts.filter(
+            (c) =>
+              c.first_name?.toLowerCase().includes(q) ||
+              c.last_name?.toLowerCase().includes(q) ||
+              c.email?.toLowerCase().includes(q) ||
+              c.title?.toLowerCase().includes(q) ||
+              c.company_name?.toLowerCase().includes(q)
+          );
+        })();
+
+    // 2. Per-column filter
+    const colFiltered = filtered.filter((row) =>
+      Object.entries(contactFilters).every(([key, val]) => {
+        if (!val) return true;
+        const cellVal = String((row as unknown as Record<string, unknown>)[key] ?? "").toLowerCase();
+        return cellVal.includes(val.toLowerCase());
+      })
     );
-  }, [contacts, search]);
+
+    // 3. Sort
+    if (contactSortColumns.length === 0) return colFiltered;
+    return [...colFiltered].sort((a, b) => {
+      for (const { columnKey, direction } of contactSortColumns) {
+        const aVal = String((a as unknown as Record<string, unknown>)[columnKey] ?? "");
+        const bVal = String((b as unknown as Record<string, unknown>)[columnKey] ?? "");
+        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true });
+        if (cmp !== 0) return direction === "ASC" ? cmp : -cmp;
+      }
+      return 0;
+    });
+  }, [contacts, search, contactFilters, contactSortColumns]);
 
   // ─── Row change handlers ──────────────────────────────────────────────────
 
@@ -326,7 +735,6 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       setCompanies((prev) => {
         const next = [...prev];
         for (const idx of indexes) {
-          // find by id in the unfiltered list
           const changed = updatedRows[idx];
           const globalIdx = next.findIndex((r) => r.id === changed.id);
           if (globalIdx !== -1) next[globalIdx] = changed;
@@ -334,14 +742,12 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         return next;
       });
 
-      // Save each changed row
       for (const idx of indexes) {
         const row = updatedRows[idx];
         if (!row.id) continue;
 
         showToast("Saving…", "saving");
 
-        // Build update payload — exclude read-only / join fields
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { _dirty, company, ...fields } = row as CompanyRow & { company?: unknown };
 
@@ -468,16 +874,40 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   // ─── Render ───────────────────────────────────────────────────────────────
 
   const isCompanies = activeTab === "companies";
+
+  // ─── Clear filters helper ────────────────────────────────────────────────
+
+  const hasActiveFilters = isCompanies
+    ? Object.values(companyFilters).some(Boolean)
+    : Object.values(contactFilters).some(Boolean);
+
+  function handleClearFilters() {
+    if (isCompanies) setCompanyFilters({});
+    else setContactFilters({});
+  }
+
   const rowCount = isCompanies ? filteredCompanies.length : filteredContacts.length;
   const totalCount = isCompanies ? companies.length : contacts.length;
   const selectedCount = isCompanies
     ? selectedCompanyRows.size
     : selectedContactRows.size;
 
+  // Columns available to toggle (skip SelectColumn and frozen key)
+  const pickableColumns = isCompanies
+    ? allCompanyColumns.filter(
+        (col) => (col.key as string) !== "select-row" && !FROZEN_COMPANY_KEYS.has(col.key as string)
+      )
+    : allContactColumns.filter(
+        (col) => (col.key as string) !== "select-row" && !FROZEN_CONTACT_KEYS.has(col.key as string)
+      );
+
+  const hiddenKeys = isCompanies ? hiddenCompanyKeys : hiddenContactKeys;
+  const setHiddenKeys = isCompanies ? setHiddenCompanyKeys : setHiddenContactKeys;
+
   return (
     <div className="flex flex-col h-full">
       {/* ── Header bar ── */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0 flex-wrap">
         <Shield size={18} className="text-blue-600" />
         <h1 className="text-sm font-semibold text-slate-800 mr-2">Admin Spreadsheet</h1>
 
@@ -519,10 +949,79 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
 
         {/* Row count */}
         <span className="text-xs text-slate-400 whitespace-nowrap">
-          {search ? `${rowCount} / ${totalCount}` : rowCount} row{rowCount !== 1 ? "s" : ""}
+          {search || hasActiveFilters ? `${rowCount} / ${totalCount}` : rowCount} row{rowCount !== 1 ? "s" : ""}
         </span>
 
         <div className="flex-1" />
+
+        {/* Clear Filters button — only when column filters are active */}
+        {hasActiveFilters && (
+          <button
+            onClick={handleClearFilters}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 rounded-md hover:bg-amber-100 transition-colors"
+          >
+            <X size={13} />
+            Clear Filters
+          </button>
+        )}
+
+        {/* Columns picker button */}
+        <div className="relative" ref={columnPickerRef}>
+          <button
+            onClick={() => setShowColumnPicker((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-md transition-colors ${
+              showColumnPicker
+                ? "bg-slate-700 text-white border-slate-700"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <SlidersHorizontal size={13} />
+            Columns
+          </button>
+
+          {showColumnPicker && (
+            <div
+              style={{
+                position: "absolute",
+                top: "calc(100% + 4px)",
+                right: 0,
+                zIndex: 50,
+                background: "#fff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+                padding: "12px",
+                minWidth: "200px",
+                maxHeight: "400px",
+                overflowY: "auto",
+              }}
+            >
+              <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", marginBottom: "8px", textTransform: "uppercase" }}>
+                Toggle Columns
+              </p>
+              {pickableColumns.map((col) => (
+                <label
+                  key={col.key as string}
+                  style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px 0", cursor: "pointer", fontSize: "12px", color: "#1e293b" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!hiddenKeys.has(col.key as string)}
+                    onChange={(e) =>
+                      setHiddenKeys((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.delete(col.key as string);
+                        else next.add(col.key as string);
+                        return next;
+                      })
+                    }
+                  />
+                  {col.name}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Delete button — only show when rows selected */}
         {selectedCount > 0 && (
@@ -555,6 +1054,8 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
             rowKeyGetter={(row: CompanyRow) => row.id}
             selectedRows={selectedCompanyRows}
             onSelectedRowsChange={setSelectedCompanyRows}
+            sortColumns={companySortColumns}
+            onSortColumnsChange={setCompanySortColumns}
             className="rdg-light"
             style={{ height: "calc(100vh - 108px)", blockSize: "calc(100vh - 108px)" }}
           />
@@ -566,6 +1067,8 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
             rowKeyGetter={(row: ContactRow) => row.id}
             selectedRows={selectedContactRows}
             onSelectedRowsChange={setSelectedContactRows}
+            sortColumns={contactSortColumns}
+            onSortColumnsChange={setContactSortColumns}
             className="rdg-light"
             style={{ height: "calc(100vh - 108px)", blockSize: "calc(100vh - 108px)" }}
           />
@@ -594,7 +1097,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           font-family: ui-sans-serif, system-ui, sans-serif;
           border: none;
           --rdg-header-background-color: #1e293b;
-          --rdg-header-row-height: 36px;
+          --rdg-header-row-height: 60px;
           --rdg-row-height: 32px;
           --rdg-selection-color: #3b82f6;
           --rdg-font-size: 12px;
@@ -620,6 +1123,11 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         .admin-grid .rdg-header-row .rdg-cell {
           border-right-color: #334155;
           border-bottom-color: #334155;
+          padding: 0;
+        }
+        .admin-grid .rdg-header-cell-content {
+          width: 100%;
+          box-sizing: border-box;
         }
         .admin-grid .rdg-row:nth-child(even) {
           background-color: #f8fafc;
