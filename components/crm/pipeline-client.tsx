@@ -270,19 +270,23 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [logoFinding, setLogoFinding]       = useState(false);
   const [logoMsg, setLogoMsg]               = useState<string | null>(null);
 
-  // Type picker
-  const [showTypePicker, setShowTypePicker] = useState(false);
+  // Badge pickers
+  const [showTypePicker,   setShowTypePicker]   = useState(false);
+  const [showStagePicker,  setShowStagePicker]  = useState(false);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
 
-  // Close type picker when clicking outside
+  // Close any picker when clicking outside
   useEffect(() => {
     function handleClickOutside() {
       setShowTypePicker(false);
+      setShowStagePicker(false);
+      setShowStatusPicker(false);
     }
-    if (showTypePicker) {
+    if (showTypePicker || showStagePicker || showStatusPicker) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showTypePicker]);
+  }, [showTypePicker, showStagePicker, showStatusPicker]);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const selected = companies.find(c => c.id === selectedId) ?? null;
@@ -547,16 +551,17 @@ export function PipelineClient({ initialCompanies }: Props) {
               <div>
                 <h1 className="text-lg font-bold text-slate-900">{selected.name}</h1>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  {/* Editable type badge */}
+
+                  {/* ── Type badge ── */}
                   <div className="relative inline-flex items-center" onMouseDown={e => e.stopPropagation()}>
                     <button
-                      onClick={() => setShowTypePicker(p => !p)}
+                      onClick={() => { setShowTypePicker(p => !p); setShowStagePicker(false); setShowStatusPicker(false); }}
                       className="inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none bg-slate-700 text-white hover:bg-slate-600 transition-colors capitalize"
                     >
-                      {selected.type?.replace(/_/g, " ")}
+                      {selected.type?.replace(/_/g, " ") || "No Type"}
                     </button>
                     {showTypePicker && (
-                      <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[160px]">
+                      <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[170px]">
                         {["startup","limited partner","investor","strategic partner","ecosystem_partner","other"].map(t => (
                           <button
                             key={t}
@@ -576,16 +581,69 @@ export function PipelineClient({ initialCompanies }: Props) {
                       </div>
                     )}
                   </div>
-                  {selected.stage && (
-                    <span className="inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none bg-slate-100 text-slate-600 capitalize">
-                      {selected.stage.replace("_", " ")}
-                    </span>
-                  )}
-                  {selected.deal_status && (
-                    <span className={cn("inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none", STATUS_COLORS[selected.deal_status])}>
-                      {STATUS_LABELS[selected.deal_status]}
-                    </span>
-                  )}
+
+                  {/* ── Stage badge ── */}
+                  <div className="relative inline-flex items-center" onMouseDown={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => { setShowStagePicker(p => !p); setShowTypePicker(false); setShowStatusPicker(false); }}
+                      className="inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors capitalize"
+                    >
+                      {selected.stage ? selected.stage.replace(/_/g, " ") : "No Stage"}
+                    </button>
+                    {showStagePicker && (
+                      <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[150px]">
+                        {STAGE_OPTIONS.map(s => (
+                          <button
+                            key={s}
+                            onClick={async () => {
+                              await supabase.from("companies").update({ stage: s }).eq("id", selected.id);
+                              setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, stage: s } : c));
+                              setShowStagePicker(false);
+                            }}
+                            className={cn(
+                              "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 capitalize transition-colors",
+                              selected.stage === s ? "text-blue-600 font-medium" : "text-slate-700"
+                            )}
+                          >
+                            {s.replace(/_/g, " ")}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Status badge ── */}
+                  <div className="relative inline-flex items-center" onMouseDown={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => { setShowStatusPicker(p => !p); setShowTypePicker(false); setShowStagePicker(false); }}
+                      className={cn("inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none transition-colors hover:opacity-80",
+                        selected.deal_status ? STATUS_COLORS[selected.deal_status] : "bg-slate-100 text-slate-500"
+                      )}
+                    >
+                      {selected.deal_status ? STATUS_LABELS[selected.deal_status] : "No Status"}
+                    </button>
+                    {showStatusPicker && (
+                      <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[150px]">
+                        {Object.entries(STATUS_LABELS).map(([val, label]) => (
+                          <button
+                            key={val}
+                            onClick={async () => {
+                              await supabase.from("companies").update({ deal_status: val }).eq("id", selected.id);
+                              setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, deal_status: val as DealStatus } : c));
+                              setShowStatusPicker(false);
+                            }}
+                            className={cn(
+                              "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors",
+                              selected.deal_status === val ? "text-blue-600 font-medium" : "text-slate-700"
+                            )}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                 </div>
               </div>
             </div>
