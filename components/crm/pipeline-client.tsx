@@ -547,16 +547,6 @@ export function PipelineClient({ initialCompanies }: Props) {
               <div>
                 <h1 className="text-lg font-bold text-slate-900">{selected.name}</h1>
                 <div className="flex items-center gap-2 mt-0.5">
-                  {selected.deal_status && (
-                    <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", STATUS_COLORS[selected.deal_status])}>
-                      {STATUS_LABELS[selected.deal_status]}
-                    </span>
-                  )}
-                  {selected.stage && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 capitalize">
-                      {selected.stage.replace("_", " ")}
-                    </span>
-                  )}
                   {/* Editable type badge */}
                   <div className="relative" onMouseDown={e => e.stopPropagation()}>
                     <button
@@ -586,6 +576,16 @@ export function PipelineClient({ initialCompanies }: Props) {
                       </div>
                     )}
                   </div>
+                  {selected.stage && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 capitalize">
+                      {selected.stage.replace("_", " ")}
+                    </span>
+                  )}
+                  {selected.deal_status && (
+                    <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", STATUS_COLORS[selected.deal_status])}>
+                      {STATUS_LABELS[selected.deal_status]}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
