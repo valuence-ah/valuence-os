@@ -968,33 +968,34 @@ export function PipelineClient({ initialCompanies }: Props) {
               ) : (
                 <div className="space-y-2">
                   {contacts.map(c => (
-                    <div key={c.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <div key={c.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                      {/* Avatar */}
+                      <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
                         <User size={14} className="text-violet-600" />
                       </div>
+
+                      {/* Name + Title */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="text-sm font-medium text-slate-800 truncate">
-                            {c.first_name} {c.last_name}
-                          </p>
-                          {c.is_primary_contact && <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">Primary</span>}
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                          {c.is_primary_contact && <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">Primary</span>}
                         </div>
-                        <p className="text-xs text-slate-500 truncate">{c.title ?? c.type}</p>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
-                          {(c.location_city || c.location_country) && (
-                            <span className="text-[11px] text-slate-400 flex items-center gap-0.5">
-                              <MapPin size={10} />
-                              {[c.location_city, c.location_country].filter(Boolean).join(", ")}
-                            </span>
-                          )}
-                          {c.last_contact_date && (
-                            <span className="text-[11px] text-slate-400 flex items-center gap-0.5">
-                              <Calendar size={10} />
-                              {formatDate(c.last_contact_date)}
-                            </span>
-                          )}
-                        </div>
+                        <p className="text-xs text-slate-500 truncate">{c.title ?? c.type ?? "—"}</p>
                       </div>
+
+                      {/* Last Contact */}
+                      <div className="flex-shrink-0 text-right w-20">
+                        <p className="text-[11px] font-medium text-slate-500">Last Contact</p>
+                        <p className="text-[11px] text-slate-400">{c.last_contact_date ? formatDate(c.last_contact_date) : "—"}</p>
+                      </div>
+
+                      {/* Location */}
+                      <div className="flex-shrink-0 text-right w-24">
+                        <p className="text-[11px] font-medium text-slate-500">Location</p>
+                        <p className="text-[11px] text-slate-400 truncate">{[c.location_city, c.location_country].filter(Boolean).join(", ") || "—"}</p>
+                      </div>
+
+                      {/* Action icons */}
                       <div className="flex gap-2 text-slate-400 flex-shrink-0">
                         {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-600"><Mail size={13} /></a>}
                         {c.phone && <a href={`tel:${c.phone}`} className="hover:text-blue-600"><Phone size={13} /></a>}
