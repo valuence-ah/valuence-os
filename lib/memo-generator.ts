@@ -23,7 +23,7 @@ export async function generateMemo(
     supabase.from("contacts").select("*").eq("company_id", company_id),
     supabase.from("interactions").select("*").eq("company_id", company_id).order("date", { ascending: false }).limit(20),
     supabase.from("deals").select("*").eq("company_id", company_id),
-    supabase.from("documents").select("name, type, ai_summary").eq("company_id", company_id),
+    supabase.from("documents").select("name, type, ai_summary, extracted_text").eq("company_id", company_id).order("created_at", { ascending: false }),
   ]);
 
   if (!company) throw new Error("Company not found");
@@ -58,10 +58,10 @@ ${deals?.map((d: { stage: string; investment_amount?: number; instrument?: strin
 ).join("\n") || "No deal data"}
 
 DOCUMENTS:
-${documents?.map((d: { name: string; type: string; ai_summary?: string }) =>
-  `- ${d.name} (${d.type})${d.ai_summary ? ": " + d.ai_summary : ""}`
-).join("\n") || "None uploaded"}
-${extraContext ? `\nADDITIONAL CONTEXT (from deck / transcript):\n${extraContext.slice(0, 3000)}` : ""}`;
+${documents?.map((d: { name: string; type: string; ai_summary?: string; extracted_text?: string }) =>
+  `[${d.type.toUpperCase()}] ${d.name}${d.ai_summary ? `\nSummary: ${d.ai_summary}` : ""}${d.extracted_text ? `\nContent:\n${d.extracted_text.slice(0, 6000)}` : ""}`
+).join("\n\n---\n\n") || "None uploaded"}
+${extraContext ? `\nADDITIONAL CONTEXT:\n${extraContext.slice(0, 3000)}` : ""}`;
 
   const { text } = await generateText({
     model: anthropic("claude-opus-4-5"),

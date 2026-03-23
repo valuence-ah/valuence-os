@@ -1,17 +1,50 @@
 // ─── Storage Upload API /api/storage/upload ───────────────────────────────────
 // Accepts a file upload (multipart/form-data), stores it in Supabase Storage,
-// and updates the relevant company record.
+// extracts text from PDFs / transcripts, and inserts a documents row.
 //
 // Form fields:
 //   file        — the file to upload
-//   bucket      — "logos" | "decks" | "transcripts"
+//   bucket      — "decks" | "transcripts"
 //   company_id  — UUID of the company
-//   doc_type    — "logo" | "deck" | "transcript"
+//   doc_type    — "deck" | "transcript"
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 60;
+
+// ── Extract readable text from a buffer ──────────────────────────────────────
+async function extractText(buffer: Buffer, mimeType: string, fileName: string): Promise<string> {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+
+  // Plain text / VTT transcripts — read directly
+  if (
+    mimeType === "text/plain" ||
+    mimeType === "text/vtt" ||
+    ext === "txt" ||
+    ext === "vtt" ||
+    ext === "srt"
+  ) {
+    return buffer.toString("utf-8").slice(0, 50000);
+  }
+
+  // PDF — extract with pdf-parse
+  if (mimeType === "application/pdf" || ext === "pdf") {
+    try {
+      // Dynamic import keeps this out of the client bundle
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse");
+      const data = await pdfParse(buffer, { max: 0 }); // max:0 = all pages
+      return data.text.slice(0, 50000);
+    } catch (err) {
+      console.error("pdf-parse error:", err);
+      return "";
+    }
+  }
+
+  // DOCX — return empty (could add mammoth later)
+  return "";
+}
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -35,69 +68,63 @@ export async function POST(req: NextRequest) {
   }
 
   // Build a clean file path: company_id/timestamp-filename
-  const ext       = file.name.split(".").pop() ?? "bin";
   const safeName  = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const filePath  = `${company_id}/${Date.now()}-${safeName}`;
+  const mimeType  = file.type || "application/octet-stream";
 
-  // Convert File to ArrayBuffer → Buffer
+  // Convert File → Buffer
   const arrayBuffer = await file.arrayBuffer();
   const buffer      = Buffer.from(arrayBuffer);
 
-  // Upload to Supabase Storage
+  // ── Upload to Supabase Storage ─────────────────────────────────────────────
   const { error: uploadError } = await supabase.storage
     .from(bucket)
-    .upload(filePath, buffer, {
-      contentType: file.type || "application/octet-stream",
-      upsert: true,
-    });
+    .upload(filePath, buffer, { contentType: mimeType, upsert: true });
 
   if (uploadError) {
     return NextResponse.json({ error: uploadError.message }, { status: 500 });
   }
 
-  // Get public URL (works for public buckets)
+  // Get public URL
   const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
 
-  // Update company record based on doc_type
-  if (doc_type === "logo") {
-    await supabase.from("companies").update({ logo_url: publicUrl }).eq("id", company_id);
-  }
+  // ── Extract text ───────────────────────────────────────────────────────────
+  const extractedText = await extractText(buffer, mimeType, file.name);
 
+  // ── Insert document record ─────────────────────────────────────────────────
+  // doc_type maps to documents.type values
+  const documentType = doc_type === "deck" ? "pitch_deck" : "transcript";
+
+  await supabase.from("documents").insert({
+    company_id,
+    name:           file.name,
+    type:           documentType,
+    storage_path:   filePath,
+    mime_type:      mimeType,
+    file_size:      buffer.byteLength,
+    extracted_text: extractedText || null,
+    uploaded_by:    user.id,
+  });
+
+  // ── Side-effects per doc type ──────────────────────────────────────────────
   if (doc_type === "deck") {
+    // Update the company's latest deck URL (used for quick access / thumbnail)
     await supabase.from("companies").update({ pitch_deck_url: publicUrl }).eq("id", company_id);
-    await supabase.from("documents").insert({
-      company_id,
-      name:         file.name,
-      type:         "pitch_deck",
-      file_url:     publicUrl,
-      storage_path: filePath,
-    });
   }
 
   if (doc_type === "transcript") {
-    // Save as an interaction with transcript_text
-    let transcriptText = "";
-    if (ext === "txt" || file.type === "text/plain") {
-      transcriptText = buffer.toString("utf-8");
-    }
+    // Store as an interaction with transcript_url + extracted text
     await supabase.from("interactions").insert({
       company_id,
       type:            "meeting",
       subject:         `Transcript: ${file.name}`,
-      transcript_text: transcriptText || null,
+      transcript_text: extractedText || null,
       transcript_url:  publicUrl,
       date:            new Date().toISOString(),
       sentiment:       "neutral",
       created_by:      user.id,
     });
-    await supabase.from("documents").insert({
-      company_id,
-      name:         file.name,
-      type:         "transcript",
-      file_url:     publicUrl,
-      storage_path: filePath,
-    });
   }
 
-  return NextResponse.json({ url: publicUrl, path: filePath, bucket });
+  return NextResponse.json({ url: publicUrl, path: filePath, bucket, extracted: !!extractedText });
 }
