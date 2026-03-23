@@ -194,7 +194,7 @@ function UploadBox({ label, accept, companyId, docType, bucket, existingUrl, exi
 
   return (
     <div
-      className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col gap-2 hover:border-blue-300 transition-colors cursor-pointer group"
+      className="h-full border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col gap-2 hover:border-blue-300 transition-colors cursor-pointer group"
       onClick={() => !uploading && inputRef.current?.click()}
       onDragOver={e => { e.preventDefault(); }}
       onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f); }}
@@ -1248,50 +1248,60 @@ export function PipelineClient({ initialCompanies }: Props) {
                     </span>
                   )}
                 </p>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Existing decks */}
-                  {documents.filter(d => d.type === "deck").map(doc => {
-                    const url = doc.storage_path
-                      ? supabase.storage.from("decks").getPublicUrl(doc.storage_path).data.publicUrl
-                      : null;
-                    return (
-                      <div key={doc.id} className="relative group border border-slate-200 rounded-xl overflow-hidden bg-white">
-                        {url ? (
-                          <a href={url} target="_blank" rel="noopener noreferrer">
-                            <PdfCover url={url} className="w-full" />
-                          </a>
-                        ) : (
-                          <div className="h-28 bg-slate-50 flex items-center justify-center">
-                            <FileText size={24} className="text-slate-300" />
+                {/* Fixed-height container — more decks → more columns (narrower), never taller */}
+                {(() => {
+                  const decks = documents.filter(d => d.type === "deck");
+                  const total = decks.length + 1; // +1 for upload box
+                  const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
+                  const colClass = cols === 1 ? "grid-cols-1" : cols === 2 ? "grid-cols-2" : cols === 3 ? "grid-cols-3" : "grid-cols-4";
+                  return (
+                    <div className={`grid ${colClass} gap-2 h-48`}>
+                      {decks.map(doc => {
+                        const url = doc.storage_path
+                          ? supabase.storage.from("decks").getPublicUrl(doc.storage_path).data.publicUrl
+                          : null;
+                        return (
+                          <div key={doc.id} className="relative group border border-slate-200 rounded-xl overflow-hidden bg-white h-full flex flex-col">
+                            <div className="flex-1 min-h-0 overflow-hidden">
+                              {url ? (
+                                <a href={url} target="_blank" rel="noopener noreferrer" className="block h-full">
+                                  <PdfCover url={url} className="w-full h-full object-cover" />
+                                </a>
+                              ) : (
+                                <div className="h-full bg-slate-50 flex items-center justify-center">
+                                  <FileText size={20} className="text-slate-300" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="px-2 py-1.5 border-t border-slate-100 flex-shrink-0">
+                              <p className="text-[9px] text-slate-600 truncate font-medium">{doc.name}</p>
+                              <p className="text-[9px] text-slate-400">{formatDate(doc.created_at)}</p>
+                            </div>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDeleteDeck(doc.id, doc.storage_path); }}
+                              className="absolute top-1.5 right-1.5 w-5 h-5 bg-white/90 backdrop-blur rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 border border-slate-200"
+                              title="Remove deck"
+                            >
+                              <X size={9} className="text-red-500" />
+                            </button>
                           </div>
-                        )}
-                        <div className="px-2.5 py-2 border-t border-slate-100">
-                          <p className="text-[10px] text-slate-600 truncate font-medium">{doc.name}</p>
-                          <p className="text-[10px] text-slate-400">{formatDate(doc.created_at)}</p>
-                        </div>
-                        {/* Delete button */}
-                        <button
-                          onClick={e => { e.stopPropagation(); handleDeleteDeck(doc.id, doc.storage_path); }}
-                          className="absolute top-1.5 right-1.5 w-6 h-6 bg-white/90 backdrop-blur rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 border border-slate-200"
-                          title="Remove deck"
-                        >
-                          <X size={10} className="text-red-500" />
-                        </button>
+                        );
+                      })}
+                      {/* Upload box — same fixed height as deck cards */}
+                      <div className="h-full">
+                        <UploadBox
+                          label="Upload Deck"
+                          accept=".pdf,.pptx,.ppt,.key"
+                          companyId={selected.id}
+                          docType="deck"
+                          bucket="decks"
+                          existingUrl={null}
+                          onUploaded={() => loadDetail(selected.id)}
+                        />
                       </div>
-                    );
-                  })}
-
-                  {/* Upload new deck — always visible */}
-                  <UploadBox
-                    label="Upload Deck"
-                    accept=".pdf,.pptx,.ppt,.key"
-                    companyId={selected.id}
-                    docType="deck"
-                    bucket="decks"
-                    existingUrl={null}
-                    onUploaded={() => loadDetail(selected.id)}
-                  />
-                </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* ── Transcripts ── */}
