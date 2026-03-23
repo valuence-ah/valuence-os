@@ -280,6 +280,8 @@ export function PipelineClient({ initialCompanies }: Props) {
     initialCompanies[0]?.id ?? null
   );
   const [search, setSearch]               = useState("");
+  const [sortBy, setSortBy]               = useState<"name" | "status" | "last_contact" | "date_added">("name");
+  const [includePassed, setIncludePassed] = useState(false);
   const [contacts, setContacts]           = useState<Contact[]>([]);
   const [interactions, setInteractions]   = useState<Interaction[]>([]);
   const [documents, setDocuments]         = useState<Array<{id:string;name:string;type:string;storage_path:string|null;created_at:string}>>([]);
@@ -333,15 +335,47 @@ export function PipelineClient({ initialCompanies }: Props) {
   // ── Derived ──────────────────────────────────────────────────────────────────
   const selected = companies.find(c => c.id === selectedId) ?? null;
 
+  const STATUS_SORT_ORDER: Record<string, number> = {
+    due_diligence:          0,
+    discussion_in_process:  1,
+    first_meeting:          2,
+    identified_introduced:  3,
+    portfolio:              4,
+    tracking_hold:          5,
+    exited:                 6,
+    passed:                 7,
+  };
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return companies.filter(c =>
-      !q ||
-      c.name.toLowerCase().includes(q) ||
-      (c.description ?? "").toLowerCase().includes(q) ||
-      (c.sectors ?? []).some(s => s.toLowerCase().includes(q))
-    );
-  }, [companies, search]);
+    const list = companies.filter(c => {
+      if (!includePassed && c.deal_status === "passed") return false;
+      return (
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        (c.description ?? "").toLowerCase().includes(q) ||
+        (c.sectors ?? []).some(s => s.toLowerCase().includes(q))
+      );
+    });
+
+    return [...list].sort((a, b) => {
+      switch (sortBy) {
+        case "name":
+          return a.name.localeCompare(b.name);
+        case "status": {
+          const ao = STATUS_SORT_ORDER[a.deal_status ?? ""] ?? 99;
+          const bo = STATUS_SORT_ORDER[b.deal_status ?? ""] ?? 99;
+          return ao !== bo ? ao - bo : a.name.localeCompare(b.name);
+        }
+        case "last_contact":
+          return (b.last_contact_date ?? "").localeCompare(a.last_contact_date ?? "");
+        case "date_added":
+          return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+        default:
+          return 0;
+      }
+    });
+  }, [companies, search, sortBy, includePassed]);
 
   // ── Load detail data when selected company changes ────────────────────────
   const loadDetail = useCallback(async (id: string) => {
@@ -614,10 +648,10 @@ export function PipelineClient({ initialCompanies }: Props) {
       <div className="w-[280px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
 
         {/* Header */}
-        <div className="px-4 pt-4 pb-3 border-b border-slate-100">
-          <div className="flex items-center justify-between mb-3">
+        <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-2">
+          <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-slate-800">
-              Active Pipeline
+              Pipeline
               <span className="ml-2 text-xs font-normal text-slate-400">{filtered.length}</span>
             </span>
             <button
@@ -628,6 +662,7 @@ export function PipelineClient({ initialCompanies }: Props) {
               <Plus size={14} />
             </button>
           </div>
+
           {/* Search */}
           <div className="relative">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -637,6 +672,31 @@ export function PipelineClient({ initialCompanies }: Props) {
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
+          </div>
+
+          {/* Sort + Include Passed */}
+          <div className="flex items-center gap-2">
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as typeof sortBy)}
+              className="flex-1 text-xs border border-slate-200 rounded-md px-2 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            >
+              <option value="name">Name A→Z</option>
+              <option value="status">Status</option>
+              <option value="last_contact">Last Contact</option>
+              <option value="date_added">Date Added</option>
+            </select>
+            <button
+              onClick={() => setIncludePassed(v => !v)}
+              className={cn(
+                "flex-shrink-0 text-[10px] font-medium px-2 py-1.5 rounded-md border transition-colors whitespace-nowrap",
+                includePassed
+                  ? "bg-red-50 border-red-200 text-red-600"
+                  : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
+              )}
+            >
+              {includePassed ? "✕ Passed" : "+ Passed"}
+            </button>
           </div>
         </div>
 
