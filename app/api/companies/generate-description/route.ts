@@ -24,14 +24,14 @@ export async function POST(req: NextRequest) {
       .from("documents")
       .select("name, type, extracted_text, ai_summary")
       .eq("company_id", company_id)
-      .in("type", ["pitch_deck", "transcript"])
+      .in("type", ["deck", "transcript"])
       .order("created_at", { ascending: false }),
   ]);
 
   if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
 
   // Build document context — combine all deck and transcript text
-  const decks = (docs ?? []).filter(d => d.type === "pitch_deck");
+  const decks = (docs ?? []).filter(d => d.type === "deck");
   const transcripts = (docs ?? []).filter(d => d.type === "transcript");
 
   const deckContext = decks.length > 0

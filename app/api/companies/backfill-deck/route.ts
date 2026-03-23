@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     .from("documents")
     .select("id")
     .eq("company_id", company_id)
-    .eq("type", "pitch_deck")
+    .eq("type", "deck")
     .limit(1)
     .single();
 
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     await supabase.from("documents").insert({
       company_id,
       name:           fileName,
-      type:           "pitch_deck",
+      type:           "deck",
       storage_path:   storagePath,
       mime_type:      "application/pdf",
       file_size:      buffer.byteLength,

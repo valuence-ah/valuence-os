@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
 
   // ── Insert document record ─────────────────────────────────────────────────
   // doc_type maps to documents.type values
-  const documentType = doc_type === "deck" ? "pitch_deck" : "transcript";
+  const documentType = doc_type === "deck" ? "deck" : "transcript";
 
   await supabase.from("documents").insert({
     company_id,
@@ -108,10 +108,10 @@ export async function POST(req: NextRequest) {
     // Store as an interaction with transcript_url + extracted text
     await supabase.from("interactions").insert({
       company_id,
-      type:            "meeting",
-      subject:         `Transcript: ${file.name}`,
-      transcript_text: extractedText || null,
-      transcript_url:  publicUrl,
+      type:           "meeting",
+      subject:        `Transcript: ${file.name}`,
+      body:           extractedText || null,
+      transcript_url: publicUrl,
       date:            new Date().toISOString(),
       sentiment:       "neutral",
       created_by:      user.id,

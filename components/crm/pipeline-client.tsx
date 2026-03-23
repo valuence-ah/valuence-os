@@ -1055,11 +1055,11 @@ export function PipelineClient({ initialCompanies }: Props) {
                   })),
                   ...documents.map(d => ({
                     id: d.id,
-                    kind: d.type === "pitch_deck" ? "deck" : "document",
+                    kind: d.type === "deck" ? "deck" : "document",
                     title: d.name,
                     body: null,
                     date: d.created_at,
-                    url: d.storage_path ? supabase.storage.from(d.type === "pitch_deck" ? "decks" : "transcripts").getPublicUrl(d.storage_path).data.publicUrl : null,
+                    url: d.storage_path ? supabase.storage.from(d.type === "deck" ? "decks" : "transcripts").getPublicUrl(d.storage_path).data.publicUrl : null,
                     meta: null,
                   })),
                 ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -1218,15 +1218,15 @@ export function PipelineClient({ initialCompanies }: Props) {
               <div className="mb-6">
                 <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                   <FileText size={12} /> Pitch Decks
-                  {documents.filter(d => d.type === "pitch_deck").length > 0 && (
+                  {documents.filter(d => d.type === "deck").length > 0 && (
                     <span className="ml-1 text-slate-400 font-normal">
-                      ({documents.filter(d => d.type === "pitch_deck").length})
+                      ({documents.filter(d => d.type === "deck").length})
                     </span>
                   )}
                 </p>
                 <div className="grid grid-cols-3 gap-3">
                   {/* Existing decks */}
-                  {documents.filter(d => d.type === "pitch_deck").map(doc => {
+                  {documents.filter(d => d.type === "deck").map(doc => {
                     const url = doc.storage_path
                       ? supabase.storage.from("decks").getPublicUrl(doc.storage_path).data.publicUrl
                       : null;
