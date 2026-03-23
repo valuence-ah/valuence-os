@@ -372,6 +372,10 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [logoFinding, setLogoFinding]       = useState(false);
   const [logoMsg, setLogoMsg]               = useState<string | null>(null);
 
+  // Delete company
+  const [confirmDelete, setConfirmDelete]   = useState(false);
+  const [deleting, setDeleting]             = useState(false);
+
   // Badge pickers
   const [showPriorityPicker, setShowPriorityPicker] = useState(false);
   const [showStagePicker,    setShowStagePicker]    = useState(false);
@@ -776,6 +780,17 @@ export function PipelineClient({ initialCompanies }: Props) {
     setLogoFinding(false);
   }
 
+  // ── Delete company ────────────────────────────────────────────────────────
+  async function handleDeleteCompany() {
+    if (!selected) return;
+    setDeleting(true);
+    await supabase.from("companies").delete().eq("id", selected.id);
+    setCompanies(prev => prev.filter(c => c.id !== selected.id));
+    setSelectedId(null);
+    setConfirmDelete(false);
+    setDeleting(false);
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -850,7 +865,7 @@ export function PipelineClient({ initialCompanies }: Props) {
               return (
                 <button
                   key={c.id}
-                  onClick={() => { setSelectedId(c.id); setEditing(false); }}
+                  onClick={() => { setSelectedId(c.id); setEditing(false); setConfirmDelete(false); }}
                   className={cn(
                     "w-full flex items-start gap-3 px-4 py-3 text-left border-b border-slate-100 hover:bg-slate-50 transition-colors relative",
                     isActive && "bg-blue-50 hover:bg-blue-50"
@@ -1077,6 +1092,32 @@ export function PipelineClient({ initialCompanies }: Props) {
                 )}
               </div>
 
+              {/* ── Delete button ── */}
+              {!editing && (
+                confirmDelete ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-red-500">Delete this company?</span>
+                    <button
+                      onClick={() => setConfirmDelete(false)}
+                      className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50"
+                    >No</button>
+                    <button
+                      onClick={handleDeleteCompany}
+                      disabled={deleting}
+                      className="px-2.5 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {deleting ? <><Loader2 size={11} className="animate-spin" /> Deleting…</> : "Yes, delete"}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-red-200 rounded-lg text-red-400 hover:bg-red-50 hover:border-red-300 transition-colors"
+                  >
+                    <X size={12} /> Delete
+                  </button>
+                )
+              )}
 
               {editing ? (
                 <div className="flex items-center gap-2">
