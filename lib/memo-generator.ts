@@ -23,7 +23,7 @@ export async function generateMemo(
     supabase.from("contacts").select("*").eq("company_id", company_id),
     supabase.from("interactions").select("*").eq("company_id", company_id).order("date", { ascending: false }).limit(20),
     supabase.from("deals").select("*").eq("company_id", company_id),
-    supabase.from("documents").select("name, type, ai_summary, extracted_text").eq("company_id", company_id).order("created_at", { ascending: false }),
+    supabase.from("documents").select("name, type, storage_path, ai_summary, extracted_text").eq("company_id", company_id).order("created_at", { ascending: false }),
   ]);
 
   if (!company) throw new Error("Company not found");
@@ -63,6 +63,19 @@ ${documents?.map((d: { name: string; type: string; ai_summary?: string; extracte
 ).join("\n\n---\n\n") || "None uploaded"}
 ${extraContext ? `\nADDITIONAL CONTEXT:\n${extraContext.slice(0, 3000)}` : ""}`;
 
+  // Attach deck PDFs as URLs for Claude to read directly (no text extraction needed)
+  type ContentPart =
+    | { type: "text"; text: string }
+    | { type: "file"; data: URL; mimeType: string };
+
+  const messageContent: ContentPart[] = [];
+  const deckDocs = (documents ?? []).filter((d: { type: string; storage_path?: string }) => d.type === "deck" && d.storage_path);
+  for (const deck of deckDocs.slice(0, 3)) {
+    const { data: { publicUrl } } = supabase.storage.from("decks").getPublicUrl(deck.storage_path);
+    messageContent.push({ type: "file", data: new URL(publicUrl), mimeType: "application/pdf" });
+  }
+  messageContent.push({ type: "text", text: `Write an IC memo for this company:\n\n${context}` });
+
   const { text } = await generateText({
     model: anthropic("claude-opus-4-5"),
     maxTokens: 16000,
@@ -85,7 +98,7 @@ Return ONLY a valid JSON object with these exact keys (no markdown, no extra tex
   "investment_thesis": "string (why invest now, fit with Valuence thesis)",
   "recommendation": "invest" | "pass" | "more_diligence" | "pending"
 }`,
-    messages: [{ role: "user", content: `Write an IC memo for this company:\n\n${context}` }],
+    messages: [{ role: "user", content: messageContent }],
   });
 
   const clean = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
