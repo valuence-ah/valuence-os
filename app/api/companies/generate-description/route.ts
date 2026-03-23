@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     supabase.from("companies").select("*").eq("id", company_id).single(),
     supabase
       .from("documents")
-      .select("name, type, storage_path, extracted_text")
+      .select("name, type, storage_path, mime_type, extracted_text")
       .eq("company_id", company_id)
       .in("type", ["deck", "transcript"])
       .order("created_at", { ascending: false }),
@@ -40,10 +40,12 @@ export async function POST(req: NextRequest) {
 
   const decks = (docs ?? []).filter(d => d.type === "deck" && d.storage_path);
   const transcriptDocs = (docs ?? []).filter(d => d.type === "transcript");
+  const pdfTranscripts = transcriptDocs.filter(t => t.storage_path && t.mime_type === "application/pdf");
+  const textTranscripts = transcriptDocs.filter(t => t.extracted_text);
 
-  // Build transcript text context (fast — already extracted)
+  // Build transcript text context from already-extracted text
   const transcriptText = [
-    ...transcriptDocs.map(t => t.extracted_text?.slice(0, 3000)).filter(Boolean),
+    ...textTranscripts.map(t => t.extracted_text?.slice(0, 3000)).filter(Boolean),
     ...(ints ?? []).map(i => i.body?.slice(0, 2000)).filter(Boolean),
   ].join("\n\n---\n\n");
 
@@ -80,6 +82,12 @@ Assumptions: [one short clause only if an item was inferred -- omit this line en
 
   for (const deck of decks.slice(0, 3)) {
     const { data: { publicUrl } } = supabase.storage.from("decks").getPublicUrl(deck.storage_path!);
+    content.push({ type: "file", data: new URL(publicUrl), mimeType: "application/pdf" });
+  }
+
+  // PDF transcripts — pass as URL; text transcripts are already in the prompt
+  for (const t of pdfTranscripts.slice(0, 2)) {
+    const { data: { publicUrl } } = supabase.storage.from("transcripts").getPublicUrl(t.storage_path!);
     content.push({ type: "file", data: new URL(publicUrl), mimeType: "application/pdf" });
   }
 

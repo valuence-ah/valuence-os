@@ -529,6 +529,19 @@ export function PipelineClient({ initialCompanies }: Props) {
     await loadDetail(selected!.id);
   }
 
+  // ── Delete a transcript document ──────────────────────────────────────────
+  async function handleDeleteTranscript(docId: string, storagePath: string | null) {
+    if (!confirm("Remove this transcript?")) return;
+    await supabase.from("documents").delete().eq("id", docId);
+    if (storagePath) {
+      await supabase.storage.from("transcripts").remove([storagePath]);
+      // Also remove the matching interaction row (linked by transcript_url)
+      const { data: { publicUrl } } = supabase.storage.from("transcripts").getPublicUrl(storagePath);
+      await supabase.from("interactions").delete().eq("company_id", selected!.id).eq("transcript_url", publicUrl);
+    }
+    await loadDetail(selected!.id);
+  }
+
   // ── Generate company description ──────────────────────────────────────────
   async function handleGenerateDesc() {
     if (!selected || generatingDesc) return;
@@ -1308,40 +1321,50 @@ export function PipelineClient({ initialCompanies }: Props) {
               <div>
                 <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                   <Paperclip size={12} /> Meeting Transcripts
-                  {interactions.filter(i => i.type === "meeting" && i.transcript_url).length > 0 && (
+                  {documents.filter(d => d.type === "transcript").length > 0 && (
                     <span className="ml-1 text-slate-400 font-normal">
-                      ({interactions.filter(i => i.type === "meeting" && i.transcript_url).length})
+                      ({documents.filter(d => d.type === "transcript").length})
                     </span>
                   )}
                 </p>
-                {/* Fixed-height container — more transcripts → more columns (narrower) */}
                 {(() => {
-                  const transcripts = interactions.filter(i => i.type === "meeting" && i.transcript_url);
+                  const transcripts = documents.filter(d => d.type === "transcript");
                   const total = transcripts.length + 1;
                   const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
                   const colClass = cols === 1 ? "grid-cols-1" : cols === 2 ? "grid-cols-2" : cols === 3 ? "grid-cols-3" : "grid-cols-4";
                   return (
                     <div className={`grid ${colClass} gap-2 h-24`}>
-                      {transcripts.map(i => (
-                        <div key={i.id} className="flex flex-col justify-between border border-slate-200 rounded-xl bg-white p-3 h-full min-w-0">
-                          <div className="flex items-start gap-2 min-w-0">
-                            <div className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
-                              <Paperclip size={11} className="text-violet-500" />
+                      {transcripts.map(doc => {
+                        const url = doc.storage_path
+                          ? supabase.storage.from("transcripts").getPublicUrl(doc.storage_path).data.publicUrl
+                          : null;
+                        return (
+                          <div key={doc.id} className="relative group flex flex-col justify-between border border-slate-200 rounded-xl bg-white p-3 h-full min-w-0">
+                            <div className="flex items-start gap-2 min-w-0">
+                              <div className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
+                                <Paperclip size={11} className="text-violet-500" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[10px] font-medium text-slate-700 truncate leading-tight">{doc.name}</p>
+                                <p className="text-[9px] text-slate-400 mt-0.5">{formatDate(doc.created_at)}</p>
+                              </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[10px] font-medium text-slate-700 truncate leading-tight">{i.subject ?? "Transcript"}</p>
-                              <p className="text-[9px] text-slate-400 mt-0.5">{formatDate(i.date)}</p>
-                            </div>
+                            {url && (
+                              <a href={url} target="_blank" rel="noopener noreferrer"
+                                className="mt-2 text-[9px] text-blue-500 hover:underline flex items-center gap-0.5 truncate">
+                                <ExternalLink size={9} /> Open
+                              </a>
+                            )}
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDeleteTranscript(doc.id, doc.storage_path); }}
+                              className="absolute top-1.5 right-1.5 w-5 h-5 bg-white/90 backdrop-blur rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 border border-slate-200"
+                              title="Remove transcript"
+                            >
+                              <X size={9} className="text-red-500" />
+                            </button>
                           </div>
-                          {i.transcript_url && (
-                            <a href={i.transcript_url} target="_blank" rel="noopener noreferrer"
-                              className="mt-2 text-[9px] text-blue-500 hover:underline flex items-center gap-0.5 truncate">
-                              <ExternalLink size={9} /> Open
-                            </a>
-                          )}
-                        </div>
-                      ))}
-                      {/* Upload box */}
+                        );
+                      })}
                       <div className="h-full">
                         <UploadBox
                           label="Upload Transcript"

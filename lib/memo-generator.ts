@@ -23,7 +23,7 @@ export async function generateMemo(
     supabase.from("contacts").select("*").eq("company_id", company_id),
     supabase.from("interactions").select("*").eq("company_id", company_id).order("date", { ascending: false }).limit(20),
     supabase.from("deals").select("*").eq("company_id", company_id),
-    supabase.from("documents").select("name, type, storage_path, ai_summary, extracted_text").eq("company_id", company_id).order("created_at", { ascending: false }),
+    supabase.from("documents").select("name, type, storage_path, mime_type, ai_summary, extracted_text").eq("company_id", company_id).order("created_at", { ascending: false }),
   ]);
 
   if (!company) throw new Error("Company not found");
@@ -72,6 +72,14 @@ ${extraContext ? `\nADDITIONAL CONTEXT:\n${extraContext.slice(0, 3000)}` : ""}`;
   const deckDocs = (documents ?? []).filter((d: { type: string; storage_path?: string }) => d.type === "deck" && d.storage_path);
   for (const deck of deckDocs.slice(0, 3)) {
     const { data: { publicUrl } } = supabase.storage.from("decks").getPublicUrl(deck.storage_path);
+    messageContent.push({ type: "file", data: new URL(publicUrl), mimeType: "application/pdf" });
+  }
+  // PDF transcripts — pass as URL so Claude can read them directly
+  const pdfTranscripts = (documents ?? []).filter((d: { type: string; storage_path?: string; mime_type?: string }) =>
+    d.type === "transcript" && d.storage_path && d.mime_type === "application/pdf"
+  );
+  for (const t of pdfTranscripts.slice(0, 2)) {
+    const { data: { publicUrl } } = supabase.storage.from("transcripts").getPublicUrl(t.storage_path);
     messageContent.push({ type: "file", data: new URL(publicUrl), mimeType: "application/pdf" });
   }
   messageContent.push({ type: "text", text: `Write an IC memo for this company:\n\n${context}` });
