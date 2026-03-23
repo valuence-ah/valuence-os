@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { extractPdfText } from "@/lib/extract-pdf-text";
 
 export const maxDuration = 60;
 
@@ -28,18 +29,9 @@ async function extractText(buffer: Buffer, mimeType: string, fileName: string): 
     return buffer.toString("utf-8").slice(0, 50000);
   }
 
-  // PDF — extract with pdf-parse
+  // PDF — try text extraction, fall back to Claude vision for image-based PDFs
   if (mimeType === "application/pdf" || ext === "pdf") {
-    try {
-      // Dynamic import keeps this out of the client bundle
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse");
-      const data = await pdfParse(buffer, { max: 0 }); // max:0 = all pages
-      return data.text.slice(0, 50000);
-    } catch (err) {
-      console.error("pdf-parse error:", err);
-      return "";
-    }
+    return extractPdfText(buffer);
   }
 
   // DOCX — return empty (could add mammoth later)

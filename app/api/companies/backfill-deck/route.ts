@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { extractPdfText } from "@/lib/extract-pdf-text";
 
 export const maxDuration = 60;
 
@@ -43,16 +44,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Could not fetch deck: ${err}` }, { status: 500 });
   }
 
-  // Extract text
-  let extractedText = "";
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require("pdf-parse");
-    const data = await pdfParse(buffer, { max: 0 });
-    extractedText = data.text.slice(0, 50000);
-  } catch (err) {
-    console.error("pdf-parse error:", err);
-  }
+  // Extract text (pdf-parse first, Claude vision fallback for image-based PDFs)
+  const extractedText = await extractPdfText(buffer);
 
   // Check if document record already exists
   const { data: existing } = await supabase
