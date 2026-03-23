@@ -160,7 +160,8 @@ interface UploadBoxProps {
 }
 
 function UploadBox({ label, accept, companyId, docType, bucket, existingUrl, existingDate, onUploaded }: UploadBoxProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const supabase  = createClient();
+  const inputRef  = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress]  = useState<string | null>(null);
   const [error, setError]        = useState<string | null>(null);
@@ -170,18 +171,51 @@ function UploadBox({ label, accept, companyId, docType, bucket, existingUrl, exi
     setProgress("Uploading…");
     setError(null);
 
-    const form = new FormData();
-    form.append("file",       file);
-    form.append("bucket",     bucket);
-    form.append("company_id", companyId);
-    form.append("doc_type",   docType);
-
     try {
-      const res  = await fetch("/api/storage/upload", { method: "POST", body: form });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Upload failed");
+      // ── 1. Upload directly to Supabase Storage (bypasses Vercel 4.5 MB limit) ──
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `${companyId}/${Date.now()}-${safeName}`;
+
+      const { error: storageError } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file, { contentType: file.type || "application/octet-stream", upsert: true });
+
+      if (storageError) throw new Error(storageError.message);
+
+      const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
+
+      // ── 2. Insert document record ─────────────────────────────────────────────
+      const documentType = docType === "deck" ? "deck" : "transcript";
+      const { data: { user } } = await supabase.auth.getUser();
+
+      await supabase.from("documents").insert({
+        company_id:   companyId,
+        name:         file.name,
+        type:         documentType,
+        storage_path: filePath,
+        mime_type:    file.type || "application/octet-stream",
+        file_size:    file.size,
+        uploaded_by:  user?.id ?? null,
+      });
+
+      // ── 3. Side-effects ───────────────────────────────────────────────────────
+      if (docType === "deck") {
+        await supabase.from("companies").update({ pitch_deck_url: publicUrl }).eq("id", companyId);
+      }
+      if (docType === "transcript") {
+        await supabase.from("interactions").insert({
+          company_id:     companyId,
+          type:           "meeting",
+          subject:        `Transcript: ${file.name}`,
+          transcript_url: publicUrl,
+          date:           new Date().toISOString(),
+          sentiment:      "neutral",
+          created_by:     user?.id ?? null,
+        });
+      }
+
       setProgress(null);
-      onUploaded(json.url);
+      onUploaded(publicUrl);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
       setProgress(null);
