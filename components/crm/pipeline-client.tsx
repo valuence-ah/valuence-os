@@ -12,6 +12,7 @@ import {
   User, FileText, Link2, MapPin, Calendar, Mail, Phone,
   Building2, Sparkles, Paperclip, Tag, Upload, Loader2, ImageIcon,
 } from "lucide-react";
+import { PdfCover } from "@/components/ui/pdf-cover";
 
 // ── Status display helpers ────────────────────────────────────────────────────
 
@@ -213,6 +214,26 @@ function UploadBox({ label, accept, companyId, docType, bucket, existingUrl, exi
       {uploading ? (
         <div className="flex items-center gap-2 text-xs text-blue-600">
           <Loader2 size={13} className="animate-spin" /> {progress ?? "Uploading…"}
+        </div>
+      ) : existingUrl && docType === "deck" ? (
+        /* ── Deck: show cover-page thumbnail ── */
+        <div className="space-y-2" onClick={e => e.stopPropagation()}>
+          <a href={existingUrl} target="_blank" rel="noopener noreferrer">
+            <PdfCover url={existingUrl} className="w-full rounded-lg shadow-sm border border-slate-100 hover:opacity-90 transition-opacity" />
+          </a>
+          <div className="flex items-center justify-between">
+            <a
+              href={existingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+            >
+              <ExternalLink size={11} /> Open deck
+            </a>
+            <p className="text-[10px] text-slate-400 group-hover:text-blue-500 transition-colors flex items-center gap-0.5">
+              <Upload size={9} /> Replace
+            </p>
+          </div>
         </div>
       ) : existingUrl ? (
         <div className="space-y-1">
