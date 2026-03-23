@@ -3,7 +3,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
 import { CompaniesViewClient } from "@/components/crm/companies-view-client";
-import { FindLogosButton } from "@/components/crm/find-logos-button";
 import type { Company } from "@/lib/types";
 
 export const metadata = { title: "All Companies" };
@@ -20,7 +19,7 @@ export default async function AllCompaniesPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="All Companies" subtitle={`${companies?.length ?? 0} total`} actions={<FindLogosButton />} />
+      <Header title="All Companies" subtitle={`${companies?.length ?? 0} total`}  />
       <CompaniesViewClient initialCompanies={companies ?? []} view="all" />
     </div>
   );

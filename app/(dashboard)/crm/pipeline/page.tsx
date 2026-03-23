@@ -6,7 +6,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
 import { PipelineClient } from "@/components/crm/pipeline-client";
 import { PipelineChatWidget } from "@/components/crm/pipeline-chat-widget";
-import { FindLogosButton } from "@/components/crm/find-logos-button";
 import type { Company } from "@/lib/types";
 
 export const metadata = { title: "Pipeline" };
@@ -24,7 +23,7 @@ export default async function PipelinePage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Pipeline" subtitle={`${companies?.length ?? 0} startups`} actions={<FindLogosButton />} />
+      <Header title="Pipeline" subtitle={`${companies?.length ?? 0} startups`}  />
       <PipelineClient initialCompanies={companies ?? []} />
       {/* Floating Valuence AI chat — position: fixed, renders above page content */}
       <PipelineChatWidget />

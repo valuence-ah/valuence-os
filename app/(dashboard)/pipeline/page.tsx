@@ -4,7 +4,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
 import { PipelineClient } from "@/components/pipeline/pipeline-client";
-import { FindLogosButton } from "@/components/crm/find-logos-button";
 
 export const metadata = { title: "Pipeline" };
 
@@ -18,7 +17,7 @@ export default async function PipelinePage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Pipeline" subtitle="Deal flow from sourced to closed" actions={<FindLogosButton />} />
+      <Header title="Pipeline" subtitle="Deal flow from sourced to closed"  />
       <PipelineClient initialDeals={deals ?? []} />
     </div>
   );
