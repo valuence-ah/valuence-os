@@ -11,6 +11,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -83,6 +85,7 @@ export async function POST(req: NextRequest) {
       type:            "meeting",
       subject:         `Transcript: ${file.name}`,
       transcript_text: transcriptText || null,
+      transcript_url:  publicUrl,
       date:            new Date().toISOString(),
       sentiment:       "neutral",
       created_by:      user.id,

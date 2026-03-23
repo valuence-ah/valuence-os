@@ -10,7 +10,7 @@ import { cn, formatDate, formatCurrency, getInitials, truncate } from "@/lib/uti
 import {
   Search, Plus, ExternalLink, ChevronRight, Pencil, Check, X,
   User, FileText, Link2, MapPin, Calendar, Mail, Phone,
-  Building2, Sparkles, Paperclip, Tag, Upload, Loader2, ImageIcon,
+  Building2, Sparkles, Paperclip, Tag, Upload, Loader2,
 } from "lucide-react";
 
 // ── Status display helpers ────────────────────────────────────────────────────
@@ -317,12 +317,34 @@ export function PipelineClient({ initialCompanies }: Props) {
   // ── Load detail data when selected company changes ────────────────────────
   const loadDetail = useCallback(async (id: string) => {
     setLoadingDetail(true);
-    const [{ data: ctcts }, { data: ints }, { data: memos }] = await Promise.all([
+    const [{ data: ctcts }, { data: ints }, { data: memos }, { data: company }] = await Promise.all([
       supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }),
       supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(5),
       supabase.from("ic_memos").select("*").eq("company_id", id).order("created_at", { ascending: false }).limit(1),
+      supabase.from("companies").select("name, website").eq("id", id).single(),
     ]);
-    setContacts(ctcts ?? []);
+
+    let contacts = ctcts ?? [];
+
+    // Fallback: if no contacts linked by company_id, match by email domain or company name
+    if (contacts.length === 0 && company) {
+      const domainFromWebsite = company.website
+        ? company.website.replace(/^https?:\/\/(www\.)?/, "").split("/")[0].split(".").slice(-2).join(".")
+        : null;
+      const nameSlug = company.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      if (domainFromWebsite || nameSlug) {
+        // Try matching contacts whose email domain matches the company website domain
+        const { data: fallback } = await supabase.rpc("match_contacts_by_company", {
+          p_company_id: id,
+          p_domain: domainFromWebsite ?? "",
+          p_name_slug: nameSlug,
+        });
+        contacts = fallback ?? contacts;
+      }
+    }
+
+    setContacts(contacts);
     setInteractions(ints ?? []);
     setMemo(memos?.[0] ?? null);
     setLoadingDetail(false);
@@ -672,67 +694,6 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </a>
               )}
 
-              {/* ── Logo Picker ── */}
-              <div className="relative">
-                <button
-                  onClick={() => { setShowLogoPicker(p => !p); setLogoMsg(null); setLogoUrlInput(""); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-                  title="Set company logo"
-                >
-                  <ImageIcon size={12} /> Logo
-                </button>
-
-                {showLogoPicker && (
-                  <div className="absolute right-0 top-9 z-30 w-72 bg-white border border-slate-200 rounded-xl shadow-lg p-4 space-y-3">
-                    <p className="text-xs font-semibold text-slate-700">Set Logo</p>
-
-                    {/* Option 1 — Manual URL */}
-                    <div className="space-y-1.5">
-                      <p className="text-[11px] text-slate-500 font-medium">Paste a logo URL</p>
-                      <div className="flex gap-2">
-                        <input
-                          className="flex-1 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                          placeholder="https://…"
-                          value={logoUrlInput}
-                          onChange={e => setLogoUrlInput(e.target.value)}
-                          onKeyDown={e => e.key === "Enter" && handleManualLogo()}
-                        />
-                        <button
-                          onClick={handleManualLogo}
-                          disabled={!logoUrlInput.trim()}
-                          className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-40"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-px bg-slate-100" />
-                      <span className="text-[10px] text-slate-400">or</span>
-                      <div className="flex-1 h-px bg-slate-100" />
-                    </div>
-
-                    {/* Option 2 — Auto-find */}
-                    <button
-                      onClick={handleAutoFindLogo}
-                      disabled={logoFinding}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-100 disabled:opacity-50 transition-colors"
-                    >
-                      {logoFinding
-                        ? <><Loader2 size={12} className="animate-spin" /> Finding logo…</>
-                        : <><Sparkles size={12} /> Auto-find logo</>
-                      }
-                    </button>
-
-                    {logoMsg && <p className="text-[11px] text-slate-500">{logoMsg}</p>}
-
-                    <button onClick={() => setShowLogoPicker(false)} className="text-[11px] text-slate-400 hover:text-slate-600 w-full text-center">
-                      Cancel
-                    </button>
-                  </div>
-                )}
-              </div>
 
               {editing ? (
                 <div className="flex gap-1.5">
@@ -795,19 +756,31 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </Field>
 
                 <Field label="Sector">
-                  {editing ? (
-                    <select className="select text-sm" value={editForm.sectors?.[0] ?? ""} onChange={e => setEF("sectors", e.target.value ? [e.target.value, ...(editForm.sectors?.slice(1) ?? [])] : (editForm.sectors?.slice(1) ?? []))}>
-                      <option value="">Select sector</option>
-                      {SECTOR_OPTIONS.map(s => <option key={s} value={s.toLowerCase()}>{s}</option>)}
-                    </select>
-                  ) : (
-                    <span className="text-sm text-slate-700 capitalize">{selected.sectors?.[0] ?? "—"}</span>
-                  )}
+                  <div className="flex flex-wrap gap-1.5 mt-0.5">
+                    {SECTOR_OPTIONS.map(s => {
+                      const lower = s.toLowerCase();
+                      const active = (editing ? (editForm.sectors as string[] ?? []) : (selected.sectors ?? [])).includes(lower);
+                      return editing ? (
+                        <button key={s} type="button" onClick={() => toggleSector(s)}
+                          className={cn("px-3 py-1 rounded-full text-xs font-medium border transition-all",
+                            active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-300 hover:border-blue-400"
+                          )}>
+                          {s}
+                        </button>
+                      ) : active ? (
+                        <span key={s} className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">{s}</span>
+                      ) : null;
+                    })}
+                    {!editing && !(selected.sectors ?? []).length && <span className="text-sm text-slate-300">—</span>}
+                  </div>
                 </Field>
 
                 <Field label="Sub-sector">
                   {editing ? (
-                    <input className="input text-sm" value={editForm.sub_type ?? ""} onChange={e => setEF("sub_type", e.target.value || null)} placeholder="e.g. Advanced Diagnostics" />
+                    <select className="select text-sm" value={editForm.sub_type ?? ""} onChange={e => setEF("sub_type", e.target.value || null)}>
+                      <option value="">Select sub-sector</option>
+                      {SUB_SECTOR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   ) : (
                     <span className="text-sm text-slate-700">{selected.sub_type ?? "—"}</span>
                   )}
@@ -817,7 +790,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   {editing ? (
                     <div className="flex gap-2">
                       <input className="input text-sm flex-1" value={editForm.location_city ?? ""} onChange={e => setEF("location_city", e.target.value || null)} placeholder="City" />
-                      <input className="input text-sm w-20" value={editForm.location_country ?? ""} onChange={e => setEF("location_country", e.target.value || null)} placeholder="Country" />
+                      <input className="input text-sm flex-1" value={editForm.location_country ?? ""} onChange={e => setEF("location_country", e.target.value || null)} placeholder="Country" />
                     </div>
                   ) : (
                     <span className="text-sm text-slate-700 flex items-center gap-1">
@@ -849,22 +822,22 @@ export function PipelineClient({ initialCompanies }: Props) {
               </div>
             </section>
 
-            {/* ── Description ── */}
+            {/* ── Description — Claude-generated, read-only ── */}
             <section>
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Company Description</h2>
-              {editing ? (
-                <textarea
-                  className="textarea text-sm w-full"
-                  rows={4}
-                  value={editForm.description ?? ""}
-                  onChange={e => setEF("description", e.target.value || null)}
-                  placeholder="Describe the company's technology, mission, and market…"
-                />
-              ) : (
-                <p className="text-sm text-slate-700 leading-relaxed">
-                  {selected.description ?? <span className="text-slate-300 italic">No description yet. Click Edit to add one.</span>}
-                </p>
-              )}
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Company Description</h2>
+                <button
+                  onClick={handleGenerateMemo}
+                  disabled={generatingMemo}
+                  className="text-[11px] px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
+                  title="Generate description with Claude"
+                >
+                  {generatingMemo ? <><Loader2 size={10} className="animate-spin" /> Generating…</> : <><Sparkles size={10} /> Generate with Claude</>}
+                </button>
+              </div>
+              <p className="text-sm text-slate-700 leading-relaxed">
+                {selected.description ?? <span className="text-slate-300 italic">No description yet — click Generate with Claude.</span>}
+              </p>
             </section>
 
             {/* ── Key Words / Tags ── */}
@@ -879,26 +852,6 @@ export function PipelineClient({ initialCompanies }: Props) {
               />
             </section>
 
-            {/* ── Sectors (multi-select chips in edit mode) ── */}
-            {editing && (
-              <section>
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Sectors</h2>
-                <div className="flex flex-wrap gap-2">
-                  {SECTOR_OPTIONS.map(s => {
-                    const lower = s.toLowerCase();
-                    const active = (editForm.sectors as string[] ?? []).includes(lower);
-                    return (
-                      <button key={s} type="button" onClick={() => toggleSector(s)}
-                        className={cn("px-3 py-1 rounded-full text-xs font-medium border transition-all",
-                          active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-300 hover:border-blue-400"
-                        )}>
-                        {s}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
 
             {/* ── Type (dropdown + multi-select chips in edit mode) ── */}
             {editing && (
