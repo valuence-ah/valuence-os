@@ -53,8 +53,8 @@ const SECTOR_COLORS: Record<string, string> = {
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
-  High:   "bg-rose-100 text-rose-700",
-  Medium: "bg-amber-100 text-amber-700",
+  High:   "bg-emerald-100 text-emerald-700",
+  Medium: "bg-orange-100 text-orange-700",
   Low:    "bg-slate-100 text-slate-500",
 };
 
@@ -855,7 +855,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                               selected.priority === p ? "font-medium" : "text-slate-700"
                             )}
                           >
-                            <span className={cn("w-2 h-2 rounded-full", p === "High" ? "bg-rose-400" : p === "Medium" ? "bg-amber-400" : "bg-slate-300")} />
+                            <span className={cn("w-2 h-2 rounded-full", p === "High" ? "bg-emerald-400" : p === "Medium" ? "bg-orange-400" : "bg-slate-300")} />
                             {p}
                           </button>
                         ))}
