@@ -694,14 +694,14 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </a>
               )}
 
-              {/* ── Logo icon button ── */}
+              {/* ── Logo button ── */}
               <div className="relative">
                 <button
                   onClick={() => { setShowLogoPicker(p => !p); setLogoMsg(null); setLogoUrlInput(""); }}
-                  className="w-8 h-8 flex items-center justify-center border border-slate-300 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors"
-                  title="Update company logo"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                  title="Set company logo"
                 >
-                  <ImageIcon size={14} />
+                  <ImageIcon size={12} /> Logo
                 </button>
                 {showLogoPicker && (
                   <div className="absolute right-0 top-9 z-30 w-72 bg-white border border-slate-200 rounded-xl shadow-lg p-4 space-y-3">
