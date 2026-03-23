@@ -52,6 +52,12 @@ const SECTOR_COLORS: Record<string, string> = {
   other:     "bg-slate-100 text-slate-600",
 };
 
+const PRIORITY_COLORS: Record<string, string> = {
+  High:   "bg-rose-100 text-rose-700",
+  Medium: "bg-amber-100 text-amber-700",
+  Low:    "bg-slate-100 text-slate-500",
+};
+
 // Values match Excel "Sub-sector" column
 const SUB_SECTOR_OPTIONS = [
   "Additive / Advanced Manufacturing", "Advanced Diagnostics / Biomarkers",
@@ -333,6 +339,14 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [addingNote, setAddingNote]   = useState(false);
   const [noteText, setNoteText]       = useState("");
   const [savingNote, setSavingNote]   = useState(false);
+
+  // Contact slide-out panel
+  const [contactPanel, setContactPanel]         = useState<Contact | null>(null);
+  const [contactEditing, setContactEditing]     = useState(false);
+  const [contactForm, setContactForm]           = useState<Partial<Contact & { emailList: string[] }>>({});
+  const [contactSaving, setContactSaving]       = useState(false);
+  const [contactRemoving, setContactRemoving]   = useState(false);
+  const [confirmRemove, setConfirmRemove]       = useState(false);
 
   // Edit mode
   const [editing, setEditing]   = useState(false);
@@ -815,32 +829,48 @@ export function PipelineClient({ initialCompanies }: Props) {
                 <h1 className="text-lg font-bold text-slate-900">{selected.name}</h1>
                 <div className="flex items-center gap-1.5 mt-0.5">
 
-                  {/* ── Type badge ── */}
+                  {/* ── Priority badge ── */}
                   <div className="relative inline-flex items-center" onMouseDown={e => e.stopPropagation()}>
                     <button
                       onClick={() => { setShowTypePicker(p => !p); setShowStagePicker(false); setShowStatusPicker(false); }}
-                      className="inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none bg-slate-700 text-white hover:bg-slate-600 transition-colors capitalize"
+                      className={cn(
+                        "inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none transition-colors",
+                        selected.priority ? PRIORITY_COLORS[selected.priority] : "bg-slate-100 text-slate-400"
+                      )}
                     >
-                      {selected.type?.replace(/_/g, " ") || "No Type"}
+                      {selected.priority ? `${selected.priority} Priority` : "Set Priority"}
                     </button>
                     {showTypePicker && (
-                      <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[170px]">
-                        {["startup","limited partner","investor","strategic partner","ecosystem_partner","other"].map(t => (
+                      <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[140px]">
+                        {(["High", "Medium", "Low"] as const).map(p => (
                           <button
-                            key={t}
+                            key={p}
                             onClick={async () => {
-                              await supabase.from("companies").update({ type: t, types: [t] }).eq("id", selected.id);
-                              setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, type: t as Company["type"], types: [t] } : c));
+                              await supabase.from("companies").update({ priority: p }).eq("id", selected.id);
+                              setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, priority: p } : c));
                               setShowTypePicker(false);
                             }}
                             className={cn(
-                              "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 capitalize transition-colors",
-                              selected.type === t ? "text-blue-600 font-medium" : "text-slate-700"
+                              "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors flex items-center gap-2",
+                              selected.priority === p ? "font-medium" : "text-slate-700"
                             )}
                           >
-                            {t.replace(/_/g, " ")}
+                            <span className={cn("w-2 h-2 rounded-full", p === "High" ? "bg-rose-400" : p === "Medium" ? "bg-amber-400" : "bg-slate-300")} />
+                            {p}
                           </button>
                         ))}
+                        {selected.priority && (
+                          <button
+                            onClick={async () => {
+                              await supabase.from("companies").update({ priority: null }).eq("id", selected.id);
+                              setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, priority: null } : c));
+                              setShowTypePicker(false);
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-50 border-t border-slate-100 mt-1 transition-colors"
+                          >
+                            Clear
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1314,9 +1344,12 @@ export function PipelineClient({ initialCompanies }: Props) {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Contacts</h2>
-                <a href={`/crm/companies/${selected.id}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                <button
+                  onClick={() => { if (contacts[0]) { setContactPanel(contacts[0]); setContactEditing(false); setConfirmRemove(false); } }}
+                  className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                >
                   Manage <ChevronRight size={12} />
-                </a>
+                </button>
               </div>
               {loadingDetail ? (
                 <div className="h-12 bg-slate-50 rounded-lg animate-pulse" />
@@ -1325,16 +1358,18 @@ export function PipelineClient({ initialCompanies }: Props) {
               ) : (
                 <div className="space-y-2">
                   {contacts.map(c => (
-                    <div key={c.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                    <button
+                      key={c.id}
+                      onClick={() => { setContactPanel(c); setContactEditing(false); setConfirmRemove(false); }}
+                      className="w-full flex items-center gap-3 p-3 bg-slate-50 rounded-lg hover:bg-blue-50 transition-colors text-left"
+                    >
                       {/* Avatar */}
                       <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
                         <User size={14} className="text-violet-600" />
                       </div>
 
-                      {/* Name + Title | Last Contact | Location — all left-aligned, grouped together */}
+                      {/* Name + Title | Last Contact | Location */}
                       <div className="flex items-center gap-6 flex-1 min-w-0">
-
-                        {/* Name + Title */}
                         <div className="w-40 flex-shrink-0">
                           <div className="flex items-center gap-1.5">
                             <p className="text-sm font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
@@ -1342,28 +1377,23 @@ export function PipelineClient({ initialCompanies }: Props) {
                           </div>
                           <p className="text-xs text-slate-500 truncate">{c.title ?? c.type ?? "—"}</p>
                         </div>
-
-                        {/* Last Contact */}
                         <div className="w-24 flex-shrink-0">
                           <p className="text-[11px] font-medium text-slate-500">Last Contact</p>
                           <p className="text-[11px] text-slate-400">{c.last_contact_date ? formatDate(c.last_contact_date) : "—"}</p>
                         </div>
-
-                        {/* Location */}
                         <div className="w-32 flex-shrink-0">
                           <p className="text-[11px] font-medium text-slate-500">Location</p>
                           <p className="text-[11px] text-slate-400 truncate">{[c.location_city, c.location_country].filter(Boolean).join(", ") || "—"}</p>
                         </div>
-
                       </div>
 
-                      {/* Action icons — pushed to far right */}
-                      <div className="flex gap-2 text-slate-400 flex-shrink-0">
+                      {/* Action icons */}
+                      <div className="flex gap-2 text-slate-400 flex-shrink-0" onClick={e => e.stopPropagation()}>
                         {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-600"><Mail size={13} /></a>}
                         {c.phone && <a href={`tel:${c.phone}`} className="hover:text-blue-600"><Phone size={13} /></a>}
                         {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600"><ExternalLink size={13} /></a>}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -1653,6 +1683,228 @@ export function PipelineClient({ initialCompanies }: Props) {
           </div>
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          CONTACT SLIDE-OUT PANEL
+      ══════════════════════════════════════════════════════════════════════ */}
+      {contactPanel && (
+        <div
+          className="fixed inset-0 z-40 bg-black/20"
+          onClick={() => { setContactPanel(null); setContactEditing(false); setConfirmRemove(false); }}
+        />
+      )}
+      <div className={cn(
+        "fixed top-0 right-0 h-full w-[420px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300",
+        contactPanel ? "translate-x-0" : "translate-x-full"
+      )}>
+        {contactPanel && (() => {
+          const cp = contactPanel;
+          const allEmails = contactEditing
+            ? (contactForm.emailList ?? [cp.email].filter(Boolean) as string[])
+            : [...(cp.emails ?? []), ...(cp.email && !(cp.emails ?? []).includes(cp.email) ? [cp.email] : [])].filter(Boolean) as string[];
+
+          function openEdit() {
+            const emailList = [...(cp.emails ?? []), ...(cp.email && !(cp.emails ?? []).includes(cp.email) ? [cp.email] : [])].filter(Boolean) as string[];
+            setContactForm({ ...cp, emailList: emailList.length ? emailList : cp.email ? [cp.email] : [""] });
+            setContactEditing(true);
+            setConfirmRemove(false);
+          }
+
+          async function saveContact() {
+            setContactSaving(true);
+            const emailList = (contactForm.emailList ?? []).filter(e => e.trim());
+            const primaryEmail = emailList[0] ?? null;
+            const updates = {
+              first_name:       contactForm.first_name      ?? cp.first_name,
+              last_name:        contactForm.last_name       ?? cp.last_name,
+              title:            contactForm.title           ?? cp.title,
+              phone:            contactForm.phone           ?? cp.phone,
+              linkedin_url:     contactForm.linkedin_url    ?? cp.linkedin_url,
+              location_city:    contactForm.location_city   ?? cp.location_city,
+              location_country: contactForm.location_country ?? cp.location_country,
+              notes:            contactForm.notes           ?? cp.notes,
+              email:            primaryEmail,
+              emails:           emailList,
+            };
+            await supabase.from("contacts").update(updates).eq("id", cp.id);
+            const updated = { ...cp, ...updates } as Contact;
+            setContacts(prev => prev.map(c => c.id === cp.id ? updated : c));
+            setContactPanel(updated);
+            setContactEditing(false);
+            setContactSaving(false);
+          }
+
+          async function removeContact() {
+            setContactRemoving(true);
+            await supabase.from("contacts").delete().eq("id", cp.id);
+            setContacts(prev => prev.filter(c => c.id !== cp.id));
+            setContactPanel(null);
+            setContactRemoving(false);
+            setConfirmRemove(false);
+          }
+
+          function setCF<K extends keyof typeof contactForm>(k: K, v: typeof contactForm[K]) {
+            setContactForm(p => ({ ...p, [k]: v }));
+          }
+
+          return (
+            <>
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                    <User size={18} className="text-violet-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{cp.first_name} {cp.last_name}</p>
+                    <p className="text-xs text-slate-500">{cp.title ?? cp.type ?? "—"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!contactEditing && (
+                    <button onClick={openEdit} className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 flex items-center gap-1">
+                      <Pencil size={11} /> Edit
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setContactPanel(null); setContactEditing(false); setConfirmRemove(false); }}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400"
+                  ><X size={15} /></button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">First Name</label>
+                    {contactEditing
+                      ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.first_name ?? ""} onChange={e => setCF("first_name", e.target.value)} />
+                      : <p className="text-sm text-slate-800 mt-1">{cp.first_name || "—"}</p>}
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Last Name</label>
+                    {contactEditing
+                      ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.last_name ?? ""} onChange={e => setCF("last_name", e.target.value)} />
+                      : <p className="text-sm text-slate-800 mt-1">{cp.last_name || "—"}</p>}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Title</label>
+                  {contactEditing
+                    ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.title ?? ""} onChange={e => setCF("title", e.target.value || null)} />
+                    : <p className="text-sm text-slate-800 mt-1">{cp.title || "—"}</p>}
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Email{allEmails.length !== 1 ? "s" : ""}</label>
+                  {contactEditing ? (
+                    <div className="mt-1 space-y-2">
+                      {(contactForm.emailList ?? [""]).map((em, idx) => (
+                        <div key={idx} className="flex gap-2">
+                          <input
+                            className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            value={em} placeholder="email@example.com"
+                            onChange={e => { const list = [...(contactForm.emailList ?? [])]; list[idx] = e.target.value; setCF("emailList", list); }}
+                          />
+                          {(contactForm.emailList ?? []).length > 1 && (
+                            <button onClick={() => setCF("emailList", (contactForm.emailList ?? []).filter((_, i) => i !== idx))}
+                              className="w-8 h-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:border-red-200 hover:text-red-400">
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <button onClick={() => setCF("emailList", [...(contactForm.emailList ?? []), ""])}
+                        className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-1">
+                        <Plus size={11} /> Add another email
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-1 space-y-1">
+                      {allEmails.length ? allEmails.map(em => (
+                        <a key={em} href={`mailto:${em}`} className="block text-sm text-blue-600 hover:underline">{em}</a>
+                      )) : <p className="text-sm text-slate-400">—</p>}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Phone</label>
+                  {contactEditing
+                    ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.phone ?? ""} onChange={e => setCF("phone", e.target.value || null)} />
+                    : <p className="text-sm text-slate-800 mt-1">{cp.phone || "—"}</p>}
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">LinkedIn</label>
+                  {contactEditing
+                    ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.linkedin_url ?? ""} onChange={e => setCF("linkedin_url", e.target.value || null)} />
+                    : cp.linkedin_url
+                      ? <a href={cp.linkedin_url} target="_blank" rel="noopener noreferrer" className="block text-sm text-blue-600 hover:underline mt-1 truncate">{cp.linkedin_url}</a>
+                      : <p className="text-sm text-slate-400 mt-1">—</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">City</label>
+                    {contactEditing
+                      ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.location_city ?? ""} onChange={e => setCF("location_city", e.target.value || null)} />
+                      : <p className="text-sm text-slate-800 mt-1">{cp.location_city || "—"}</p>}
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Country</label>
+                    {contactEditing
+                      ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.location_country ?? ""} onChange={e => setCF("location_country", e.target.value || null)} />
+                      : <p className="text-sm text-slate-800 mt-1">{cp.location_country || "—"}</p>}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Notes</label>
+                  {contactEditing
+                    ? <textarea className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" rows={4} value={contactForm.notes ?? ""} onChange={e => setCF("notes", e.target.value || null)} />
+                    : <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap leading-relaxed">{cp.notes || <span className="text-slate-300 italic">No notes</span>}</p>}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-4 border-t border-slate-100 space-y-2">
+                {contactEditing && (
+                  <div className="flex gap-2">
+                    <button onClick={() => { setContactEditing(false); setContactForm({}); }}
+                      className="flex-1 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+                    <button onClick={saveContact} disabled={contactSaving}
+                      className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-1.5">
+                      {contactSaving ? <><Loader2 size={13} className="animate-spin" /> Saving…</> : <><Check size={13} /> Save</>}
+                    </button>
+                  </div>
+                )}
+                {!contactEditing && (
+                  confirmRemove ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-center text-slate-500">Remove this contact permanently?</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => setConfirmRemove(false)} className="flex-1 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+                        <button onClick={removeContact} disabled={contactRemoving}
+                          className="flex-1 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-1.5">
+                          {contactRemoving ? <><Loader2 size={13} className="animate-spin" /> Removing…</> : "Confirm Remove"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => setConfirmRemove(true)}
+                      className="w-full py-2 border border-red-200 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors">
+                      Remove Contact
+                    </button>
+                  )
+                )}
+              </div>
+            </>
+          );
+        })()}
+      </div>
     </div>
   );
 }

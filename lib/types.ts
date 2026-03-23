@@ -43,6 +43,7 @@ export interface Company {
   last_funding_stage: string | null;
   pitch_deck_url: string | null;
   deal_status: DealStatus | null;
+  priority: "High" | "Medium" | "Low" | null;
   aum: number | null;
   fund_focus: string | null;
   lp_type: string | null;
@@ -77,6 +78,7 @@ export interface Contact {
   location_country: string | null;
   notes: string | null;
   tags: string[] | null;
+  emails: string[] | null;
   status: ContactStatus;
   created_by: string | null;
   created_at: string;
