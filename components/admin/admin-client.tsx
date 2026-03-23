@@ -18,7 +18,8 @@ import {
 import "react-data-grid/lib/styles.css";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
-import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter } from "lucide-react";
+import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles } from "lucide-react";
+import { AiConfigPanel } from "@/components/admin/ai-config-panel";
 
 // ─── Row types ────────────────────────────────────────────────────────────────
 
@@ -80,7 +81,7 @@ interface AdminClientProps {
 export function AdminClient({ initialCompanies, initialContacts }: AdminClientProps) {
   const supabase = createClient();
 
-  const [activeTab, setActiveTab] = useState<"companies" | "contacts">("companies");
+  const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config">("companies");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<ToastState>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -835,6 +836,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   // ─── Render ───────────────────────────────────────────────────────────────
 
   const isCompanies = activeTab === "companies";
+  const isAiConfig  = activeTab === "ai_config";
 
   // ─── Clear filters helper ────────────────────────────────────────────────
 
@@ -944,12 +946,22 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           <button
             onClick={() => { setActiveTab("contacts"); setSearch(""); }}
             className={`px-3 py-1.5 border-l border-slate-200 transition-colors ${
-              !isCompanies
+              activeTab === "contacts"
                 ? "bg-blue-600 text-white"
                 : "bg-white text-slate-600 hover:bg-slate-50"
             }`}
           >
             Contacts
+          </button>
+          <button
+            onClick={() => { setActiveTab("ai_config"); setSearch(""); }}
+            className={`px-3 py-1.5 border-l border-slate-200 transition-colors flex items-center gap-1 ${
+              isAiConfig
+                ? "bg-blue-600 text-white"
+                : "bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <Sparkles size={11} /> AI Config
           </button>
         </div>
 
@@ -1137,9 +1149,11 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         </button>
       </div>
 
-      {/* ── Grid ── */}
+      {/* ── Grid or AI Config panel ── */}
       <div className="flex-1 overflow-hidden admin-grid">
-        {isCompanies ? (
+        {isAiConfig ? (
+          <AiConfigPanel />
+        ) : isCompanies ? (
           <DataGrid<CompanyRow, unknown, string>
             columns={companyColumns}
             rows={filteredCompanies}

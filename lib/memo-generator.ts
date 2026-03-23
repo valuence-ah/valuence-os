@@ -18,12 +18,14 @@ export async function generateMemo(
     { data: interactions },
     { data: deals },
     { data: documents },
+    { data: aiConfig },
   ] = await Promise.all([
     supabase.from("companies").select("*").eq("id", company_id).single(),
     supabase.from("contacts").select("*").eq("company_id", company_id),
     supabase.from("interactions").select("*").eq("company_id", company_id).order("date", { ascending: false }).limit(20),
     supabase.from("deals").select("*").eq("company_id", company_id),
     supabase.from("documents").select("name, type, storage_path, mime_type, ai_summary, extracted_text").eq("company_id", company_id).order("created_at", { ascending: false }),
+    supabase.from("ai_configs").select("*").eq("name", "ic_memo").single(),
   ]);
 
   if (!company) throw new Error("Company not found");
@@ -84,10 +86,8 @@ ${extraContext ? `\nADDITIONAL CONTEXT:\n${extraContext.slice(0, 3000)}` : ""}`;
   }
   messageContent.push({ type: "text", text: `Write an IC memo for this company:\n\n${context}` });
 
-  const { text } = await generateText({
-    model: anthropic("claude-opus-4-5"),
-    maxTokens: 16000,
-    system: `You are a senior venture capital analyst at Valuence Ventures, a deeptech fund focused on cleantech, techbio, and advanced materials at pre-seed and seed stage.
+  const cfg = aiConfig as { model?: string; max_tokens?: number; temperature?: number; system_prompt?: string | null } | null;
+  const systemPrompt = cfg?.system_prompt ?? `You are a senior venture capital analyst at Valuence Ventures, a deeptech fund focused on cleantech, techbio, and advanced materials at pre-seed and seed stage.
 
 Write a comprehensive IC (Investment Committee) memo based on the provided company data, meeting notes, transcripts, and deck. Be analytical, objective, and specific. Use Valuence's focus areas to evaluate fit.
 
@@ -105,7 +105,13 @@ Return ONLY a valid JSON object with these exact keys (no markdown, no extra tex
   "financials": "string (current financials, use of proceeds)",
   "investment_thesis": "string (why invest now, fit with Valuence thesis)",
   "recommendation": "invest" | "pass" | "more_diligence" | "pending"
-}`,
+}`;
+
+  const { text } = await generateText({
+    model: anthropic((cfg?.model ?? "claude-opus-4-5") as Parameters<typeof anthropic>[0]),
+    maxTokens: cfg?.max_tokens ?? 16000,
+    temperature: cfg?.temperature ?? 0.3,
+    system: systemPrompt,
     messages: [{ role: "user", content: messageContent }],
   });
 

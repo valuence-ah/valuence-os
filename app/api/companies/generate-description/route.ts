@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
   const { company_id } = await req.json();
   if (!company_id) return NextResponse.json({ error: "company_id required" }, { status: 400 });
 
-  // Fetch company + deck and transcript documents
-  const [{ data: company }, { data: docs }, { data: ints }] = await Promise.all([
+  // Fetch config + company + deck and transcript documents
+  const [{ data: company }, { data: docs }, { data: ints }, { data: aiConfig }] = await Promise.all([
     supabase.from("companies").select("*").eq("id", company_id).single(),
     supabase
       .from("documents")
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       .not("body", "is", null)
       .order("date", { ascending: false })
       .limit(5),
+    supabase.from("ai_configs").select("*").eq("name", "company_description").single(),
   ]);
 
   if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
@@ -49,29 +50,25 @@ export async function POST(req: NextRequest) {
     ...(ints ?? []).map(i => i.body?.slice(0, 2000)).filter(Boolean),
   ].join("\n\n---\n\n");
 
-  const prompt = `You are a senior analyst at Valuence Ventures, an early-stage deeptech fund focused on cleantech and techbio. Produce a precise company overview of no more than 100 words.
+  // Use DB prompt template, fall back to hardcoded default
+  const promptTemplate = (aiConfig as { user_prompt?: string } | null)?.user_prompt ||
+    `You are a senior analyst at Valuence Ventures. Produce a precise company overview of no more than 100 words. Single paragraph, strictly under 130 words. Cover: HQ city, founding year, core technology, differentiation, markets, significance. Factual, no marketing language.`;
 
-INPUTS
-Company: ${company.name}
-Website: ${company.website ?? "not provided"}
-Keywords: ${company.tags?.join(", ") ?? "not provided"}
-HQ city: ${company.location_city ?? "not provided"}
-Founded: ${company.founded_year ?? "not provided"}
-${transcriptText ? `\nMEETING TRANSCRIPT EXCERPTS:\n${transcriptText}` : ""}
+  const prompt = `INPUTS
+Company: {{company_name}}
+Website: {{website}}
+Keywords: {{keywords}}
+HQ city: {{hq_city}}
+Founded: {{founded_year}}
+{{transcript_text}}
 
-RESEARCH RULES
-Review the deck(s) first, then transcripts, then the website. Supplement with reputable external sources only if details are missing.
-Do not fabricate. If a detail cannot be confirmed, omit it.
-Do not describe your research process. Output only the final result.
-
-WRITING RULES
-Single paragraph, strictly under 130 words.
-Cover in this order: HQ city (city only), founding year, core technology, key differentiation (tied to keywords where relevant), primary markets or applications, and one concrete reason why the technology is significant.
-Factual, investment-relevant, no marketing language. American English.
-
-OUTPUT FORMAT
-[paragraph under 130 words]
-Assumptions: [one short clause only if an item was inferred -- omit this line entirely if nothing was inferred]`;
+${promptTemplate}`
+    .replace("{{company_name}}", company.name)
+    .replace("{{website}}", company.website ?? "not provided")
+    .replace("{{keywords}}", company.tags?.join(", ") ?? "not provided")
+    .replace("{{hq_city}}", company.location_city ?? "not provided")
+    .replace("{{founded_year}}", String(company.founded_year ?? "not provided"))
+    .replace("{{transcript_text}}", transcriptText ? `MEETING TRANSCRIPT EXCERPTS:\n${transcriptText}` : "");
 
   // Build message content — attach each deck PDF as a URL for Claude to read directly
   type ContentPart =
@@ -94,9 +91,12 @@ Assumptions: [one short clause only if an item was inferred -- omit this line en
   content.push({ type: "text", text: prompt });
 
   try {
+    const cfg = aiConfig as { model: string; max_tokens: number; temperature: number; system_prompt: string | null } | null;
     const { text } = await generateText({
-      model: anthropic("claude-opus-4-5"),
-      maxTokens: 400,
+      model: anthropic((cfg?.model ?? "claude-opus-4-5") as Parameters<typeof anthropic>[0]),
+      maxTokens: cfg?.max_tokens ?? 400,
+      temperature: cfg?.temperature ?? 0.3,
+      ...(cfg?.system_prompt ? { system: cfg.system_prompt } : {}),
       messages: [{ role: "user", content }],
     });
 
