@@ -1108,39 +1108,54 @@ export function PipelineClient({ initialCompanies }: Props) {
               </p>
             </section>
 
-            {/* ── Key Words / Tags ── */}
-            <section>
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
-                <span className="flex items-center gap-1.5"><Tag size={12} /> Key Words</span>
-              </h2>
-              <KeywordEditor
-                tags={(editing ? (editForm.tags as string[]) : (selected.tags as string[])) ?? []}
-                onChange={tags => setEF("tags", tags)}
-                readOnly={!editing}
-              />
-            </section>
+            {/* ── Keywords + Notes (left) | Interaction Timeline (right) ── */}
+            <div className="grid grid-cols-2 gap-6 items-start">
 
+              {/* LEFT: Keywords + Internal Notes stacked */}
+              <div className="space-y-5">
+                {/* Key Words / Tags */}
+                <section>
+                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+                    <span className="flex items-center gap-1.5"><Tag size={12} /> Key Words</span>
+                  </h2>
+                  {editing ? (
+                    <div className="min-h-[80px] border border-slate-200 rounded-lg p-2.5 bg-white">
+                      <KeywordEditor
+                        tags={(editForm.tags as string[]) ?? []}
+                        onChange={tags => setEF("tags", tags)}
+                        readOnly={false}
+                      />
+                    </div>
+                  ) : (
+                    <KeywordEditor
+                      tags={(selected.tags as string[]) ?? []}
+                      onChange={tags => setEF("tags", tags)}
+                      readOnly={true}
+                    />
+                  )}
+                </section>
 
-            {/* ── Internal Notes ── */}
-            <section>
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Internal Notes</h2>
-              {editing ? (
-                <textarea
-                  className="textarea text-sm w-full"
-                  rows={3}
-                  value={editForm.notes ?? ""}
-                  onChange={e => setEF("notes", e.target.value || null)}
-                  placeholder="Private notes visible only to your team…"
-                />
-              ) : (
-                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  {selected.notes ?? <span className="text-slate-300 italic">No notes</span>}
-                </p>
-              )}
-            </section>
+                {/* Internal Notes */}
+                <section>
+                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Internal Notes</h2>
+                  {editing ? (
+                    <textarea
+                      className="textarea text-sm w-full min-h-[80px]"
+                      rows={4}
+                      value={editForm.notes ?? ""}
+                      onChange={e => setEF("notes", e.target.value || null)}
+                      placeholder="Private notes visible only to your team…"
+                    />
+                  ) : (
+                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {selected.notes ?? <span className="text-slate-300 italic">No notes</span>}
+                    </p>
+                  )}
+                </section>
+              </div>
 
-            {/* ── Interaction Timeline ── */}
-            <section>
+              {/* RIGHT: Interaction Timeline */}
+              <section>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                   <Calendar size={12} /> Interaction Timeline
@@ -1282,7 +1297,8 @@ export function PipelineClient({ initialCompanies }: Props) {
                   </div>
                 );
               })()}
-            </section>
+              </section>
+            </div>{/* end 50/50 grid */}
 
             {/* ── Contacts ── */}
             <section>
