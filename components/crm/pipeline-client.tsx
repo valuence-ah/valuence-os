@@ -974,28 +974,33 @@ export function PipelineClient({ initialCompanies }: Props) {
                         <User size={14} className="text-violet-600" />
                       </div>
 
-                      {/* Name + Title */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-sm font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
-                          {c.is_primary_contact && <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">Primary</span>}
+                      {/* Name + Title | Last Contact | Location — all left-aligned, grouped together */}
+                      <div className="flex items-center gap-6 flex-1 min-w-0">
+
+                        {/* Name + Title */}
+                        <div className="w-40 flex-shrink-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                            {c.is_primary_contact && <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">Primary</span>}
+                          </div>
+                          <p className="text-xs text-slate-500 truncate">{c.title ?? c.type ?? "—"}</p>
                         </div>
-                        <p className="text-xs text-slate-500 truncate">{c.title ?? c.type ?? "—"}</p>
+
+                        {/* Last Contact */}
+                        <div className="w-24 flex-shrink-0">
+                          <p className="text-[11px] font-medium text-slate-500">Last Contact</p>
+                          <p className="text-[11px] text-slate-400">{c.last_contact_date ? formatDate(c.last_contact_date) : "—"}</p>
+                        </div>
+
+                        {/* Location */}
+                        <div className="w-32 flex-shrink-0">
+                          <p className="text-[11px] font-medium text-slate-500">Location</p>
+                          <p className="text-[11px] text-slate-400 truncate">{[c.location_city, c.location_country].filter(Boolean).join(", ") || "—"}</p>
+                        </div>
+
                       </div>
 
-                      {/* Last Contact */}
-                      <div className="flex-shrink-0 w-24">
-                        <p className="text-[11px] font-medium text-slate-500">Last Contact</p>
-                        <p className="text-[11px] text-slate-400">{c.last_contact_date ? formatDate(c.last_contact_date) : "—"}</p>
-                      </div>
-
-                      {/* Location */}
-                      <div className="flex-shrink-0 w-28">
-                        <p className="text-[11px] font-medium text-slate-500">Location</p>
-                        <p className="text-[11px] text-slate-400 truncate">{[c.location_city, c.location_country].filter(Boolean).join(", ") || "—"}</p>
-                      </div>
-
-                      {/* Action icons */}
+                      {/* Action icons — pushed to far right */}
                       <div className="flex gap-2 text-slate-400 flex-shrink-0">
                         {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-600"><Mail size={13} /></a>}
                         {c.phone && <a href={`tel:${c.phone}`} className="hover:text-blue-600"><Phone size={13} /></a>}
