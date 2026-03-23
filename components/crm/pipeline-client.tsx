@@ -285,6 +285,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [documents, setDocuments]         = useState<Array<{id:string;name:string;type:string;storage_path:string|null;created_at:string}>>([]);
   const [memo, setMemo]                   = useState<IcMemo | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [emailEvents, setEmailEvents]     = useState<Array<{id:string;kind:"email";title:string;body:string;date:string;url:string}>>([]);
 
   // Inline note adding
   const [addingNote, setAddingNote]   = useState(false);
@@ -380,9 +381,35 @@ export function PipelineClient({ initialCompanies }: Props) {
     setLoadingDetail(false);
   }, [supabase]);
 
+  const loadEmails = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/companies/emails?company_id=${id}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.graphError) return; // Graph not configured
+      setEmailEvents(
+        (json.emails ?? []).map((e: {
+          id: string; subject: string; summary: string;
+          from: { name: string; address: string }; date: string; webLink: string;
+        }) => ({
+          id: `email-${e.id}`,
+          kind: "email" as const,
+          title: e.summary,
+          body: `${e.from.name || e.from.address} · ${e.subject}`,
+          date: e.date,
+          url: e.webLink,
+        }))
+      );
+    } catch { /* Graph not configured — silently skip */ }
+  }, []);
+
   useEffect(() => {
-    if (selectedId) loadDetail(selectedId);
-  }, [selectedId, loadDetail]);
+    if (selectedId) {
+      setEmailEvents([]);
+      loadDetail(selectedId);
+      loadEmails(selectedId);
+    }
+  }, [selectedId, loadDetail, loadEmails]);
 
   // ── Edit handlers ─────────────────────────────────────────────────────────
   function startEdit() {
@@ -1062,6 +1089,15 @@ export function PipelineClient({ initialCompanies }: Props) {
                     url: d.storage_path ? supabase.storage.from(d.type === "deck" ? "decks" : "transcripts").getPublicUrl(d.storage_path).data.publicUrl : null,
                     meta: null,
                   })),
+                  ...emailEvents.map(e => ({
+                    id: e.id,
+                    kind: e.kind,
+                    title: e.title,
+                    body: e.body,
+                    date: e.date,
+                    url: e.url,
+                    meta: null,
+                  })),
                 ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
                 if (events.length === 0) return (
@@ -1101,7 +1137,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   <div className="relative">
                     {/* Vertical line */}
                     <div className="absolute left-[15px] top-2 bottom-2 w-px bg-slate-200" />
-                    <div className="space-y-3">
+                    <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
                       {events.map(ev => (
                         <div key={ev.id} className="flex gap-3">
                           {/* Dot on timeline */}
@@ -1133,19 +1169,6 @@ export function PipelineClient({ initialCompanies }: Props) {
                       ))}
                     </div>
 
-                    {/* Coming soon: Outlook + Fireflies */}
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      <div className="border border-dashed border-slate-200 rounded-xl p-3 text-center">
-                        <Mail size={16} className="mx-auto mb-1 text-slate-300" />
-                        <p className="text-xs text-slate-400 font-medium">Outlook Emails</p>
-                        <p className="text-[10px] text-slate-300">Coming soon</p>
-                      </div>
-                      <div className="border border-dashed border-slate-200 rounded-xl p-3 text-center">
-                        <Sparkles size={16} className="mx-auto mb-1 text-slate-300" />
-                        <p className="text-xs text-slate-400 font-medium">Fireflies Transcripts</p>
-                        <p className="text-[10px] text-slate-300">Coming soon</p>
-                      </div>
-                    </div>
                   </div>
                 );
               })()}
@@ -1214,8 +1237,9 @@ export function PipelineClient({ initialCompanies }: Props) {
             <section>
               <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Documents</h2>
 
+              <div className="grid grid-cols-2 gap-6">
               {/* ── Pitch Decks (multi) ── */}
-              <div className="mb-6">
+              <div>
                 <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                   <FileText size={12} /> Pitch Decks
                   {documents.filter(d => d.type === "deck").length > 0 && (
@@ -1224,7 +1248,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     </span>
                   )}
                 </p>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   {/* Existing decks */}
                   {documents.filter(d => d.type === "deck").map(doc => {
                     const url = doc.storage_path
@@ -1280,7 +1304,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     </span>
                   )}
                 </p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3">
                   {interactions.filter(i => i.type === "meeting" && i.transcript_url).map(i => (
                     <div key={i.id} className="flex items-center gap-2.5 p-3 border border-slate-200 rounded-xl bg-white">
                       <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
@@ -1309,6 +1333,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   />
                 </div>
               </div>
+              </div>{/* end grid cols-2 */}
             </section>
 
             {/* ── IC Memo ── */}

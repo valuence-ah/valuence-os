@@ -61,20 +61,21 @@ export interface GraphEmail {
   webLink: string;
 }
 
-/** Fetch recent emails from a mailbox. `since` is an ISO timestamp (e.g. "2025-01-01T00:00:00Z"). */
+/** Fetch recent emails from a mailbox folder. */
 export async function getRecentEmails(
   mailbox: string,
   since?: string,
-  limit = 50
+  limit = 50,
+  folder: "inbox" | "sentItems" = "inbox"
 ): Promise<GraphEmail[]> {
   const token = await getAccessToken();
 
   const filter = since
-    ? `&$filter=receivedDateTime ge ${since}&$filter=isDraft eq false`
+    ? `&$filter=receivedDateTime ge ${since} and isDraft eq false`
     : "$filter=isDraft eq false";
 
   const url =
-    `${GRAPH_BASE}/users/${mailbox}/mailFolders/inbox/messages` +
+    `${GRAPH_BASE}/users/${mailbox}/mailFolders/${folder}/messages` +
     `?$top=${limit}&${filter}&$orderby=receivedDateTime desc` +
     `&$select=id,subject,from,toRecipients,receivedDateTime,bodyPreview,body,hasAttachments,webLink`;
 
