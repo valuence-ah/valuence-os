@@ -8,9 +8,22 @@ import { createClient } from "@/lib/supabase/client";
 import { Loader2, Save, Check, Sparkles, FileText } from "lucide-react";
 
 const MODELS = [
-  { value: "claude-opus-4-5",          label: "Claude Opus 4.5 — Most capable" },
-  { value: "claude-sonnet-4-6",        label: "Claude Sonnet 4.6 — Fast + smart" },
-  { value: "claude-haiku-4-5-20251001",label: "Claude Haiku 4.5 — Fastest" },
+  { group: "Claude 4.6", options: [
+    { value: "claude-sonnet-4-6",         label: "Claude Sonnet 4.6" },
+    { value: "claude-opus-4-6",           label: "Claude Opus 4.6" },
+  ]},
+  { group: "Claude 4.5", options: [
+    { value: "claude-opus-4-5",           label: "Claude Opus 4.5" },
+    { value: "claude-sonnet-4-5-20251001",label: "Claude Sonnet 4.5" },
+    { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+  ]},
+  { group: "Claude 4.1", options: [
+    { value: "claude-opus-4-1",           label: "Claude Opus 4.1" },
+  ]},
+  { group: "Claude 4", options: [
+    { value: "claude-opus-4-0",           label: "Claude Opus 4" },
+    { value: "claude-sonnet-4-0",         label: "Claude Sonnet 4" },
+  ]},
 ];
 
 interface AiConfig {
@@ -145,8 +158,12 @@ export function AiConfigPanel() {
                   onChange={e => update(config.name, "model", e.target.value)}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                 >
-                  {MODELS.map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
+                  {MODELS.map(group => (
+                    <optgroup key={group.group} label={group.group}>
+                      {group.options.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>
