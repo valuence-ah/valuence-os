@@ -664,7 +664,7 @@ export function PipelineClient({ initialCompanies }: Props) {
     contactSearchTimer.current = setTimeout(async () => {
       const { data } = await supabase
         .from("contacts")
-        .select("id, first_name, last_name, email, title, company_id")
+        .select("id, first_name, last_name, email, title, location_city, location_country, company_id")
         .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%`)
         .limit(6);
       setContactSuggestions((data as Contact[]) ?? []);
@@ -1279,20 +1279,33 @@ export function PipelineClient({ initialCompanies }: Props) {
             </div>
 
             {/* ── Contacts (left 50%) | Interaction Timeline (right 50%) ── */}
-            <div className="grid grid-cols-2 gap-6 items-start">
+            {/* Row 1: headers share the same grid row → guaranteed same y-position */}
+            <div className="grid grid-cols-2 gap-x-6">
 
-              {/* LEFT: Contacts */}
-              <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Contacts</h2>
-                  <button
-                    onClick={() => { setContactPanelMode("manage"); if (contacts.length > 0) { setContactPanel(contacts[0]); } else { setContactPanel({ id: "__manage__", first_name: "", last_name: "", email: null, phone: null, linkedin_url: null, title: null, company_id: selected?.id ?? null, type: "other", relationship_strength: null, is_primary_contact: false, last_contact_date: null, location_city: null, location_country: null, notes: null, tags: null, emails: null, status: "active", created_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as Contact); } setContactEditing(false); setConfirmRemove(false); setShowAddContactForm(false); }}
-                    className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                  >
-                    Manage <ChevronRight size={12} />
-                  </button>
-                </div>
-                <div className="h-[200px] overflow-y-auto space-y-2 pr-1">
+              {/* Header: Contacts */}
+              <div className="flex items-center justify-between pb-3">
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Contacts</h2>
+                <button
+                  onClick={() => { setContactPanelMode("manage"); if (contacts.length > 0) { setContactPanel(contacts[0]); } else { setContactPanel({ id: "__manage__", first_name: "", last_name: "", email: null, phone: null, linkedin_url: null, title: null, company_id: selected?.id ?? null, type: "other", relationship_strength: null, is_primary_contact: false, last_contact_date: null, location_city: null, location_country: null, notes: null, tags: null, emails: null, status: "active", created_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as Contact); } setContactEditing(false); setConfirmRemove(false); setShowAddContactForm(false); }}
+                  className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                >
+                  Manage <ChevronRight size={12} />
+                </button>
+              </div>
+
+              {/* Header: Interaction Timeline */}
+              <div className="flex items-center justify-between pb-3">
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Interaction Timeline</h2>
+                <button
+                  onClick={() => setAddingNote(p => !p)}
+                  className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 flex items-center gap-1"
+                >
+                  <Plus size={11} /> Add Event
+                </button>
+              </div>
+
+              {/* Content: Contacts list */}
+              <div className="h-[200px] overflow-y-auto space-y-2 pr-1">
                   {loadingDetail ? (
                     <div className="h-12 bg-slate-50 rounded-lg animate-pulse" />
                   ) : contacts.length === 0 ? (
@@ -1337,22 +1350,9 @@ export function PipelineClient({ initialCompanies }: Props) {
                     </button>
                   ))}
                 </div>
-              </section>
 
-              {/* RIGHT: Interaction Timeline */}
-              <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <Calendar size={12} /> Interaction Timeline
-                </h2>
-                <button
-                  onClick={() => setAddingNote(p => !p)}
-                  className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 flex items-center gap-1"
-                >
-                  <Plus size={11} /> Add Event
-                </button>
-              </div>
-
+              {/* Content: Timeline (event form + scroll area) */}
+              <div>
               {/* Add event form */}
               {addingNote && (
                 <div className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
@@ -1504,7 +1504,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   </div>
                 );
               })()}
-              </section>
+              </div>{/* end timeline content */}
             </div>{/* end contacts/timeline grid */}
 
             {/* ── Documents — Decks & Transcripts ── */}
@@ -1813,7 +1813,10 @@ export function PipelineClient({ initialCompanies }: Props) {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-slate-800">{c.first_name} {c.last_name}</p>
-                                <p className="text-[11px] text-slate-400 truncate">{[c.title, c.email].filter(Boolean).join(" · ")}</p>
+                                {c.email && <p className="text-[11px] text-blue-600 truncate">{c.email}</p>}
+                                <p className="text-[11px] text-slate-400 truncate">
+                                  {[c.title, [c.location_city, c.location_country].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}
+                                </p>
                               </div>
                             </button>
                           ))}
