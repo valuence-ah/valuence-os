@@ -261,8 +261,14 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [search, setSearch]               = useState("");
   const [contacts, setContacts]           = useState<Contact[]>([]);
   const [interactions, setInteractions]   = useState<Interaction[]>([]);
+  const [documents, setDocuments]         = useState<Array<{id:string;name:string;type:string;file_url:string|null;created_at:string}>>([]);
   const [memo, setMemo]                   = useState<IcMemo | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+
+  // Inline note adding
+  const [addingNote, setAddingNote]   = useState(false);
+  const [noteText, setNoteText]       = useState("");
+  const [savingNote, setSavingNote]   = useState(false);
 
   // Edit mode
   const [editing, setEditing]   = useState(false);
@@ -317,11 +323,12 @@ export function PipelineClient({ initialCompanies }: Props) {
   // ── Load detail data when selected company changes ────────────────────────
   const loadDetail = useCallback(async (id: string) => {
     setLoadingDetail(true);
-    const [{ data: ctcts }, { data: ints }, { data: memos }, { data: company }] = await Promise.all([
+    const [{ data: ctcts }, { data: ints }, { data: memos }, { data: company }, { data: docs }] = await Promise.all([
       supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }),
-      supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(5),
+      supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(20),
       supabase.from("ic_memos").select("*").eq("company_id", id).order("created_at", { ascending: false }).limit(1),
       supabase.from("companies").select("name, website").eq("id", id).single(),
+      supabase.from("documents").select("id,name,type,file_url,created_at").eq("company_id", id).order("created_at", { ascending: false }),
     ]);
 
     let contacts = ctcts ?? [];
@@ -346,6 +353,7 @@ export function PipelineClient({ initialCompanies }: Props) {
 
     setContacts(contacts);
     setInteractions(ints ?? []);
+    setDocuments(docs ?? []);
     setMemo(memos?.[0] ?? null);
     setLoadingDetail(false);
   }, [supabase]);
@@ -401,6 +409,26 @@ export function PipelineClient({ initialCompanies }: Props) {
     const next = curr.includes(t) ? curr.filter(x => x !== t) : [...curr, t];
     setEF("types", next);
     if (next.length > 0) setEF("type", next[0] as CompanyType);
+  }
+
+  // ── Add note inline ───────────────────────────────────────────────────────
+  async function handleAddNote() {
+    if (!selected || !noteText.trim()) return;
+    setSavingNote(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from("interactions").insert({
+      company_id: selected.id,
+      type: "note",
+      subject: "Note",
+      body: noteText.trim(),
+      date: new Date().toISOString(),
+      sentiment: "neutral",
+      created_by: user?.id,
+    });
+    setNoteText("");
+    setAddingNote(false);
+    setSavingNote(false);
+    await loadDetail(selected.id);
   }
 
   // ── Add company ───────────────────────────────────────────────────────────
@@ -758,8 +786,9 @@ export function PipelineClient({ initialCompanies }: Props) {
             {/* ── Overview Fields ── */}
             <section>
               <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Overview</h2>
-              <div className="grid grid-cols-3 gap-x-6 gap-y-5">
+              <div className="grid grid-cols-4 gap-x-6 gap-y-5">
 
+                {/* Row 1: Domain/Website, Type, Sector, Sub-sector */}
                 <Field label="Domain / Website">
                   {editing ? (
                     <input className="input text-sm" value={editForm.website ?? ""} onChange={e => setEF("website", e.target.value)} placeholder="https://…" />
@@ -772,28 +801,23 @@ export function PipelineClient({ initialCompanies }: Props) {
                   )}
                 </Field>
 
-                <Field label="Status">
-                  {editing ? (
-                    <select className="select text-sm" value={editForm.deal_status ?? ""} onChange={e => setEF("deal_status", e.target.value as DealStatus || null)}>
-                      <option value="">Not set</option>
-                      {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                  ) : (
-                    selected.deal_status
-                      ? <span className={cn("inline-block text-xs px-2 py-1 rounded-md font-medium", STATUS_COLORS[selected.deal_status])}>{STATUS_LABELS[selected.deal_status]}</span>
-                      : <span className="text-sm text-slate-300">—</span>
-                  )}
-                </Field>
-
-                <Field label="Investment Round">
-                  {editing ? (
-                    <select className="select text-sm" value={editForm.stage ?? ""} onChange={e => setEF("stage", e.target.value || null)}>
-                      <option value="">Not set</option>
-                      {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
-                    </select>
-                  ) : (
-                    <span className="text-sm text-slate-700 capitalize">{selected.stage?.replace("_", " ") ?? "—"}</span>
-                  )}
+                <Field label="Type">
+                  <div className="flex flex-wrap gap-1.5 mt-0.5">
+                    {TYPE_OPTIONS.map(o => {
+                      const active = (editing ? (editForm.types as string[] ?? []) : (selected.types ?? [])).includes(o.value);
+                      return editing ? (
+                        <button key={o.value} type="button" onClick={() => toggleType(o.value)}
+                          className={cn("px-2.5 py-0.5 rounded-full text-xs font-medium border transition-all",
+                            active ? "bg-slate-700 text-white border-slate-700" : "bg-white text-slate-600 border-slate-300 hover:border-slate-500"
+                          )}>
+                          {o.label}
+                        </button>
+                      ) : active ? (
+                        <span key={o.value} className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-700 text-white">{o.label}</span>
+                      ) : null;
+                    })}
+                    {!editing && !(selected.types ?? []).length && <span className="text-sm text-slate-300">—</span>}
+                  </div>
                 </Field>
 
                 <Field label="Sector">
@@ -827,6 +851,31 @@ export function PipelineClient({ initialCompanies }: Props) {
                   )}
                 </Field>
 
+                {/* Row 2: Status, Investment Round, Location, Last Contact */}
+                <Field label="Status">
+                  {editing ? (
+                    <select className="select text-sm" value={editForm.deal_status ?? ""} onChange={e => setEF("deal_status", e.target.value as DealStatus || null)}>
+                      <option value="">Not set</option>
+                      {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  ) : (
+                    selected.deal_status
+                      ? <span className={cn("inline-block text-xs px-2 py-1 rounded-md font-medium", STATUS_COLORS[selected.deal_status])}>{STATUS_LABELS[selected.deal_status]}</span>
+                      : <span className="text-sm text-slate-300">—</span>
+                  )}
+                </Field>
+
+                <Field label="Investment Round">
+                  {editing ? (
+                    <select className="select text-sm" value={editForm.stage ?? ""} onChange={e => setEF("stage", e.target.value || null)}>
+                      <option value="">Not set</option>
+                      {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+                    </select>
+                  ) : (
+                    <span className="text-sm text-slate-700 capitalize">{selected.stage?.replace("_", " ") ?? "—"}</span>
+                  )}
+                </Field>
+
                 <Field label="Location">
                   {editing ? (
                     <div className="flex gap-2">
@@ -839,18 +888,6 @@ export function PipelineClient({ initialCompanies }: Props) {
                       {[selected.location_city, selected.location_country].filter(Boolean).join(", ") || "—"}
                     </span>
                   )}
-                </Field>
-
-                <Field label="Founded">
-                  {editing ? (
-                    <input className="input text-sm" type="number" value={editForm.founded_year ?? ""} onChange={e => setEF("founded_year", parseInt(e.target.value) || null)} placeholder="2020" />
-                  ) : (
-                    <span className="text-sm text-slate-700">{selected.founded_year ?? "—"}</span>
-                  )}
-                </Field>
-
-                <Field label="Total Raised">
-                  <span className="text-sm text-slate-700">{formatCurrency(selected.funding_raised, true)}</span>
                 </Field>
 
                 <Field label="Last Contact">
@@ -894,47 +931,6 @@ export function PipelineClient({ initialCompanies }: Props) {
             </section>
 
 
-            {/* ── Type (dropdown + multi-select chips in edit mode) ── */}
-            {editing && (
-              <section>
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Type</h2>
-                {/* Quick single-select dropdown — changes the primary type and syncs types array */}
-                <div className="mb-3">
-                  <select
-                    className="select text-sm"
-                    value={editForm.type ?? ""}
-                    onChange={e => {
-                      const val = e.target.value as CompanyType;
-                      setEF("type", val);
-                      // Replace types array so the primary type matches
-                      const curr = (editForm.types as string[] ?? []);
-                      const filtered = curr.filter(x => x !== editForm.type);
-                      setEF("types", [val, ...filtered]);
-                    }}
-                  >
-                    <option value="">Select type</option>
-                    {TYPE_OPTIONS.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-                {/* Additional type tags (multi-select chips) */}
-                <div className="flex flex-wrap gap-2">
-                  {TYPE_OPTIONS.map(o => {
-                    const active = (editForm.types as string[] ?? []).includes(o.value);
-                    return (
-                      <button key={o.value} type="button" onClick={() => toggleType(o.value)}
-                        className={cn("px-3 py-1 rounded-full text-xs font-medium border transition-all",
-                          active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-300 hover:border-blue-400"
-                        )}>
-                        {o.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
             {/* ── Internal Notes ── */}
             <section>
               <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Internal Notes</h2>
@@ -951,6 +947,155 @@ export function PipelineClient({ initialCompanies }: Props) {
                   {selected.notes ?? <span className="text-slate-300 italic">No notes</span>}
                 </p>
               )}
+            </section>
+
+            {/* ── Interaction Timeline ── */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Calendar size={12} /> Interaction Timeline
+                </h2>
+                <button
+                  onClick={() => setAddingNote(p => !p)}
+                  className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 flex items-center gap-1"
+                >
+                  <Plus size={11} /> Add Note
+                </button>
+              </div>
+
+              {/* Add note form */}
+              {addingNote && (
+                <div className="mb-4 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
+                  <textarea
+                    className="w-full text-sm border border-slate-200 rounded-lg p-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                    rows={3}
+                    placeholder="Add a note about this company…"
+                    value={noteText}
+                    onChange={e => setNoteText(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => { setAddingNote(false); setNoteText(""); }} className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-100">Cancel</button>
+                    <button onClick={handleAddNote} disabled={savingNote || !noteText.trim()} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 flex items-center gap-1">
+                      {savingNote ? <><Loader2 size={10} className="animate-spin" /> Saving…</> : <><Check size={10} /> Save Note</>}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {loadingDetail ? (
+                <div className="space-y-3">
+                  {[1,2,3].map(i => <div key={i} className="h-14 bg-slate-50 rounded-xl animate-pulse" />)}
+                </div>
+              ) : (() => {
+                // Merge interactions + document uploads into a single timeline
+                type TEvent = { id: string; kind: string; title: string; body?: string | null; date: string; url?: string | null; meta?: string | null };
+                const events: TEvent[] = [
+                  ...interactions.map(i => ({
+                    id: i.id,
+                    kind: i.type,
+                    title: i.subject ?? (i.type === "note" ? "Note" : i.type === "meeting" ? "Meeting" : i.type === "email" ? "Email" : "Interaction"),
+                    body: i.body ?? i.summary ?? null,
+                    date: i.date,
+                    url: i.transcript_url ?? null,
+                    meta: i.sentiment ?? null,
+                  })),
+                  ...documents.map(d => ({
+                    id: d.id,
+                    kind: d.type === "pitch_deck" ? "deck" : "document",
+                    title: d.name,
+                    body: null,
+                    date: d.created_at,
+                    url: d.file_url ?? null,
+                    meta: null,
+                  })),
+                ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                if (events.length === 0) return (
+                  <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl">
+                    <Calendar size={24} className="mx-auto mb-2 text-slate-300" />
+                    <p className="text-sm text-slate-400 mb-1">No activity yet</p>
+                    <p className="text-xs text-slate-300">Upload a deck, add a note, or connect Outlook & Fireflies</p>
+                  </div>
+                );
+
+                const kindIcon: Record<string, React.ReactNode> = {
+                  meeting:  <Calendar size={13} className="text-violet-500" />,
+                  note:     <FileText size={13} className="text-slate-500" />,
+                  email:    <Mail size={13} className="text-blue-500" />,
+                  call:     <Phone size={13} className="text-green-500" />,
+                  deck:     <FileText size={13} className="text-orange-500" />,
+                  document: <Paperclip size={13} className="text-slate-400" />,
+                  intro:    <User size={13} className="text-teal-500" />,
+                  event:    <Calendar size={13} className="text-amber-500" />,
+                };
+                const kindColor: Record<string, string> = {
+                  meeting:  "bg-violet-50 border-violet-100",
+                  note:     "bg-slate-50 border-slate-200",
+                  email:    "bg-blue-50 border-blue-100",
+                  call:     "bg-green-50 border-green-100",
+                  deck:     "bg-orange-50 border-orange-100",
+                  document: "bg-slate-50 border-slate-100",
+                  intro:    "bg-teal-50 border-teal-100",
+                  event:    "bg-amber-50 border-amber-100",
+                };
+                const kindLabel: Record<string, string> = {
+                  meeting: "Meeting", note: "Note", email: "Email", call: "Call",
+                  deck: "Deck Upload", document: "Document", intro: "Intro", event: "Event",
+                };
+
+                return (
+                  <div className="relative">
+                    {/* Vertical line */}
+                    <div className="absolute left-[15px] top-2 bottom-2 w-px bg-slate-200" />
+                    <div className="space-y-3">
+                      {events.map(ev => (
+                        <div key={ev.id} className="flex gap-3">
+                          {/* Dot on timeline */}
+                          <div className={cn("w-8 h-8 rounded-full border flex items-center justify-center flex-shrink-0 bg-white z-10", kindColor[ev.kind] ?? "bg-slate-50 border-slate-200")}>
+                            {kindIcon[ev.kind] ?? <FileText size={13} className="text-slate-400" />}
+                          </div>
+                          {/* Card */}
+                          <div className={cn("flex-1 border rounded-xl px-4 py-3 min-w-0", kindColor[ev.kind] ?? "bg-slate-50 border-slate-200")}>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{kindLabel[ev.kind] ?? ev.kind}</span>
+                                  <span className="text-xs font-medium text-slate-700 truncate">{ev.title}</span>
+                                </div>
+                                {ev.body && <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-3">{ev.body}</p>}
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {ev.url && (
+                                  <a href={ev.url} target="_blank" rel="noopener noreferrer"
+                                    className="text-[11px] text-blue-600 hover:underline flex items-center gap-0.5">
+                                    <ExternalLink size={10} /> View
+                                  </a>
+                                )}
+                                <span className="text-[11px] text-slate-400 whitespace-nowrap">{formatDate(ev.date)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Coming soon: Outlook + Fireflies */}
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className="border border-dashed border-slate-200 rounded-xl p-3 text-center">
+                        <Mail size={16} className="mx-auto mb-1 text-slate-300" />
+                        <p className="text-xs text-slate-400 font-medium">Outlook Emails</p>
+                        <p className="text-[10px] text-slate-300">Coming soon</p>
+                      </div>
+                      <div className="border border-dashed border-slate-200 rounded-xl p-3 text-center">
+                        <Sparkles size={16} className="mx-auto mb-1 text-slate-300" />
+                        <p className="text-xs text-slate-400 font-medium">Fireflies Transcripts</p>
+                        <p className="text-[10px] text-slate-300">Coming soon</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </section>
 
             {/* ── Contacts ── */}
