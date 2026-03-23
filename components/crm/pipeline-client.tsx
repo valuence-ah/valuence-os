@@ -984,13 +984,13 @@ export function PipelineClient({ initialCompanies }: Props) {
                       </div>
 
                       {/* Last Contact */}
-                      <div className="flex-shrink-0 text-right w-20">
+                      <div className="flex-shrink-0 w-24">
                         <p className="text-[11px] font-medium text-slate-500">Last Contact</p>
                         <p className="text-[11px] text-slate-400">{c.last_contact_date ? formatDate(c.last_contact_date) : "—"}</p>
                       </div>
 
                       {/* Location */}
-                      <div className="flex-shrink-0 text-right w-24">
+                      <div className="flex-shrink-0 w-28">
                         <p className="text-[11px] font-medium text-slate-500">Location</p>
                         <p className="text-[11px] text-slate-400 truncate">{[c.location_city, c.location_country].filter(Boolean).join(", ") || "—"}</p>
                       </div>
