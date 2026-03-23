@@ -679,7 +679,7 @@ export function PipelineClient({ initialCompanies }: Props) {
       {/* ═══════════════════════════════════════════════════════════════════════
           LEFT PANEL — Company List
       ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="w-[280px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
+      <div className="w-[360px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
 
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-2">
@@ -758,21 +758,24 @@ export function PipelineClient({ initialCompanies }: Props) {
                   )}
                   <CompanyLogo company={c} />
                   <div className="flex-1 min-w-0">
-                    <p className={cn("text-sm font-medium truncate", isActive ? "text-blue-700" : "text-slate-800")}>
+                    {/* Line 1 — Company name */}
+                    <p className={cn("text-sm font-semibold truncate", isActive ? "text-blue-700" : "text-slate-800")}>
                       {c.name}
                     </p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {c.deal_status && (
+                    {/* Line 2 — Status */}
+                    <p className="mt-0.5 text-xs truncate">
+                      {c.deal_status ? (
                         <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", STATUS_COLORS[c.deal_status])}>
                           {STATUS_LABELS[c.deal_status] ?? c.deal_status}
                         </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-300">No status</span>
                       )}
-                      {c.sectors?.[0] && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-slate-100 text-slate-600 capitalize">
-                          {c.sectors[0]}
-                        </span>
-                      )}
-                    </div>
+                    </p>
+                    {/* Line 3 — Sector */}
+                    <p className="mt-0.5 text-[11px] text-slate-400 truncate capitalize">
+                      {c.sectors?.[0] ?? ""}
+                    </p>
                   </div>
                 </button>
               );
