@@ -679,7 +679,7 @@ export function PipelineClient({ initialCompanies }: Props) {
       {/* ═══════════════════════════════════════════════════════════════════════
           LEFT PANEL — Company List
       ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="w-[360px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
+      <div className="w-[300px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
 
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-2">
@@ -772,9 +772,13 @@ export function PipelineClient({ initialCompanies }: Props) {
                         <span className="text-[10px] text-slate-300">No status</span>
                       )}
                     </p>
-                    {/* Line 3 — Sector */}
-                    <p className="mt-0.5 text-[11px] text-slate-400 truncate capitalize">
-                      {c.sectors?.[0] ?? ""}
+                    {/* Line 3 — Sector bubble */}
+                    <p className="mt-0.5">
+                      {c.sectors?.[0] ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-slate-100 text-slate-600 capitalize">
+                          {c.sectors[0]}
+                        </span>
+                      ) : null}
                     </p>
                   </div>
                 </button>
