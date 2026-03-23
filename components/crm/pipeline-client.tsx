@@ -1314,34 +1314,48 @@ export function PipelineClient({ initialCompanies }: Props) {
                     </span>
                   )}
                 </p>
-                <div className="grid grid-cols-1 gap-3">
-                  {interactions.filter(i => i.type === "meeting" && i.transcript_url).map(i => (
-                    <div key={i.id} className="flex items-center gap-2.5 p-3 border border-slate-200 rounded-xl bg-white">
-                      <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
-                        <Paperclip size={13} className="text-violet-500" />
+                {/* Fixed-height container — more transcripts → more columns (narrower) */}
+                {(() => {
+                  const transcripts = interactions.filter(i => i.type === "meeting" && i.transcript_url);
+                  const total = transcripts.length + 1;
+                  const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
+                  const colClass = cols === 1 ? "grid-cols-1" : cols === 2 ? "grid-cols-2" : cols === 3 ? "grid-cols-3" : "grid-cols-4";
+                  return (
+                    <div className={`grid ${colClass} gap-2 h-48`}>
+                      {transcripts.map(i => (
+                        <div key={i.id} className="flex flex-col justify-between border border-slate-200 rounded-xl bg-white p-3 h-full min-w-0">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <div className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
+                              <Paperclip size={11} className="text-violet-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-medium text-slate-700 truncate leading-tight">{i.subject ?? "Transcript"}</p>
+                              <p className="text-[9px] text-slate-400 mt-0.5">{formatDate(i.date)}</p>
+                            </div>
+                          </div>
+                          {i.transcript_url && (
+                            <a href={i.transcript_url} target="_blank" rel="noopener noreferrer"
+                              className="mt-2 text-[9px] text-blue-500 hover:underline flex items-center gap-0.5 truncate">
+                              <ExternalLink size={9} /> Open
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                      {/* Upload box */}
+                      <div className="h-full">
+                        <UploadBox
+                          label="Upload Transcript"
+                          accept=".txt,.pdf,.docx,.vtt"
+                          companyId={selected.id}
+                          docType="transcript"
+                          bucket="transcripts"
+                          existingUrl={null}
+                          onUploaded={() => loadDetail(selected.id)}
+                        />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-slate-700 truncate">{truncate(i.subject ?? "Transcript", 28)}</p>
-                        <p className="text-[10px] text-slate-400">{formatDate(i.date)}</p>
-                      </div>
-                      {i.transcript_url && (
-                        <a href={i.transcript_url} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-blue-600 flex-shrink-0">
-                          <ExternalLink size={12} />
-                        </a>
-                      )}
                     </div>
-                  ))}
-                  {/* Upload transcript */}
-                  <UploadBox
-                    label="Upload Transcript"
-                    accept=".txt,.pdf,.docx,.vtt"
-                    companyId={selected.id}
-                    docType="transcript"
-                    bucket="transcripts"
-                    existingUrl={null}
-                    onUploaded={() => loadDetail(selected.id)}
-                  />
-                </div>
+                  );
+                })()}
               </div>
               </div>{/* end grid cols-2 */}
             </section>
