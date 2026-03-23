@@ -282,7 +282,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [search, setSearch]               = useState("");
   const [contacts, setContacts]           = useState<Contact[]>([]);
   const [interactions, setInteractions]   = useState<Interaction[]>([]);
-  const [documents, setDocuments]         = useState<Array<{id:string;name:string;type:string;file_url:string|null;created_at:string}>>([]);
+  const [documents, setDocuments]         = useState<Array<{id:string;name:string;type:string;storage_path:string|null;created_at:string}>>([]);
   const [memo, setMemo]                   = useState<IcMemo | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
@@ -350,7 +350,7 @@ export function PipelineClient({ initialCompanies }: Props) {
       supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(20),
       supabase.from("ic_memos").select("*").eq("company_id", id).order("created_at", { ascending: false }).limit(1),
       supabase.from("companies").select("name, website").eq("id", id).single(),
-      supabase.from("documents").select("id,name,type,file_url,created_at").eq("company_id", id).order("created_at", { ascending: false }),
+      supabase.from("documents").select("id,name,type,storage_path,created_at").eq("company_id", id).order("created_at", { ascending: false }),
     ]);
 
     let contacts = ctcts ?? [];
@@ -492,6 +492,14 @@ export function PipelineClient({ initialCompanies }: Props) {
     } finally {
       setGeneratingMemo(false);
     }
+  }
+
+  // ── Delete a deck document ────────────────────────────────────────────────
+  async function handleDeleteDeck(docId: string, storagePath: string | null) {
+    if (!confirm("Remove this deck?")) return;
+    await supabase.from("documents").delete().eq("id", docId);
+    if (storagePath) await supabase.storage.from("decks").remove([storagePath]);
+    await loadDetail(selected!.id);
   }
 
   // ── Generate company description ──────────────────────────────────────────
@@ -1051,7 +1059,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     title: d.name,
                     body: null,
                     date: d.created_at,
-                    url: d.file_url ?? null,
+                    url: d.storage_path ? supabase.storage.from(d.type === "pitch_deck" ? "decks" : "transcripts").getPublicUrl(d.storage_path).data.publicUrl : null,
                     meta: null,
                   })),
                 ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -1202,52 +1210,104 @@ export function PipelineClient({ initialCompanies }: Props) {
               )}
             </section>
 
-            {/* ── Documents — Deck & Transcripts ── */}
+            {/* ── Documents — Decks & Transcripts ── */}
             <section>
               <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Documents</h2>
-              <div className="grid grid-cols-3 gap-4">
 
-                {/* Pitch Deck */}
-                <UploadBox
-                  label="Deck"
-                  accept=".pdf,.pptx,.ppt,.key"
-                  companyId={selected.id}
-                  docType="deck"
-                  bucket="decks"
-                  existingUrl={selected.pitch_deck_url}
-                  onUploaded={url => setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, pitch_deck_url: url } : c))}
-                />
-
-                {/* Latest Meeting Transcript */}
-                <UploadBox
-                  label="Last Meeting Transcript"
-                  accept=".txt,.pdf,.docx,.vtt"
-                  companyId={selected.id}
-                  docType="transcript"
-                  bucket="transcripts"
-                  existingUrl={interactions.find(i => i.type === "meeting" && i.transcript_url)?.transcript_url ?? null}
-                  existingDate={interactions.find(i => i.type === "meeting")?.date}
-                  onUploaded={() => loadDetail(selected.id)}
-                />
-
-                {/* Previous Transcripts */}
-                <div className="border-2 border-dashed border-slate-200 rounded-xl p-4">
-                  <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
-                    <Paperclip size={12} /> Previous Transcripts
-                  </p>
-                  {interactions.filter(i => i.type === "meeting").length > 1 ? (
-                    <div className="space-y-1.5">
-                      {interactions.filter(i => i.type === "meeting").slice(1).map(i => (
-                        <div key={i.id} className="text-xs text-slate-500">
-                          {formatDate(i.date)} — {truncate(i.subject, 22)}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-300 italic">No previous meetings</p>
+              {/* ── Pitch Decks (multi) ── */}
+              <div className="mb-6">
+                <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
+                  <FileText size={12} /> Pitch Decks
+                  {documents.filter(d => d.type === "pitch_deck").length > 0 && (
+                    <span className="ml-1 text-slate-400 font-normal">
+                      ({documents.filter(d => d.type === "pitch_deck").length})
+                    </span>
                   )}
-                </div>
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Existing decks */}
+                  {documents.filter(d => d.type === "pitch_deck").map(doc => {
+                    const url = doc.storage_path
+                      ? supabase.storage.from("decks").getPublicUrl(doc.storage_path).data.publicUrl
+                      : null;
+                    return (
+                      <div key={doc.id} className="relative group border border-slate-200 rounded-xl overflow-hidden bg-white">
+                        {url ? (
+                          <a href={url} target="_blank" rel="noopener noreferrer">
+                            <PdfCover url={url} className="w-full" />
+                          </a>
+                        ) : (
+                          <div className="h-28 bg-slate-50 flex items-center justify-center">
+                            <FileText size={24} className="text-slate-300" />
+                          </div>
+                        )}
+                        <div className="px-2.5 py-2 border-t border-slate-100">
+                          <p className="text-[10px] text-slate-600 truncate font-medium">{doc.name}</p>
+                          <p className="text-[10px] text-slate-400">{formatDate(doc.created_at)}</p>
+                        </div>
+                        {/* Delete button */}
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeleteDeck(doc.id, doc.storage_path); }}
+                          className="absolute top-1.5 right-1.5 w-6 h-6 bg-white/90 backdrop-blur rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 border border-slate-200"
+                          title="Remove deck"
+                        >
+                          <X size={10} className="text-red-500" />
+                        </button>
+                      </div>
+                    );
+                  })}
 
+                  {/* Upload new deck — always visible */}
+                  <UploadBox
+                    label="Upload Deck"
+                    accept=".pdf,.pptx,.ppt,.key"
+                    companyId={selected.id}
+                    docType="deck"
+                    bucket="decks"
+                    existingUrl={null}
+                    onUploaded={() => loadDetail(selected.id)}
+                  />
+                </div>
+              </div>
+
+              {/* ── Transcripts ── */}
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
+                  <Paperclip size={12} /> Meeting Transcripts
+                  {interactions.filter(i => i.type === "meeting" && i.transcript_url).length > 0 && (
+                    <span className="ml-1 text-slate-400 font-normal">
+                      ({interactions.filter(i => i.type === "meeting" && i.transcript_url).length})
+                    </span>
+                  )}
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {interactions.filter(i => i.type === "meeting" && i.transcript_url).map(i => (
+                    <div key={i.id} className="flex items-center gap-2.5 p-3 border border-slate-200 rounded-xl bg-white">
+                      <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
+                        <Paperclip size={13} className="text-violet-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-slate-700 truncate">{truncate(i.subject ?? "Transcript", 28)}</p>
+                        <p className="text-[10px] text-slate-400">{formatDate(i.date)}</p>
+                      </div>
+                      {i.transcript_url && (
+                        <a href={i.transcript_url} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-blue-600 flex-shrink-0">
+                          <ExternalLink size={12} />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                  {/* Upload transcript */}
+                  <UploadBox
+                    label="Upload Transcript"
+                    accept=".txt,.pdf,.docx,.vtt"
+                    companyId={selected.id}
+                    docType="transcript"
+                    bucket="transcripts"
+                    existingUrl={null}
+                    onUploaded={() => loadDetail(selected.id)}
+                  />
+                </div>
               </div>
             </section>
 
