@@ -1255,7 +1255,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
                   const colClass = cols === 1 ? "grid-cols-1" : cols === 2 ? "grid-cols-2" : cols === 3 ? "grid-cols-3" : "grid-cols-4";
                   return (
-                    <div className={`grid ${colClass} gap-2 h-48`}>
+                    <div className={`grid ${colClass} gap-2 h-24`}>
                       {decks.map(doc => {
                         const url = doc.storage_path
                           ? supabase.storage.from("decks").getPublicUrl(doc.storage_path).data.publicUrl
@@ -1321,7 +1321,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
                   const colClass = cols === 1 ? "grid-cols-1" : cols === 2 ? "grid-cols-2" : cols === 3 ? "grid-cols-3" : "grid-cols-4";
                   return (
-                    <div className={`grid ${colClass} gap-2 h-48`}>
+                    <div className={`grid ${colClass} gap-2 h-24`}>
                       {transcripts.map(i => (
                         <div key={i.id} className="flex flex-col justify-between border border-slate-200 rounded-xl bg-white p-3 h-full min-w-0">
                           <div className="flex items-start gap-2 min-w-0">
