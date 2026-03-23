@@ -282,6 +282,7 @@ export function PipelineClient({ initialCompanies }: Props) {
 
   // Memo generation
   const [generatingMemo, setGeneratingMemo] = useState(false);
+  const [generatingDesc, setGeneratingDesc] = useState(false);
 
   // Logo picker
   const [showLogoPicker, setShowLogoPicker] = useState(false);
@@ -469,6 +470,29 @@ export function PipelineClient({ initialCompanies }: Props) {
       alert(e instanceof Error ? e.message : "Memo generation failed");
     } finally {
       setGeneratingMemo(false);
+    }
+  }
+
+  // ── Generate company description ──────────────────────────────────────────
+  async function handleGenerateDesc() {
+    if (!selected || generatingDesc) return;
+    setGeneratingDesc(true);
+    try {
+      const res = await fetch("/api/companies/generate-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: selected.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to generate description");
+      // Update the company in local state immediately
+      setCompanies(prev => prev.map(c =>
+        c.id === selected.id ? { ...c, description: json.description } : c
+      ));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Description generation failed");
+    } finally {
+      setGeneratingDesc(false);
     }
   }
 
@@ -905,12 +929,12 @@ export function PipelineClient({ initialCompanies }: Props) {
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Company Description</h2>
                 <button
-                  onClick={handleGenerateMemo}
-                  disabled={generatingMemo}
+                  onClick={handleGenerateDesc}
+                  disabled={generatingDesc}
                   className="text-[11px] px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
                   title="Generate description with Claude"
                 >
-                  {generatingMemo ? <><Loader2 size={10} className="animate-spin" /> Generating…</> : <><Sparkles size={10} /> Generate with Claude</>}
+                  {generatingDesc ? <><Loader2 size={10} className="animate-spin" /> Generating…</> : <><Sparkles size={10} /> Generate with Claude</>}
                 </button>
               </div>
               <p className="text-sm text-slate-700 leading-relaxed">
