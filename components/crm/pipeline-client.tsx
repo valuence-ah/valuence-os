@@ -1109,7 +1109,7 @@ export function PipelineClient({ initialCompanies }: Props) {
             </section>
 
             {/* ── Keywords + Notes (left) | Interaction Timeline (right) ── */}
-            <div className="grid grid-cols-2 gap-6 items-start">
+            <div className="grid grid-cols-[2fr_3fr] gap-6 items-start">
 
               {/* LEFT: Keywords + Internal Notes stacked */}
               <div className="space-y-5">
