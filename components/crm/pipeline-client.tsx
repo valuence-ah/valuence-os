@@ -46,6 +46,12 @@ const STAGE_OPTIONS = ["Pre-Seed", "Pre-A", "Seed", "Seed Extension", "Series A"
 // Values match Excel "Sector" column
 const SECTOR_OPTIONS = ["Biotech", "Cleantech", "Other"];
 
+const SECTOR_COLORS: Record<string, string> = {
+  cleantech: "bg-emerald-100 text-emerald-700",
+  biotech:   "bg-violet-100 text-violet-700",
+  other:     "bg-slate-100 text-slate-600",
+};
+
 // Values match Excel "Sub-sector" column
 const SUB_SECTOR_OPTIONS = [
   "Additive / Advanced Manufacturing", "Advanced Diagnostics / Biomarkers",
@@ -775,7 +781,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     {/* Line 3 — Sector bubble */}
                     <p className="mt-0.5">
                       {c.sectors?.[0] ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-slate-100 text-slate-600 capitalize">
+                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium capitalize", SECTOR_COLORS[c.sectors[0].toLowerCase()] ?? SECTOR_COLORS.other)}>
                           {c.sectors[0]}
                         </span>
                       ) : null}
