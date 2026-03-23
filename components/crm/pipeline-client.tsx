@@ -807,13 +807,13 @@ export function PipelineClient({ initialCompanies }: Props) {
                       const active = (editing ? (editForm.types as string[] ?? []) : (selected.types ?? [])).includes(o.value);
                       return editing ? (
                         <button key={o.value} type="button" onClick={() => toggleType(o.value)}
-                          className={cn("px-2.5 py-0.5 rounded-full text-xs font-medium border transition-all",
-                            active ? "bg-slate-700 text-white border-slate-700" : "bg-white text-slate-600 border-slate-300 hover:border-slate-500"
+                          className={cn("px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+                            active ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
                           )}>
                           {o.label}
                         </button>
                       ) : active ? (
-                        <span key={o.value} className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-700 text-white">{o.label}</span>
+                        <span key={o.value} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{o.label}</span>
                       ) : null;
                     })}
                     {!editing && !(selected.types ?? []).length && <span className="text-sm text-slate-300">—</span>}
@@ -827,13 +827,13 @@ export function PipelineClient({ initialCompanies }: Props) {
                       const active = (editing ? (editForm.sectors as string[] ?? []) : (selected.sectors ?? [])).includes(lower);
                       return editing ? (
                         <button key={s} type="button" onClick={() => toggleSector(s)}
-                          className={cn("px-3 py-1 rounded-full text-xs font-medium border transition-all",
-                            active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-300 hover:border-blue-400"
+                          className={cn("px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+                            active ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
                           )}>
                           {s}
                         </button>
                       ) : active ? (
-                        <span key={s} className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">{s}</span>
+                        <span key={s} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{s}</span>
                       ) : null;
                     })}
                     {!editing && !(selected.sectors ?? []).length && <span className="text-sm text-slate-300">—</span>}
