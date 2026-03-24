@@ -1276,7 +1276,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                     {contactsManaging ? "Done" : <>Manage <ChevronRight size={11} /></>}
                   </button>
                 </div>
-                <div className="h-[300px] overflow-y-auto space-y-2 pr-1">
+                <div className="h-[200px] overflow-y-auto space-y-2 pr-1">
                   {loadingDetail ? (
                     [1, 2].map(i => <div key={i} className="h-14 bg-slate-50 rounded-lg animate-pulse" />)
                   ) : contactsManaging ? (<>
