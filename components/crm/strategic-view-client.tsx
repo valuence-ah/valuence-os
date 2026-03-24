@@ -541,6 +541,16 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     saveExt(selected.id, { scores: { ...selectedExt.scores, [key]: v } });
   }
 
+  function deleteOpportunity(id: string) {
+    if (!selected) return;
+    saveExt(selected.id, { opportunities: selectedExt.opportunities.filter(o => o.id !== id) });
+  }
+
+  function deleteMatch(idx: number) {
+    if (!selected) return;
+    saveExt(selected.id, { portco_matches: selectedExt.portco_matches.filter((_, i) => i !== idx) });
+  }
+
   function addOpportunity() {
     if (!selected || !oppTitle.trim()) return;
     const newOpp = { id: genId(), title: oppTitle.trim(), type: oppType, urgency: oppUrgency, description: oppDesc.trim(), due: oppDue };
@@ -1144,20 +1154,31 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                       <p className="text-xs text-slate-400">No opportunities yet</p>
                     )}
                     <div className="space-y-2">
-                      {selectedExt.opportunities.map(opp => (
-                        <div key={opp.id} className="border border-slate-200 rounded-lg p-2.5 bg-white">
-                          <div className="flex items-start gap-2 mb-1">
-                            <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0", OPP_TYPE_COLORS[opp.type] ?? "bg-slate-100 text-slate-600")}>{opp.type}</span>
-                            <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0",
-                              opp.urgency === "high" ? "bg-red-100 text-red-600" : opp.urgency === "medium" ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-500")}>
-                              {opp.urgency}
-                            </span>
+                      {selectedExt.opportunities.map(opp => {
+                        const isOverdue = opp.due && new Date(opp.due) < new Date(new Date().toDateString());
+                        return (
+                          <div key={opp.id} className={cn("border rounded-lg p-2.5 bg-white", isOverdue ? "border-red-300 bg-red-50" : "border-slate-200")}>
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", OPP_TYPE_COLORS[opp.type] ?? "bg-slate-100 text-slate-600")}>{opp.type}</span>
+                                <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium",
+                                  opp.urgency === "high" ? "bg-red-100 text-red-600" : opp.urgency === "medium" ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-500")}>
+                                  {opp.urgency}
+                                </span>
+                                {isOverdue && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">Overdue</span>}
+                              </div>
+                              <button onClick={() => deleteOpportunity(opp.id)} className="text-slate-300 hover:text-red-400 flex-shrink-0 mt-0.5"><X size={12} /></button>
+                            </div>
+                            <p className="text-xs font-semibold text-slate-800">{opp.title}</p>
+                            {opp.description && <p className="text-xs text-slate-500 mt-0.5">{opp.description}</p>}
+                            {opp.due && (
+                              <p className={cn("text-[10px] mt-0.5", isOverdue ? "text-red-500 font-medium" : "text-slate-400")}>
+                                Due {formatDate(opp.due)}
+                              </p>
+                            )}
                           </div>
-                          <p className="text-xs font-semibold text-slate-800">{opp.title}</p>
-                          {opp.description && <p className="text-xs text-slate-500 mt-0.5">{opp.description}</p>}
-                          {opp.due && <p className="text-[10px] text-slate-400 mt-0.5">Due {formatDate(opp.due)}</p>}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -1197,15 +1218,25 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                       <p className="text-xs text-slate-400">No portco matches yet</p>
                     )}
                     <div className="space-y-1.5">
-                      {selectedExt.portco_matches.map((m, idx) => (
-                        <div key={idx} className="py-1.5 border-b border-slate-100">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-slate-700">{m.portco}</span>
-                            <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", PORTCO_STATUS_COLORS[m.status])}>{m.status}</span>
+                      {selectedExt.portco_matches.map((m, idx) => {
+                        const isOverdue = m.due && new Date(m.due) < new Date(new Date().toDateString());
+                        return (
+                          <div key={idx} className="py-1.5 border-b border-slate-100">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-medium text-slate-700 min-w-0 truncate">{m.portco}</span>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", PORTCO_STATUS_COLORS[m.status])}>{m.status}</span>
+                                <button onClick={() => deleteMatch(idx)} className="text-slate-300 hover:text-red-400"><X size={12} /></button>
+                              </div>
+                            </div>
+                            {m.due && (
+                              <p className={cn("text-[10px] mt-0.5", isOverdue ? "text-red-500 font-medium" : "text-slate-400")}>
+                                Due {formatDate(m.due)}{isOverdue ? " — Overdue" : ""}
+                              </p>
+                            )}
                           </div>
-                          {m.due && <p className="text-[10px] text-slate-400 mt-0.5">Due {formatDate(m.due)}</p>}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

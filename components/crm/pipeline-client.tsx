@@ -396,6 +396,9 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [newPartnerName, setNewPartnerName]         = useState("");
   const [newPartnerNote, setNewPartnerNote]         = useState("");
   const [newPartnerDate, setNewPartnerDate]         = useState(() => new Date().toISOString().slice(0, 10));
+  const [partnerCompanies, setPartnerCompanies]     = useState<{ id: string; name: string; types: string[] }[]>([]);
+  const [partnerSearch, setPartnerSearch]           = useState("");
+  const [showPartnerDropdown, setShowPartnerDropdown] = useState(false);
 
   // Auto-save
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -539,6 +542,14 @@ export function PipelineClient({ initialCompanies }: Props) {
     }
   }, [selectedId, loadDetail, loadEmails]);
 
+  // Load partner companies (strategics / LPs / investors) for search
+  useEffect(() => {
+    supabase.from("companies").select("id, name, types")
+      .or('types.cs.{"strategic partner"},types.cs.{"limited partner"},types.cs.{"investor"}')
+      .order("name").then(({ data }) => { if (data) setPartnerCompanies(data as { id: string; name: string; types: string[] }[]); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Load strategic partnerships from localStorage when selected company changes
   useEffect(() => {
     if (!selected) { setPortcoPartnerships([]); setManualPartnerships([]); return; }
@@ -566,8 +577,47 @@ export function PipelineClient({ initialCompanies }: Props) {
       map[selected.id] = updated;
       localStorage.setItem("pipeline_manual_partnerships", JSON.stringify(map));
     } catch {}
-    setNewPartnerName(""); setNewPartnerNote(""); setNewPartnerDate(new Date().toISOString().slice(0, 10));
-    setShowAddPartnership(false);
+    // If the partner is a strategic company, also write an opportunity to their strategic_ext_map
+    try {
+      const match = partnerCompanies.find(c => c.name.toLowerCase() === newPartnerName.trim().toLowerCase());
+      if (match && (match.types ?? []).includes("strategic partner")) {
+        const LS_STRATEGIC = "strategic_ext_map";
+        const raw = localStorage.getItem(LS_STRATEGIC);
+        const map = raw ? JSON.parse(raw) : {};
+        const ext = map[match.id] ?? {};
+        const opps = ext.opportunities ?? [];
+        opps.push({ id: Math.random().toString(36).slice(2, 10), title: `Partnership: ${selected.name}`, type: "Value-add", urgency: "medium", description: newPartnerNote.trim(), due: newPartnerDate });
+        map[match.id] = { ...ext, opportunities: opps };
+        localStorage.setItem(LS_STRATEGIC, JSON.stringify(map));
+      }
+    } catch {}
+    setNewPartnerName(""); setPartnerSearch(""); setNewPartnerNote(""); setNewPartnerDate(new Date().toISOString().slice(0, 10));
+    setShowAddPartnership(false); setShowPartnerDropdown(false);
+  }
+
+  function deletePortcoPartnership(strategicId: string) {
+    const updated = portcoPartnerships.filter(p => p.strategicId !== strategicId);
+    setPortcoPartnerships(updated);
+    try {
+      const raw = localStorage.getItem("portco_strategic_map");
+      const map = raw ? JSON.parse(raw) : {};
+      if (selected && map[selected.name]) {
+        map[selected.name] = map[selected.name].filter((e: { strategicId: string }) => e.strategicId !== strategicId);
+        localStorage.setItem("portco_strategic_map", JSON.stringify(map));
+      }
+    } catch {}
+  }
+
+  function deleteManualPartnership(id: string) {
+    if (!selected) return;
+    const updated = manualPartnerships.filter(p => p.id !== id);
+    setManualPartnerships(updated);
+    try {
+      const raw = localStorage.getItem("pipeline_manual_partnerships");
+      const map = raw ? JSON.parse(raw) : {};
+      map[selected.id] = updated;
+      localStorage.setItem("pipeline_manual_partnerships", JSON.stringify(map));
+    } catch {}
   }
 
   // ── Edit handlers ─────────────────────────────────────────────────────────
@@ -1360,9 +1410,29 @@ export function PipelineClient({ initialCompanies }: Props) {
 
                 {showAddPartnership && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
-                    <input value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)}
-                      placeholder="Partner name"
-                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                    {/* Searchable partner name */}
+                    <div className="relative">
+                      <input value={partnerSearch}
+                        onChange={e => { setPartnerSearch(e.target.value); setNewPartnerName(e.target.value); setShowPartnerDropdown(true); }}
+                        onFocus={() => setShowPartnerDropdown(true)}
+                        onBlur={() => setTimeout(() => setShowPartnerDropdown(false), 150)}
+                        placeholder="Search strategics / LPs / funds…"
+                        className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                      {showPartnerDropdown && partnerSearch.length > 0 && (
+                        <div className="absolute z-20 top-full left-0 right-0 bg-white border border-slate-200 rounded shadow-lg max-h-40 overflow-y-auto mt-0.5">
+                          {partnerCompanies.filter(c => c.name.toLowerCase().includes(partnerSearch.toLowerCase())).slice(0, 10).map(c => (
+                            <button key={c.id} onMouseDown={() => { setNewPartnerName(c.name); setPartnerSearch(c.name); setShowPartnerDropdown(false); }}
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 flex items-center justify-between gap-2">
+                              <span className="font-medium text-slate-700">{c.name}</span>
+                              <span className="text-[10px] text-slate-400">{(c.types ?? []).includes("strategic partner") ? "Strategic" : (c.types ?? []).includes("limited partner") ? "LP" : "Investor"}</span>
+                            </button>
+                          ))}
+                          {partnerCompanies.filter(c => c.name.toLowerCase().includes(partnerSearch.toLowerCase())).length === 0 && (
+                            <p className="px-3 py-2 text-xs text-slate-400 italic">No match — will be added manually</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <input value={newPartnerNote} onChange={e => setNewPartnerNote(e.target.value)}
                       placeholder="Note (optional)"
                       className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
@@ -1371,7 +1441,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     <div className="flex gap-2">
                       <button onClick={addManualPartnership}
                         className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">Add</button>
-                      <button onClick={() => setShowAddPartnership(false)}
+                      <button onClick={() => { setShowAddPartnership(false); setPartnerSearch(""); setNewPartnerName(""); }}
                         className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
                     </div>
                   </div>
@@ -1381,23 +1451,21 @@ export function PipelineClient({ initialCompanies }: Props) {
                   <p className="text-xs text-slate-300 italic">No strategic partnerships yet</p>
                 )}
 
-                <div className="space-y-1.5">
+                <div className="divide-y divide-slate-100">
                   {portcoPartnerships.map(p => (
-                    <div key={p.strategicId} className="py-1.5 border-b border-slate-100">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-slate-700">{p.strategicName}</span>
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>
-                      </div>
-                      {p.due && <p className="text-[10px] text-slate-400 mt-0.5">Due {formatDate(p.due)}</p>}
+                    <div key={p.strategicId} className="flex items-center gap-2 h-[30px]">
+                      <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.strategicName}</span>
+                      <span className="text-xs text-slate-400 flex-shrink-0">{p.due ? formatDate(p.due) : ""}</span>
+                      <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>
+                      <button onClick={() => deletePortcoPartnership(p.strategicId)} className="text-slate-300 hover:text-red-400 flex-shrink-0"><X size={12} /></button>
                     </div>
                   ))}
                   {manualPartnerships.map(p => (
-                    <div key={p.id} className="py-1.5 border-b border-slate-100">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-slate-700">{p.name}</span>
-                        {p.date && <span className="text-[10px] text-slate-400">{formatDate(p.date)}</span>}
-                      </div>
-                      {p.note && <p className="text-[10px] text-slate-400 mt-0.5">{p.note}</p>}
+                    <div key={p.id} className="flex items-center gap-2 h-[30px]">
+                      <span className="text-xs font-medium text-slate-700 min-w-0 truncate">{p.name}</span>
+                      {p.note && <span className="text-xs text-slate-400 truncate flex-1">{p.note}</span>}
+                      {p.date && <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(p.date)}</span>}
+                      <button onClick={() => deleteManualPartnership(p.id)} className="text-slate-300 hover:text-red-400 flex-shrink-0"><X size={12} /></button>
                     </div>
                   ))}
                 </div>
@@ -1444,31 +1512,33 @@ export function PipelineClient({ initialCompanies }: Props) {
                         const { data } = await supabase.from("interactions").select("type, date").contains("contact_ids", [c.id]).order("date", { ascending: false });
                         setContactInteractions(data ?? []);
                       }}
-                      className="w-full flex items-start gap-3 p-3 bg-slate-50 rounded-lg hover:bg-blue-50 transition-colors text-left"
+                      className="w-full flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-lg hover:bg-blue-50 transition-colors text-left"
                     >
-                      <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <User size={14} className="text-violet-600" />
+                      {/* Avatar */}
+                      <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                        <User size={13} className="text-violet-600" />
                       </div>
+                      {/* Name + Title */}
+                      <div className="w-36 min-w-0 flex-shrink-0">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                          {c.is_primary_contact && <span className="text-[10px] text-blue-600 bg-blue-50 px-1 rounded flex-shrink-0">★</span>}
+                        </div>
+                        <p className="text-[11px] text-slate-400 truncate">{c.title ?? c.type ?? "—"}</p>
+                      </div>
+                      {/* Last Contact */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
-                          {c.is_primary_contact && <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">Primary</span>}
-                        </div>
-                        <p className="text-xs text-slate-500 truncate">{c.title ?? c.type ?? "—"}</p>
-                        {c.email && <p className="text-xs text-blue-500 truncate">{c.email}</p>}
-                        <div className="flex items-center gap-3 mt-1">
-                          {c.last_contact_date && (
-                            <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                              <Mail size={9} /> {formatDate(c.last_contact_date)}
-                            </span>
-                          )}
-                          {(c.location_city || c.location_country) && (
-                            <span className="text-[10px] text-slate-400 flex items-center gap-0.5 truncate">
-                              <MapPin size={9} /> {[c.location_city, c.location_country].filter(Boolean).join(", ")}
-                            </span>
-                          )}
-                        </div>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Last Contact</p>
+                        <p className="text-xs text-slate-600">{c.last_contact_date ? formatDate(c.last_contact_date) : "—"}</p>
                       </div>
+                      {/* Location */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Location</p>
+                        <p className="text-xs text-slate-600 truncate">
+                          {[c.location_city, c.location_country].filter(Boolean).join(", ") || "—"}
+                        </p>
+                      </div>
+                      {/* Actions */}
                       <div className="flex gap-1.5 text-slate-400 flex-shrink-0" onClick={e => e.stopPropagation()}>
                         {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-600"><Mail size={13} /></a>}
                         {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600"><ExternalLink size={13} /></a>}
