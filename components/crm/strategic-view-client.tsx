@@ -512,7 +512,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
       <div className="flex flex-1 overflow-hidden relative">
 
         {/* Table */}
-        <div className="flex-1 overflow-auto">
+        <div className={cn("flex-1 overflow-auto", selectedId ? "mr-[400px]" : "")}>
           <table className="w-full text-sm border-collapse">
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>
@@ -616,8 +616,8 @@ export function StrategicViewClient({ initialCompanies }: Props) {
         </div>
 
         {/* ── Detail panel ─────────────────────────────────────────────────── */}
-        {selected && (
-          <div className="w-[340px] flex-shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-hidden">
+        <div className={cn("fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-30 flex flex-col transition-transform duration-300", selectedId ? "translate-x-0" : "translate-x-full")} style={{ width: 400 }}>
+        {selected && (<>
             {/* Panel header */}
             <div className="flex items-start gap-2.5 px-4 py-3 border-b border-slate-200 flex-shrink-0">
               <CompanyAvatar name={selected.name} size="md" />
@@ -1012,8 +1012,8 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                 View Profile <ExternalLink size={11} />
               </a>
             </div>
-          </div>
-        )}
+          </>)}
+        </div>
       </div>
 
       {/* ── Add Partner Modal ────────────────────────────────────────────────── */}
