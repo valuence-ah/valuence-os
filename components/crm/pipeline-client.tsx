@@ -1254,12 +1254,6 @@ export function PipelineClient({ initialCompanies }: Props) {
                   </span>
                 </Field>
 
-                <Field label="Last Meeting">
-                  <span className="text-sm text-slate-700 flex items-center gap-1">
-                    <Calendar size={12} className="text-slate-400" />
-                    {selected.last_meeting_date ? formatDate(selected.last_meeting_date) : "—"}
-                  </span>
-                </Field>
 
               </div>
             </section>
