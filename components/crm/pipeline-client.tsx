@@ -399,6 +399,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [manualPartnerships, setManualPartnerships] = useState<{ id: string; name: string; note: string; date: string }[]>([]);
   const [showAddPartnership, setShowAddPartnership] = useState(false);
   const [newPartnerName, setNewPartnerName]         = useState("");
+  const [partnerTitle, setPartnerTitle]             = useState("");
   const [newPartnerType, setNewPartnerType]         = useState("Introduction");
   const [newPartnerNote, setNewPartnerNote]         = useState("");
   const [newPartnerDate, setNewPartnerDate]         = useState(() => new Date().toISOString().slice(0, 10));
@@ -600,6 +601,34 @@ export function PipelineClient({ initialCompanies }: Props) {
         localStorage.setItem(LS_STRATEGIC, JSON.stringify(map));
       }
     } catch {}
+    // Bridge: also create a task for this partnership
+    if (partnerTitle.trim()) {
+      try {
+        const raw = localStorage.getItem("strategic_tasks_map") ?? "{}";
+        const map = JSON.parse(raw) as Record<string, unknown>;
+        const taskId = Date.now();
+        map[String(taskId)] = {
+          id: taskId,
+          title: partnerTitle.trim(),
+          cat: "Ecosystem",
+          init: "ecosystem",
+          prio: "Medium",
+          status: "Not started",
+          prog: 0,
+          owner: "Andrew",
+          cos: selected ? [selected.name] : [],
+          start: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          due: newPartnerDate ? new Date(newPartnerDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "",
+          daysLeft: 0,
+          notes: newPartnerNote.trim(),
+          risks: [],
+          deps: [],
+          comments: [],
+        };
+        localStorage.setItem("strategic_tasks_map", JSON.stringify(map));
+      } catch {}
+    }
+    setPartnerTitle("");
     setNewPartnerName(""); setPartnerSearch(""); setSelectedPartnerId(null); setNewPartnerType("Introduction"); setNewPartnerNote(""); setNewPartnerDate(new Date().toISOString().slice(0, 10));
     setShowAddPartnership(false); setShowPartnerDropdown(false);
   }
@@ -1410,7 +1439,7 @@ export function PipelineClient({ initialCompanies }: Props) {
               {/* Strategic Partnerships */}
               <section>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Strategic Partnerships</h2>
+                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Opportunities / tasks</h2>
                   <button onClick={() => setShowAddPartnership(v => !v)}
                     className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                     <Plus size={11} /> Add
@@ -1419,6 +1448,13 @@ export function PipelineClient({ initialCompanies }: Props) {
 
                 {showAddPartnership && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
+                    {/* Opportunity / task title */}
+                    <input
+                      value={partnerTitle ?? ""}
+                      onChange={e => setPartnerTitle(e.target.value)}
+                      placeholder="Opportunity / task title"
+                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                    />
                     {/* Company + Type row */}
                     <div className="flex gap-2">
                       <div className="relative flex-1">
@@ -1456,7 +1492,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     <div className="flex gap-2">
                       <button onClick={addManualPartnership}
                         className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">Add</button>
-                      <button onClick={() => { setShowAddPartnership(false); setPartnerSearch(""); setNewPartnerName(""); setSelectedPartnerId(null); setNewPartnerType("Introduction"); }}
+                      <button onClick={() => { setShowAddPartnership(false); setPartnerSearch(""); setNewPartnerName(""); setSelectedPartnerId(null); setNewPartnerType("Introduction"); setPartnerTitle(""); }}
                         className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
                     </div>
                   </div>
@@ -1503,6 +1539,24 @@ export function PipelineClient({ initialCompanies }: Props) {
                       )}
                     </div>
                   ))}
+                  {/* Tasks linked from /tasks page */}
+                  {(() => {
+                    try {
+                      const raw = localStorage.getItem("crm_tasks");
+                      if (!raw || !selected) return null;
+                      const allTasks = JSON.parse(raw) as Array<{id: number; title: string; status: string; due: string; cos: string[]}>;
+                      const linked = allTasks.filter(t => t.cos?.some((c: string) => c.toLowerCase() === selected.name.toLowerCase()));
+                      if (linked.length === 0) return null;
+                      return linked.map(t => (
+                        <div key={t.id} className="h-auto py-1.5 flex items-center gap-2 border-t border-slate-100">
+                          <span className="text-xs text-slate-400">→</span>
+                          <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{t.title}</span>
+                          {t.due && <span className="text-xs text-slate-400 flex-shrink-0">{t.due}</span>}
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 flex-shrink-0">{t.status}</span>
+                        </div>
+                      ));
+                    } catch { return null; }
+                  })()}
                 </div>
               </section>
             </div>

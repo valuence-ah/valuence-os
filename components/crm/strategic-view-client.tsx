@@ -230,7 +230,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [loadingDetail, setLoadingDetail] = useState(false);
 
   // Panel tab
-  const [panelTab, setPanelTab] = useState<"overview" | "opportunities" | "intelligence" | "tasks">("overview");
+  const [panelTab, setPanelTab] = useState<"overview" | "opportunities" | "intelligence">("overview");
 
   // localStorage ext map
   const [extMap, setExtMap] = useState<Record<string, StrategicExt>>({});
@@ -247,6 +247,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
   // Opportunity form
   const [showOppForm, setShowOppForm]         = useState(false);
+  const [oppTitle, setOppTitle]               = useState("");
   const [oppType, setOppType]                 = useState<OppType>("Introduction");
   const [oppUrgency, setOppUrgency]           = useState<OppUrgency>("medium");
   const [oppCompany, setOppCompany]           = useState("");
@@ -554,6 +555,34 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     if (oppCompanyId) {
       upsertPortcoStrategicMap(oppCompany.trim(), oppCompanyId, selected.id, selected.name, oppType, oppDue);
     }
+    // Bridge: create task in tasks page via localStorage
+    if (oppTitle.trim()) {
+      try {
+        const raw = localStorage.getItem("strategic_tasks_map") ?? "{}";
+        const map = JSON.parse(raw) as Record<string, unknown>;
+        const taskId = Date.now();
+        map[String(taskId)] = {
+          id: taskId,
+          title: oppTitle.trim(),
+          cat: "Ecosystem",
+          init: "ecosystem",
+          prio: oppUrgency === "high" ? "High" : oppUrgency === "medium" ? "Medium" : "Low",
+          status: "Not started",
+          prog: 0,
+          owner: "Andrew",
+          cos: selected ? [selected.name] : [],
+          start: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          due: oppDue ? new Date(oppDue).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "",
+          daysLeft: 0,
+          notes: oppDesc.trim(),
+          risks: [],
+          deps: [],
+          comments: [],
+        };
+        localStorage.setItem("strategic_tasks_map", JSON.stringify(map));
+      } catch {}
+    }
+    setOppTitle("");
     setOppCompany(""); setOppCompanyId(""); setOppSearch(""); setOppType("Introduction"); setOppUrgency("medium"); setOppDesc(""); setOppDue("");
     setShowOppForm(false);
   }
@@ -786,7 +815,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
             {/* Tabs */}
             <div className="flex border-b border-slate-200 flex-shrink-0">
-              {(["overview", "opportunities", "intelligence", "tasks"] as const).map(tab => (
+              {(["overview", "opportunities", "intelligence"] as const).map(tab => (
                 <button key={tab} onClick={() => setPanelTab(tab)}
                   className={cn("flex-1 text-xs font-medium py-2 capitalize transition-colors",
                     panelTab === tab ? "text-blue-600 border-b-2 border-blue-600" : "text-slate-500 hover:text-slate-700")}>
@@ -1109,6 +1138,9 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
                     {showOppForm && (
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3 space-y-2">
+                        {/* Opportunity / Task title */}
+                        <input value={oppTitle} onChange={e => setOppTitle(e.target.value)} placeholder="Opportunity / task title"
+                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
                         {/* Key Opportunity | Priority */}
                         <div className="flex gap-2">
                           <select value={oppType} onChange={e => setOppType(e.target.value as OppType)}
@@ -1153,7 +1185,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         </div>
                         <div className="flex gap-2">
                           <button onClick={addOpportunity} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
-                          <button onClick={() => { setShowOppForm(false); setOppCompany(""); setOppSearch(""); setOppCompanyId(""); }} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
+                          <button onClick={() => { setShowOppForm(false); setOppCompany(""); setOppSearch(""); setOppCompanyId(""); setOppTitle(""); }} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
                         </div>
                       </div>
                     )}
@@ -1196,6 +1228,34 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         );
                       })}
                     </div>
+                    {/* Tasks linked from /tasks page */}
+                    {(() => {
+                      try {
+                        const raw = localStorage.getItem("crm_tasks");
+                        if (!raw) return null;
+                        const allTasks = JSON.parse(raw) as Array<{id: number; title: string; status: string; prio: string; due: string; cos: string[]; cat: string}>;
+                        const linked = allTasks.filter(t => t.cos?.some((c: string) => c.toLowerCase() === (selected?.name ?? "").toLowerCase()));
+                        if (linked.length === 0) return null;
+                        return (
+                          <div className="mt-3">
+                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Linked Tasks</p>
+                            <div className="space-y-1.5">
+                              {linked.map(t => (
+                                <div key={t.id} className="border border-slate-200 rounded-lg p-2 bg-white flex items-start justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium text-slate-700 truncate">{t.title}</p>
+                                    {t.due && <p className="text-[10px] text-slate-400 mt-0.5">Due {t.due}</p>}
+                                  </div>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{t.status}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      } catch { return null; }
+                    })()}
                   </div>
                 </div>
               )}
@@ -1285,49 +1345,6 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                 </div>
               )}
 
-              {/* ── TASKS TAB ────────────────────────────────────────────── */}
-              {panelTab === "tasks" && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Tasks</h3>
-                    <button onClick={() => setShowTaskForm(v => !v)} className="text-blue-600 hover:text-blue-700">
-                      <Plus size={14} />
-                    </button>
-                  </div>
-
-                  {showTaskForm && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
-                      <input value={taskText} onChange={e => setTaskText(e.target.value)} placeholder="Task description"
-                        className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                      <input value={taskDue} onChange={e => setTaskDue(e.target.value)} type="date"
-                        className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                      <div className="flex gap-2">
-                        <button onClick={addTask} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
-                        <button onClick={() => setShowTaskForm(false)} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedExt.tasks.length === 0 && !showTaskForm && (
-                    <p className="text-xs text-slate-400">No tasks yet</p>
-                  )}
-                  <div className="space-y-1.5">
-                    {selectedExt.tasks.map(task => (
-                      <div key={task.id} className={cn("flex items-start gap-2.5 py-2 border-b border-slate-100", task.done ? "opacity-50" : "")}>
-                        <button onClick={() => toggleTask(task.id)}
-                          className={cn("flex-shrink-0 w-4 h-4 rounded border mt-0.5 flex items-center justify-center transition-colors",
-                            task.done ? "bg-blue-600 border-blue-600" : "border-slate-300 hover:border-blue-400")}>
-                          {task.done && <Check size={10} className="text-white" />}
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <p className={cn("text-xs text-slate-700", task.done && "line-through text-slate-400")}>{task.text}</p>
-                          {task.due && <p className="text-[10px] text-slate-400 mt-0.5">Due {formatDate(task.due)}</p>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
             </div>
 

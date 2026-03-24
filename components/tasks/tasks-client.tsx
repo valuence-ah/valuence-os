@@ -29,6 +29,7 @@ interface Task {
   risks: { title: string; detail: string }[];
   deps: string[];
   comments: { by: string; date: string; txt: string }[];
+  noteItems?: { id: string; txt: string }[];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -173,6 +174,30 @@ function CatBadge({ cat }: { cat: string }) {
   return (
     <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", CAT_COLORS[cat] ?? "bg-slate-100 text-slate-500")}>
       {cat}
+    </span>
+  );
+}
+
+const INIT_COLORS: Record<string, string> = {
+  "fundraise":    "bg-blue-50 text-blue-700",
+  "ecosystem":    "bg-green-50 text-green-700",
+  "diligence":    "bg-violet-50 text-violet-700",
+  "portfolio":    "bg-teal-50 text-teal-700",
+  "lp-relations": "bg-orange-50 text-orange-700",
+};
+const INIT_BADGE_LABELS: Record<string, string> = {
+  "fundraise":    "Fundraise",
+  "ecosystem":    "Ecosystem",
+  "diligence":    "Active Diligence",
+  "portfolio":    "Portfolio Mgmt",
+  "lp-relations": "LP Relationship",
+};
+
+function InitBadge({ init }: { init: string }) {
+  const label = INIT_BADGE_LABELS[init] ?? init;
+  return (
+    <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", INIT_COLORS[init] ?? "bg-slate-100 text-slate-500")}>
+      {label}
     </span>
   );
 }
@@ -554,7 +579,7 @@ interface SidePanelProps {
 }
 
 function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
-  const [editMode, setEditMode] = useState(false);
+  const [editingField, setEditingField] = useState<string | null>(null);
   const [editFields, setEditFields] = useState({
     cat: task.cat,
     init: task.init,
@@ -566,6 +591,8 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
   });
   const [addingComment, setAddingComment] = useState(false);
   const [commentText, setCommentText] = useState("");
+  const [addingNote, setAddingNote] = useState(false);
+  const [noteText, setNoteText] = useState("");
 
   // Sync when task changes externally
   useEffect(() => {
@@ -578,32 +605,8 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
       start: task.start,
       due: task.due,
     });
-    setEditMode(false);
+    setEditingField(null);
   }, [task.id]);
-
-  function handleSave() {
-    // Convert date inputs (yyyy-mm-dd) to display format
-    function fmtDate(s: string): string {
-      const d = new Date(s);
-      if (isNaN(d.getTime())) return s;
-      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    }
-    const newDue = editFields.due.includes("-") ? fmtDate(editFields.due) : editFields.due;
-    const newStart = editFields.start.includes("-") ? fmtDate(editFields.start) : editFields.start;
-    const updated: Task = {
-      ...task,
-      cat: editFields.cat,
-      init: editFields.init,
-      status: editFields.status,
-      prio: editFields.prio,
-      owner: editFields.owner,
-      start: newStart,
-      due: newDue,
-      daysLeft: calcDaysLeft(newDue),
-    };
-    onUpdate(updated);
-    setEditMode(false);
-  }
 
   function handleMarkComplete() {
     onUpdate({ ...task, status: "Completed" });
@@ -667,137 +670,214 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
         >
           <Plus className="w-3.5 h-3.5" /> Add Update
         </button>
-        <button
-          onClick={() => setEditMode(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 flex-1 justify-center"
-        >
-          Edit
-        </button>
       </div>
 
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
 
-        {/* Overview — double-click to edit */}
+        {/* Overview — click any field to edit it */}
         <section className="px-4 py-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
-              Overview
-              {!editMode && <span className="ml-1 text-[9px] text-slate-300 normal-case tracking-normal font-normal">(double-click to edit)</span>}
-            </p>
-            {editMode && (
-              <div className="flex gap-1">
-                <button onClick={handleSave} className="flex items-center gap-1 px-2 py-0.5 bg-slate-900 text-white text-[10px] rounded hover:bg-slate-700">
-                  <Check className="w-2.5 h-2.5" /> Save
-                </button>
-                <button onClick={() => setEditMode(false)} className="px-2 py-0.5 border border-slate-200 text-[10px] rounded text-slate-600 hover:bg-slate-50">
-                  Cancel
-                </button>
-              </div>
-            )}
-          </div>
-          {editMode ? (
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p className="text-[10px] text-slate-400 uppercase mb-1">Category</p>
-                <select className={selectCls} value={editFields.cat} onChange={e => setEditFields(f => ({ ...f, cat: e.target.value }))}>
+          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Overview</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+
+            {/* Category */}
+            <div>
+              <span className="text-slate-400 block mb-0.5">Category</span>
+              {editingField === "cat" ? (
+                <select autoFocus className={selectCls} value={editFields.cat}
+                  onChange={e => setEditFields(f => ({ ...f, cat: e.target.value }))}
+                  onBlur={() => { onUpdate({ ...task, cat: editFields.cat }); setEditingField(null); }}>
                   {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                 </select>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 uppercase mb-1">Initiative</p>
-                <select className={selectCls} value={editFields.init} onChange={e => setEditFields(f => ({ ...f, init: e.target.value }))}>
+              ) : (
+                <div className="cursor-pointer" onClick={() => setEditingField("cat")}>
+                  <CatBadge cat={task.cat} />
+                </div>
+              )}
+            </div>
+
+            {/* Initiative */}
+            <div>
+              <span className="text-slate-400 block mb-0.5">Initiative</span>
+              {editingField === "init" ? (
+                <select autoFocus className={selectCls} value={editFields.init}
+                  onChange={e => setEditFields(f => ({ ...f, init: e.target.value }))}
+                  onBlur={() => { onUpdate({ ...task, init: editFields.init }); setEditingField(null); }}>
                   {initiatives.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}
                 </select>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 uppercase mb-1">Status</p>
-                <select className={selectCls} value={editFields.status} onChange={e => setEditFields(f => ({ ...f, status: e.target.value }))}>
+              ) : (
+                <div className="cursor-pointer" onClick={() => setEditingField("init")}>
+                  <InitBadge init={task.init} />
+                </div>
+              )}
+            </div>
+
+            {/* Status */}
+            <div>
+              <span className="text-slate-400 block mb-0.5">Status</span>
+              {editingField === "status" ? (
+                <select autoFocus className={selectCls} value={editFields.status}
+                  onChange={e => setEditFields(f => ({ ...f, status: e.target.value }))}
+                  onBlur={() => { onUpdate({ ...task, status: editFields.status }); setEditingField(null); }}>
                   {STATUSES.map(s => <option key={s}>{s}</option>)}
                 </select>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 uppercase mb-1">Priority</p>
-                <select className={selectCls} value={editFields.prio} onChange={e => setEditFields(f => ({ ...f, prio: e.target.value }))}>
+              ) : (
+                <div className="cursor-pointer" onClick={() => setEditingField("status")}>
+                  <StatusBadge status={task.status} />
+                </div>
+              )}
+            </div>
+
+            {/* Priority */}
+            <div>
+              <span className="text-slate-400 block mb-0.5">Priority</span>
+              {editingField === "prio" ? (
+                <select autoFocus className={selectCls} value={editFields.prio}
+                  onChange={e => setEditFields(f => ({ ...f, prio: e.target.value }))}
+                  onBlur={() => { onUpdate({ ...task, prio: editFields.prio }); setEditingField(null); }}>
                   {PRIORITIES.map(p => <option key={p}>{p}</option>)}
                 </select>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 uppercase mb-1">Owner</p>
-                <select className={selectCls} value={editFields.owner} onChange={e => setEditFields(f => ({ ...f, owner: e.target.value }))}>
-                  {OWNERS.map(o => <option key={o}>{o}</option>)}
-                </select>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 uppercase mb-1">Start Date</p>
-                <input type="date" className={selectCls} value={toInputDate(editFields.start)} onChange={e => setEditFields(f => ({ ...f, start: e.target.value }))} />
-              </div>
-              <div className="col-span-2">
-                <p className="text-[10px] text-slate-400 uppercase mb-1">Target Date</p>
-                <input type="date" className={selectCls} value={toInputDate(editFields.due)} onChange={e => setEditFields(f => ({ ...f, due: e.target.value }))} />
-              </div>
-            </div>
-          ) : (
-            <div
-              onDoubleClick={() => setEditMode(true)}
-              className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs cursor-default select-none"
-              title="Double-click to edit"
-            >
-              <div>
-                <span className="text-slate-400">Category</span>
-                <div className="mt-0.5"><CatBadge cat={task.cat} /></div>
-              </div>
-              <div>
-                <span className="text-slate-400">Initiative</span>
-                <div className="mt-0.5 text-slate-700 text-xs">{
-                  ({ fundraise:"Fundraise", ecosystem:"Ecosystem", diligence:"Active Diligence", portfolio:"Portfolio Mgmt", "lp-relations":"LP Relationship" } as Record<string,string>)[task.init] ?? task.init
-                }</div>
-              </div>
-              <div>
-                <span className="text-slate-400">Status</span>
-                <div className="mt-0.5"><StatusBadge status={task.status} /></div>
-              </div>
-              <div>
-                <span className="text-slate-400">Priority</span>
-                <div className="mt-0.5 flex items-center gap-1">
+              ) : (
+                <div className="flex items-center gap-1 cursor-pointer" onClick={() => setEditingField("prio")}>
                   <span className={cn("w-1.5 h-1.5 rounded-full", PRIO_DOTS[task.prio])} />
                   <span className="text-slate-700">{task.prio}</span>
                 </div>
-              </div>
-              <div>
-                <span className="text-slate-400">Owner</span>
-                <div className="mt-0.5 flex items-center gap-1.5">
+              )}
+            </div>
+
+            {/* Owner */}
+            <div>
+              <span className="text-slate-400 block mb-0.5">Owner</span>
+              {editingField === "owner" ? (
+                <select autoFocus className={selectCls} value={editFields.owner}
+                  onChange={e => setEditFields(f => ({ ...f, owner: e.target.value }))}
+                  onBlur={() => { onUpdate({ ...task, owner: editFields.owner }); setEditingField(null); }}>
+                  {OWNERS.map(o => <option key={o}>{o}</option>)}
+                </select>
+              ) : (
+                <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => setEditingField("owner")}>
                   <OwnerAvatar owner={task.owner} />
                   <span className="text-slate-700">{task.owner}</span>
                 </div>
-              </div>
-              <div>
-                <span className="text-slate-400">Days left</span>
-                <div className="mt-0.5"><DaysChip daysLeft={task.daysLeft} /></div>
-              </div>
-              <div>
-                <span className="text-slate-400">Start</span>
-                <div className="mt-0.5 text-slate-700">{task.start}</div>
-              </div>
-              <div>
-                <span className="text-slate-400">Target</span>
-                <div className="mt-0.5 text-slate-700">{task.due}</div>
-              </div>
-              <div className="col-span-2 mt-0.5">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-slate-400">Progress</span>
-                  <span className="font-medium text-slate-700">{task.prog}%</span>
-                </div>
-                <ProgressBar pct={task.prog} />
-              </div>
+              )}
             </div>
-          )}
+
+            {/* Days left */}
+            <div>
+              <span className="text-slate-400 block mb-0.5">Days left</span>
+              <DaysChip daysLeft={task.daysLeft} />
+            </div>
+
+            {/* Start date */}
+            <div>
+              <span className="text-slate-400 block mb-0.5">Start</span>
+              {editingField === "start" ? (
+                <input autoFocus type="date" className={selectCls} value={toInputDate(editFields.start)}
+                  onChange={e => setEditFields(f => ({ ...f, start: e.target.value }))}
+                  onBlur={() => {
+                    function fmtDate(s: string) { const d = new Date(s); return isNaN(d.getTime()) ? s : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
+                    const ns = editFields.start.includes("-") ? fmtDate(editFields.start) : editFields.start;
+                    onUpdate({ ...task, start: ns }); setEditingField(null);
+                  }}
+                  onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingField(null); }}
+                />
+              ) : (
+                <span className="text-slate-700 cursor-pointer" onClick={() => setEditingField("start")}>{task.start}</span>
+              )}
+            </div>
+
+            {/* Target date */}
+            <div>
+              <span className="text-slate-400 block mb-0.5">Target</span>
+              {editingField === "due" ? (
+                <input autoFocus type="date" className={selectCls} value={toInputDate(editFields.due)}
+                  onChange={e => setEditFields(f => ({ ...f, due: e.target.value }))}
+                  onBlur={() => {
+                    function fmtDate(s: string) { const d = new Date(s); return isNaN(d.getTime()) ? s : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
+                    const nd = editFields.due.includes("-") ? fmtDate(editFields.due) : editFields.due;
+                    onUpdate({ ...task, due: nd, daysLeft: calcDaysLeft(nd) }); setEditingField(null);
+                  }}
+                  onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingField(null); }}
+                />
+              ) : (
+                <span className="text-slate-700 cursor-pointer" onClick={() => setEditingField("due")}>{task.due}</span>
+              )}
+            </div>
+
+            {/* Progress */}
+            <div className="col-span-2 mt-0.5">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-slate-400">Progress</span>
+                <span className="font-medium text-slate-700">{task.prog}%</span>
+              </div>
+              <ProgressBar pct={task.prog} />
+            </div>
+          </div>
         </section>
 
         {/* Notes */}
         <section className="px-4 py-3">
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Notes</p>
-          <p className="text-xs text-slate-600 leading-relaxed">{task.notes}</p>
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Notes</p>
+            <button
+              onClick={() => setAddingNote(true)}
+              className="text-blue-600 hover:text-blue-700"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {task.notes && (
+              <div className="group flex items-start gap-1.5">
+                <p className="text-xs text-slate-600 leading-relaxed flex-1">{task.notes}</p>
+                <button
+                  onClick={() => onUpdate({ ...task, notes: "" })}
+                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 flex-shrink-0 mt-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+            {(task.noteItems ?? []).map((n: { id: string; txt: string }) => (
+              <div key={n.id} className="group flex items-start gap-1.5">
+                <p className="text-xs text-slate-600 leading-relaxed flex-1">{n.txt}</p>
+                <button
+                  onClick={() => onUpdate({ ...task, noteItems: (task.noteItems ?? []).filter((x: { id: string; txt: string }) => x.id !== n.id) })}
+                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 flex-shrink-0 mt-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          {addingNote && (
+            <div className="mt-2 space-y-1.5">
+              <textarea
+                autoFocus
+                rows={2}
+                placeholder="Add a note…"
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-md px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-blue-300"
+              />
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => {
+                    if (!noteText.trim()) return;
+                    const newItem = { id: Date.now().toString(), txt: noteText.trim() };
+                    onUpdate({ ...task, noteItems: [...(task.noteItems ?? []), newItem] });
+                    setNoteText("");
+                    setAddingNote(false);
+                  }}
+                  className="px-2.5 py-1 bg-slate-900 text-white text-xs rounded-md hover:bg-slate-700"
+                >Save</button>
+                <button
+                  onClick={() => { setAddingNote(false); setNoteText(""); }}
+                  className="px-2.5 py-1 border border-slate-200 text-xs rounded-md text-slate-600"
+                >Cancel</button>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Linked Companies */}
@@ -1114,15 +1194,12 @@ export function TasksClient() {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  // Persist user-added/modified tasks (id > 30) to crm_tasks
+  // Persist ALL tasks to crm_tasks for cross-page linking
   useEffect(() => {
-    const userTasks = tasks.filter(t => t.id > 30);
-    if (userTasks.length > 0) {
-      try {
-        localStorage.setItem("crm_tasks", JSON.stringify(userTasks));
-      } catch {
-        // ignore
-      }
+    try {
+      localStorage.setItem("crm_tasks", JSON.stringify(tasks));
+    } catch {
+      // ignore
     }
   }, [tasks]);
 
@@ -1241,12 +1318,6 @@ export function TasksClient() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top bar */}
       <div className="flex-shrink-0 bg-white border-b border-slate-200 px-5 pt-4 pb-3 space-y-3">
-        {/* Title row */}
-        <div>
-          <h1 className="text-sm font-semibold text-slate-900">Task Intelligence</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Fund II close · portfolio · diligence · ecosystem — Mar 2026</p>
-        </div>
-
         {/* Stat cards — full width */}
         <div className="flex gap-2">
           <div className="flex-1 h-24 min-w-[100px] rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50 flex flex-col justify-between">
@@ -1382,13 +1453,6 @@ export function TasksClient() {
               </button>
             )}
           </div>
-          {/* Add task */}
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-md hover:bg-slate-700"
-          >
-            <Plus className="w-3 h-3" /> Add task
-          </button>
           {/* Filter pills */}
           <div className="flex gap-1 overflow-x-auto pb-0.5 flex-1">
             {FILTER_PILLS.map(f => (
@@ -1427,6 +1491,13 @@ export function TasksClient() {
               );
             })}
           </div>
+          {/* Add task — far right, blue */}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-3 h-3" /> Add task
+          </button>
         </div>
       </div>
 
