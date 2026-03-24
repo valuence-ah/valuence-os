@@ -599,7 +599,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
           { label: "Diligence Experts",   value: metrics.diligence, icon: <Shield size={14} className="text-violet-500" /> },
           { label: "Cooling Off",         value: metrics.cooling,   icon: <AlertCircle size={14} className="text-red-400" /> },
         ].map(m => (
-          <div key={m.label} className="flex-1 bg-slate-50 rounded-xl border border-slate-200 px-3 py-2.5">
+          <div key={m.label} className="flex-1 bg-slate-50 rounded-xl border border-slate-200 px-3 py-2.5 h-24">
             <div className="flex items-center gap-1.5 mb-1">{m.icon}<span className="text-xs text-slate-500 font-medium">{m.label}</span></div>
             <p className="text-xl font-bold text-slate-800">{m.value}</p>
           </div>
