@@ -3,12 +3,12 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Company, Interaction } from "@/lib/types";
+import type { Company, Contact, Interaction } from "@/lib/types";
 import { cn, formatDate, getInitials, timeAgo } from "@/lib/utils";
 import {
   Search, Plus, X, Check, Loader2, Mail, Video, Phone, FileText,
   Building2, Target, TrendingUp, AlertCircle, Users, Shield,
-  Handshake, MoreHorizontal, ChevronRight, ExternalLink,
+  Handshake, MoreHorizontal, ChevronRight, ExternalLink, RefreshCw,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ interface StrategicExt {
   scores: { mandate: number; relationship: number; portco: number; responsiveness: number };
   portco_matches: { portco: string; status: PortcoStatus }[];
   opportunities: { id: string; title: string; type: string; urgency: OppUrgency; description: string }[];
-  intel: { id: string; headline: string; source: string; date: string; is_signal: boolean }[];
+  intel: { id: string; headline: string; source: string; url?: string; date: string; is_signal: boolean; summary?: string }[];
   tasks: { id: string; text: string; done: boolean; due: string }[];
 }
 
@@ -80,6 +80,13 @@ const PORTCO_STATUS_COLORS: Record<PortcoStatus, string> = {
   "Intro pending":  "bg-amber-100 text-amber-700",
   "Exploring":      "bg-blue-100 text-blue-700",
   "Not started":    "bg-slate-100 text-slate-500",
+};
+
+// Column widths for resizable columns
+const DEFAULT_COL_WIDTHS: Record<string, number> = {
+  Company: 200, Sector: 120, "Rel. Health": 110, Utility: 90,
+  Roles: 160, "Co-invest": 90, Diligence: 100, "Pilot/Customer": 110,
+  "Last Contact": 110, Signal: 90, Owner: 80,
 };
 
 // ── Helper functions ──────────────────────────────────────────────────────────
@@ -206,6 +213,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [search, setSearch]               = useState("");
   const [activeFilter, setActiveFilter]   = useState<FilterId>("all");
   const [interactions, setInteractions]   = useState<Interaction[]>([]);
+  const [contacts, setContacts]           = useState<Contact[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
   // Panel tab
@@ -216,13 +224,6 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
   // Last touch map (loaded once on mount)
   const [lastTouchMap, setLastTouchMap] = useState<Record<string, { date: string; type: string }>>({});
-
-  // Add interaction state
-  const [addingActivity, setAddingActivity] = useState(false);
-  const [activityDate, setActivityDate]     = useState(() => new Date().toISOString().slice(0, 10));
-  const [activityType, setActivityType]     = useState<"call" | "meeting" | "email">("call");
-  const [activityNote, setActivityNote]     = useState("");
-  const [savingActivity, setSavingActivity] = useState(false);
 
   // Add partner modal
   const [showAddPartner, setShowAddPartner] = useState(false);
@@ -250,10 +251,40 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [intelDate, setIntelDate]           = useState(() => new Date().toISOString().slice(0, 10));
   const [intelSignal, setIntelSignal]       = useState(false);
 
+  // Intel auto-load
+  const [loadingIntel, setLoadingIntel]     = useState(false);
+
   // Task form
   const [showTaskForm, setShowTaskForm]     = useState(false);
   const [taskText, setTaskText]             = useState("");
   const [taskDue, setTaskDue]               = useState("");
+
+  // Description auto-generate
+  const [loadingDesc, setLoadingDesc]       = useState(false);
+
+  // Sector auto-generate
+  const [loadingSector, setLoadingSector]   = useState(false);
+
+  // Resizable columns
+  const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_COL_WIDTHS);
+  const resizingCol = useRef<{ col: string; startX: number; startW: number } | null>(null);
+
+  function onResizeStart(col: string, e: React.MouseEvent) {
+    e.preventDefault();
+    resizingCol.current = { col, startX: e.clientX, startW: colWidths[col] };
+    function onMove(ev: MouseEvent) {
+      if (!resizingCol.current) return;
+      const diff = ev.clientX - resizingCol.current.startX;
+      setColWidths(prev => ({ ...prev, [resizingCol.current!.col]: Math.max(50, resizingCol.current!.startW + diff) }));
+    }
+    function onUp() {
+      resizingCol.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
 
   // Re-fetch on mount
   useEffect(() => {
@@ -315,6 +346,17 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     return healthToSignal(getHealth(co));
   }
 
+  // Save company field to Supabase (optimistic update)
+  async function saveCompanyField(id: string, patch: Partial<Company>) {
+    const prev = companies.find(c => c.id === id);
+    setCompanies(ps => ps.map(c => c.id === id ? { ...c, ...patch } : c));
+    const { error } = await supabase.from("companies").update(patch).eq("id", id);
+    if (error) {
+      console.error("saveCompanyField error:", error);
+      if (prev) setCompanies(ps => ps.map(c => c.id === id ? prev : c));
+    }
+  }
+
   // Metrics
   const metrics = useMemo(() => {
     const now = Date.now();
@@ -350,12 +392,11 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   // Load detail
   const loadDetail = useCallback(async (id: string) => {
     setLoadingDetail(true);
-    const { data: ints } = await supabase
-      .from("interactions")
-      .select("*")
-      .eq("company_id", id)
-      .order("date", { ascending: false })
-      .limit(20);
+    const [{ data: ctcts }, { data: ints }] = await Promise.all([
+      supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }),
+      supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(20),
+    ]);
+    setContacts((ctcts ?? []) as Contact[]);
     setInteractions((ints ?? []) as Interaction[]);
     setLoadingDetail(false);
   }, [supabase]);
@@ -363,7 +404,6 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   function selectCompany(id: string) {
     setSelectedId(id);
     setPanelTab("overview");
-    setAddingActivity(false);
     setShowOppForm(false);
     setShowMatchForm(false);
     setShowIntelForm(false);
@@ -374,23 +414,9 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const selected = companies.find(c => c.id === selectedId) ?? null;
   const selectedExt = selected ? getExt(selected.id) : DEFAULT_EXT;
 
-  // Save activity
-  async function saveActivity() {
-    if (!selected || !activityNote.trim()) return;
-    setSavingActivity(true);
-    const { data: newInt } = await supabase.from("interactions").insert({
-      company_id: selected.id,
-      type: activityType,
-      subject: activityNote.slice(0, 80),
-      body: activityNote,
-      date: activityDate,
-    }).select().single();
-    if (newInt) {
-      setInteractions(prev => [newInt as Interaction, ...prev]);
-      setLastTouchMap(prev => ({ ...prev, [selected.id]: { date: activityDate, type: activityType } }));
-    }
-    setActivityNote(""); setAddingActivity(false);
-    setSavingActivity(false);
+  // Computed utility = average of 4 scores
+  function computedUtility(ext: StrategicExt): number {
+    return Math.round((ext.scores.mandate + ext.scores.relationship + ext.scores.portco + ext.scores.responsiveness) / 4);
   }
 
   // Save partner
@@ -406,6 +432,63 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     if (newCo) setCompanies(prev => [...prev, newCo as Company].sort((a, b) => a.name.localeCompare(b.name)));
     setAddName(""); setAddSector(""); setAddDesc(""); setShowAddPartner(false);
     setSavingPartner(false);
+  }
+
+  // Auto-generate description
+  async function generateDescription() {
+    if (!selected) return;
+    setLoadingDesc(true);
+    try {
+      const res = await fetch("/api/strategic/describe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: selected.id, name: selected.name, sectors: selected.sectors }),
+      });
+      const data = await res.json();
+      if (data.description) {
+        setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, description: data.description } : c));
+      }
+    } catch {}
+    setLoadingDesc(false);
+  }
+
+  // Auto-generate sector
+  async function generateSector() {
+    if (!selected) return;
+    setLoadingSector(true);
+    try {
+      const res = await fetch("/api/strategic/sector", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: selected.id, name: selected.name, description: selected.description }),
+      });
+      const data = await res.json();
+      if (data.sector) {
+        setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, sectors: [data.sector] } : c));
+      }
+    } catch {}
+    setLoadingSector(false);
+  }
+
+  // Auto-load intelligence
+  async function loadIntelligence() {
+    if (!selected) return;
+    setLoadingIntel(true);
+    try {
+      const res = await fetch("/api/strategic/intel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: selected.id, name: selected.name, sectors: selected.sectors }),
+      });
+      const data = await res.json();
+      if (data.items && data.items.length > 0) {
+        const currentExt = getExt(selected.id);
+        const existingIds = new Set(currentExt.intel.map((i: { id: string }) => i.id));
+        const newItems = data.items.filter((item: { id: string }) => !existingIds.has(item.id));
+        saveExt(selected.id, { intel: [...newItems, ...currentExt.intel] });
+      }
+    } catch {}
+    setLoadingIntel(false);
   }
 
   // ── Panel helpers ──────────────────────────────────────────────────────────
@@ -444,7 +527,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
   function addIntel() {
     if (!selected || !intelHeadline.trim()) return;
-    const newIntel = { id: genId(), headline: intelHeadline.trim(), source: intelSource.trim(), date: intelDate, is_signal: intelSignal };
+    const newIntel = { id: genId(), headline: intelHeadline.trim(), source: intelSource.trim(), url: "", date: intelDate, is_signal: intelSignal, summary: "" };
     saveExt(selected.id, { intel: [newIntel, ...selectedExt.intel] });
     setIntelHeadline(""); setIntelSource(""); setIntelDate(new Date().toISOString().slice(0, 10)); setIntelSignal(false);
     setShowIntelForm(false);
@@ -462,6 +545,11 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     const tasks = selectedExt.tasks.map(t => t.id === taskId ? { ...t, done: !t.done } : t);
     saveExt(selected.id, { tasks });
   }
+
+  // 90-day stats from interactions
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
+  const emails90d   = interactions.filter(i => i.type === "email" && i.date >= ninetyDaysAgo).length;
+  const meetings90d = interactions.filter(i => (i.type === "meeting" || i.type === "call") && i.date >= ninetyDaysAgo).length;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -512,13 +600,19 @@ export function StrategicViewClient({ initialCompanies }: Props) {
       <div className="flex flex-1 overflow-hidden relative">
 
         {/* Table */}
-        <div className={cn("flex-1 overflow-auto", selectedId ? "mr-[400px]" : "")}>
-          <table className="w-full text-sm border-collapse">
+        <div className={cn("flex-1 overflow-auto", selectedId ? "mr-[480px]" : "")}>
+          <table className="w-full text-sm border-collapse" style={{ tableLayout: "fixed" }}>
+            <colgroup>
+              {Object.keys(DEFAULT_COL_WIDTHS).map(col => <col key={col} style={{ width: colWidths[col] }} />)}
+            </colgroup>
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>
-                {["Company", "Sector", "Rel. Health", "Utility", "Roles", "Co-invest", "Diligence", "Pilot/Customer", "Last Contact", "Signal", "Owner"].map(col => (
-                  <th key={col} className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-200 whitespace-nowrap">
+                {Object.keys(DEFAULT_COL_WIDTHS).map(col => (
+                  <th key={col} className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-200 whitespace-nowrap relative select-none">
                     {col}
+                    <div className="absolute right-0 top-0 h-full w-2 cursor-col-resize group flex items-center justify-center" onMouseDown={e => onResizeStart(col, e)}>
+                      <div className="w-px h-4 bg-slate-300 group-hover:bg-blue-400 transition-colors" />
+                    </div>
                   </th>
                 ))}
               </tr>
@@ -531,6 +625,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                 const sigDot = sig === "hot" ? "bg-emerald-500" : sig === "warm" ? "bg-amber-400" : "bg-slate-300";
                 const lastTouch = lastTouchMap[co.id]?.date ?? co.last_contact_date;
                 const isSelected = co.id === selectedId;
+                const utilityVal = computedUtility(ext);
                 return (
                   <tr key={co.id} onClick={() => selectCompany(co.id)}
                     className={cn("border-b border-slate-100 cursor-pointer transition-colors hover:bg-blue-50",
@@ -560,7 +655,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     </td>
                     {/* Utility */}
                     <td className="px-3 py-2.5">
-                      <UtilityBars value={ext.utility} h={h} />
+                      <UtilityBars value={utilityVal} h={h} />
                     </td>
                     {/* Roles */}
                     <td className="px-3 py-2.5">
@@ -616,7 +711,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
         </div>
 
         {/* ── Detail panel ─────────────────────────────────────────────────── */}
-        <div className={cn("fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-30 flex flex-col transition-transform duration-300", selectedId ? "translate-x-0" : "translate-x-full")} style={{ width: 400 }}>
+        <div className={cn("fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-30 flex flex-col transition-transform duration-300", selectedId ? "translate-x-0" : "translate-x-full")} style={{ width: 480 }}>
         {selected && (<>
             {/* Panel header */}
             <div className="flex items-start gap-2.5 px-4 py-3 border-b border-slate-200 flex-shrink-0">
@@ -648,6 +743,8 @@ export function StrategicViewClient({ initialCompanies }: Props) {
               {panelTab === "overview" && (() => {
                 const h   = selectedExt.health ?? computeHealth(selected.last_contact_date ?? null);
                 const sig = selectedExt.signal ?? healthToSignal(h);
+                const utilityVal = computedUtility(selectedExt);
+                const wordCount = (selected.description ?? "").trim().split(/\s+/).filter(Boolean).length;
                 return (
                   <div className="space-y-4">
                     {/* Signal alert */}
@@ -667,23 +764,127 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     {/* Profile */}
                     <div>
                       <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Profile</h3>
-                      <div className="space-y-1.5">
-                        {[
-                          { label: "Sector",       value: selected.sectors?.[0] ?? "—" },
-                          { label: "Location",     value: [selected.location_city, selected.location_country].filter(Boolean).join(", ") || "—" },
-                          { label: "Last Contact", value: formatDate(selected.last_contact_date) },
-                        ].map(row => (
-                          <div key={row.label} className="flex items-start gap-2">
-                            <span className="text-[11px] text-slate-400 w-24 flex-shrink-0">{row.label}</span>
-                            <span className="text-[11px] text-slate-700">{row.value}</span>
+                      <div className="space-y-2">
+
+                        {/* Sector row */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-400 w-24 flex-shrink-0">Sector</span>
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                            <input
+                              value={selected.sectors?.[0] ?? ""}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, sectors: val ? [val] : [] } : c));
+                              }}
+                              onBlur={async e => {
+                                const val = e.target.value.trim();
+                                await saveCompanyField(selected.id, { sectors: val ? [val] : [] });
+                              }}
+                              placeholder="e.g. Energy & Materials"
+                              className="flex-1 text-[11px] text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
+                            />
+                            <button
+                              onClick={generateSector}
+                              disabled={loadingSector}
+                              className="text-[10px] text-violet-500 hover:text-violet-700 flex-shrink-0 flex items-center gap-0.5"
+                              title="Auto-generate sector"
+                            >
+                              {loadingSector ? <Loader2 size={10} className="animate-spin" /> : "✨"}
+                            </button>
                           </div>
-                        ))}
-                        {selected.description && (
-                          <div className="flex items-start gap-2">
-                            <span className="text-[11px] text-slate-400 w-24 flex-shrink-0">Description</span>
-                            <span className="text-[11px] text-slate-700 leading-relaxed">{selected.description}</span>
+                        </div>
+
+                        {/* Location row — City + Country side by side */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-400 w-24 flex-shrink-0">Location</span>
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                            <input
+                              value={selected.location_city ?? ""}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, location_city: val } : c));
+                              }}
+                              onBlur={async e => {
+                                await saveCompanyField(selected.id, { location_city: e.target.value.trim() || null });
+                              }}
+                              placeholder="City"
+                              className="flex-1 text-[11px] text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
+                            />
+                            <span className="text-slate-300 text-[11px]">/</span>
+                            <input
+                              value={selected.location_country ?? ""}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, location_country: val } : c));
+                              }}
+                              onBlur={async e => {
+                                await saveCompanyField(selected.id, { location_country: e.target.value.trim() || null });
+                              }}
+                              placeholder="Country"
+                              className="flex-1 text-[11px] text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
+                            />
                           </div>
-                        )}
+                        </div>
+
+                        {/* Website row */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-400 w-24 flex-shrink-0">Website</span>
+                          <input
+                            value={selected.website ?? ""}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, website: val } : c));
+                            }}
+                            onBlur={async e => {
+                              await saveCompanyField(selected.id, { website: e.target.value.trim() || null });
+                            }}
+                            placeholder="https://…"
+                            className="flex-1 text-[11px] text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5 min-w-0"
+                          />
+                        </div>
+
+                        {/* Last Contact row */}
+                        <div className="flex items-start gap-2">
+                          <span className="text-[11px] text-slate-400 w-24 flex-shrink-0">Last Contact</span>
+                          <span className="text-[11px] text-slate-700">{formatDate(selected.last_contact_date)}</span>
+                        </div>
+
+                        {/* Description row */}
+                        <div className="flex items-start gap-2">
+                          <div className="w-24 flex-shrink-0 flex items-center gap-1">
+                            <span className="text-[11px] text-slate-400">Description</span>
+                            <button
+                              onClick={generateDescription}
+                              disabled={loadingDesc}
+                              className="text-[10px] text-violet-500 hover:text-violet-700 flex-shrink-0"
+                              title="Auto-generate description"
+                            >
+                              {loadingDesc ? <Loader2 size={10} className="animate-spin" /> : "✨"}
+                            </button>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <textarea
+                              rows={2}
+                              value={selected.description ?? ""}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, description: val } : c));
+                              }}
+                              onBlur={async e => {
+                                await saveCompanyField(selected.id, { description: e.target.value.trim() || null });
+                              }}
+                              placeholder="Company description…"
+                              className={cn(
+                                "w-full text-[11px] text-slate-700 border rounded px-1.5 py-1 focus:outline-none focus:border-blue-400 resize-none bg-transparent",
+                                wordCount > 60 ? "border-red-400" : "border-slate-200"
+                              )}
+                            />
+                            <p className={cn("text-[10px] mt-0.5", wordCount > 60 ? "text-red-500" : "text-slate-400")}>
+                              {wordCount}/60 words
+                            </p>
+                          </div>
+                        </div>
+
                       </div>
                     </div>
 
@@ -727,29 +928,113 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         <ScoreBar label="Portco Synergy"       value={selectedExt.scores.portco}       onChange={v => setScore("portco", v)} />
                         <ScoreBar label="Responsiveness"       value={selectedExt.scores.responsiveness} onChange={v => setScore("responsiveness", v)} />
                       </div>
+                      <p className="text-[10px] text-slate-400 mt-1.5">Utility (avg): {computedUtility(selectedExt)}%</p>
                     </div>
 
-                    {/* Activity timeline */}
-                    <div>
-                      <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Activity</h3>
-                      {loadingDetail ? (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-400"><Loader2 size={12} className="animate-spin" /> Loading…</div>
-                      ) : interactions.length === 0 ? (
-                        <p className="text-[11px] text-slate-400">No interactions yet</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {interactions.slice(0, 10).map(i => (
-                            <div key={i.id} className="flex items-start gap-2">
-                              <div className="flex-shrink-0 mt-0.5"><InteractionIcon type={i.type} /></div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[11px] font-medium text-slate-700 truncate">{i.subject ?? i.type}</p>
-                                {i.summary && <p className="text-[10px] text-slate-400 truncate">{i.summary}</p>}
-                                <p className="text-[10px] text-slate-400">{timeAgo(i.date)}</p>
-                              </div>
+                    {/* Contacts section */}
+                    <div className="pt-2 border-t border-slate-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Contacts</h3>
+                        <a href={`/crm/companies/${selected.id}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                          Manage <ChevronRight size={11} />
+                        </a>
+                      </div>
+                      <div className="h-[200px] overflow-y-auto space-y-2 pr-1">
+                        {loadingDetail ? (
+                          [1, 2].map(i => <div key={i} className="h-14 bg-slate-50 rounded-lg animate-pulse" />)
+                        ) : contacts.length === 0 ? (
+                          <p className="text-xs text-slate-400 italic">No contacts on file</p>
+                        ) : contacts.map(c => (
+                          <div key={c.id} className="flex items-start gap-2.5 p-2.5 bg-slate-50 rounded-lg">
+                            <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${hashColor(c.first_name + (c.last_name ?? ""))} flex items-center justify-center flex-shrink-0`}>
+                              <span className="text-white text-[10px] font-bold">{getInitials(`${c.first_name} ${c.last_name ?? ""}`)}</span>
                             </div>
-                          ))}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                              {c.title && <p className="text-[11px] text-slate-400 truncate">{c.title}</p>}
+                              {c.email && (
+                                <a href={`mailto:${c.email}`} className="flex items-center gap-1 text-[11px] text-blue-500 hover:underline truncate">
+                                  <Mail size={9} /> {c.email}
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Activity Timeline */}
+                    <div className="pt-2 border-t border-slate-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Activity Timeline</h3>
+                        <button
+                          onClick={async () => {
+                            if (!selected) return;
+                            // Re-load interactions for "+ Add Activity" (open a modal or form in panel if needed)
+                          }}
+                          className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 flex items-center gap-1"
+                        >
+                          <Plus size={11} /> Add Activity
+                        </button>
+                      </div>
+
+                      <div className="h-[300px] overflow-y-auto space-y-3 pr-1">
+                        {/* 3 metric tiles */}
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                          <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
+                            <Mail size={14} className="text-blue-500 mx-auto mb-1" />
+                            <p className="text-lg font-bold text-blue-700">{emails90d}</p>
+                            <p className="text-[10px] text-blue-500 font-medium">Emails</p>
+                            <p className="text-[10px] text-slate-400">past 90 days</p>
+                          </div>
+                          <div className="bg-violet-50 border border-violet-100 rounded-xl p-3 text-center">
+                            <Video size={14} className="text-violet-500 mx-auto mb-1" />
+                            <p className="text-lg font-bold text-violet-700">{meetings90d}</p>
+                            <p className="text-[10px] text-violet-500 font-medium">Meetings</p>
+                            <p className="text-[10px] text-slate-400">past 90 days</p>
+                          </div>
+                          <div
+                            className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center cursor-pointer hover:bg-amber-100 transition-colors"
+                            onClick={() => loadIntelligence()}
+                          >
+                            <FileText size={14} className="text-amber-500 mx-auto mb-1" />
+                            {loadingIntel
+                              ? <Loader2 size={14} className="animate-spin text-amber-500 mx-auto" />
+                              : <p className="text-lg font-bold text-amber-700">{selectedExt.intel.length > 0 ? selectedExt.intel.length : "—"}</p>
+                            }
+                            <p className="text-[10px] text-amber-600 font-medium">Intelligence</p>
+                            <p className="text-[10px] text-slate-400">click to load</p>
+                          </div>
                         </div>
-                      )}
+
+                        {/* Timeline list */}
+                        {loadingDetail ? (
+                          [1, 2, 3].map(i => <div key={i} className="h-10 bg-slate-50 rounded-lg animate-pulse" />)
+                        ) : interactions.length === 0 ? (
+                          <p className="text-xs text-slate-400 italic">No interactions recorded</p>
+                        ) : (
+                          <div className="relative pl-4">
+                            <div className="absolute left-1.5 top-0 bottom-0 w-px bg-slate-100" />
+                            <div className="space-y-3">
+                              {interactions.slice(0, 12).map(int => (
+                                <div key={int.id} className="relative flex gap-2.5">
+                                  <div className="absolute -left-4 mt-0.5 w-3 h-3 rounded-full bg-white border-2 border-slate-200" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start gap-1.5">
+                                      <InteractionIcon type={int.type} />
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium text-slate-700 leading-tight truncate">{int.subject ?? int.type.charAt(0).toUpperCase() + int.type.slice(1)}</p>
+                                        {int.body && <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{int.body}</p>}
+                                        <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(int.date)}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -854,6 +1139,19 @@ export function StrategicViewClient({ initialCompanies }: Props) {
               {/* ── INTELLIGENCE TAB ─────────────────────────────────────── */}
               {panelTab === "intelligence" && (
                 <div className="space-y-4">
+                  {/* Refresh button */}
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Intel Feed</h3>
+                    <button
+                      onClick={loadIntelligence}
+                      disabled={loadingIntel}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      {loadingIntel ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                      {loadingIntel ? "Loading…" : "Refresh Intelligence"}
+                    </button>
+                  </div>
+
                   {/* Signal alert based on intel */}
                   {(() => {
                     const signalItems = selectedExt.intel.filter(i => i.is_signal);
@@ -868,52 +1166,57 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     return null;
                   })()}
 
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Intel Feed</h3>
-                      <button onClick={() => setShowIntelForm(v => !v)} className="text-blue-600 hover:text-blue-700">
-                        <Plus size={14} />
-                      </button>
-                    </div>
+                  {/* Add intel form */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] text-slate-400">Manually add intel</p>
+                    <button onClick={() => setShowIntelForm(v => !v)} className="text-blue-600 hover:text-blue-700">
+                      <Plus size={14} />
+                    </button>
+                  </div>
 
-                    {showIntelForm && (
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3 space-y-2">
-                        <input value={intelHeadline} onChange={e => setIntelHeadline(e.target.value)} placeholder="Headline"
-                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                        <div className="flex gap-2">
-                          <input value={intelSource} onChange={e => setIntelSource(e.target.value)} placeholder="Source"
-                            className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                          <input value={intelDate} onChange={e => setIntelDate(e.target.value)} type="date"
-                            className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                        </div>
-                        <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-                          <input type="checkbox" checked={intelSignal} onChange={e => setIntelSignal(e.target.checked)} className="rounded" />
-                          Mark as signal
-                        </label>
-                        <div className="flex gap-2">
-                          <button onClick={addIntel} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
-                          <button onClick={() => setShowIntelForm(false)} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
+                  {showIntelForm && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3 space-y-2">
+                      <input value={intelHeadline} onChange={e => setIntelHeadline(e.target.value)} placeholder="Headline"
+                        className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                      <div className="flex gap-2">
+                        <input value={intelSource} onChange={e => setIntelSource(e.target.value)} placeholder="Source"
+                          className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                        <input value={intelDate} onChange={e => setIntelDate(e.target.value)} type="date"
+                          className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                        <input type="checkbox" checked={intelSignal} onChange={e => setIntelSignal(e.target.checked)} className="rounded" />
+                        Mark as signal
+                      </label>
+                      <div className="flex gap-2">
+                        <button onClick={addIntel} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
+                        <button onClick={() => setShowIntelForm(false)} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedExt.intel.length === 0 && !showIntelForm && !loadingIntel && (
+                    <p className="text-[11px] text-slate-400">No intel yet — click &quot;Refresh Intelligence&quot; to load</p>
+                  )}
+                  <div className="space-y-2.5">
+                    {selectedExt.intel.map(item => (
+                      <div key={item.id} className="border border-slate-200 rounded-lg p-2.5 bg-white">
+                        {item.is_signal && (
+                          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide bg-emerald-50 px-1.5 py-0.5 rounded mb-1 inline-block">SIGNAL</span>
+                        )}
+                        <p className="text-xs font-medium text-slate-800">{item.headline}</p>
+                        {item.summary && <p className="text-[11px] text-slate-500 mt-0.5">{item.summary}</p>}
+                        <div className="flex items-center gap-2 mt-1">
+                          {item.source && item.url ? (
+                            <a href={item.url} target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] text-blue-600 hover:underline">{item.source}</a>
+                          ) : item.source ? (
+                            <span className="text-[10px] text-slate-400">{item.source}</span>
+                          ) : null}
+                          <span className="text-[10px] text-slate-400">{formatDate(item.date)}</span>
                         </div>
                       </div>
-                    )}
-
-                    {selectedExt.intel.length === 0 && !showIntelForm && (
-                      <p className="text-[11px] text-slate-400">No intel yet</p>
-                    )}
-                    <div className="space-y-2.5">
-                      {selectedExt.intel.map(item => (
-                        <div key={item.id} className="border border-slate-200 rounded-lg p-2.5 bg-white">
-                          {item.is_signal && (
-                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-0.5">Signal Detected</p>
-                          )}
-                          <p className="text-xs font-medium text-slate-800">{item.headline}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            {item.source && <span className="text-[10px] text-slate-400">{item.source}</span>}
-                            <span className="text-[10px] text-slate-400">{formatDate(item.date)}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -966,36 +1269,6 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
             {/* Panel footer */}
             <div className="flex-shrink-0 border-t border-slate-200 px-4 py-3 space-y-2">
-              {/* Log activity */}
-              {!addingActivity ? (
-                <button onClick={() => setAddingActivity(true)}
-                  className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors">
-                  <Plus size={12} /> Log Activity
-                </button>
-              ) : (
-                <div className="space-y-1.5">
-                  <div className="flex gap-1.5">
-                    <select value={activityType} onChange={e => setActivityType(e.target.value as "call" | "meeting" | "email")}
-                      className="text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400">
-                      <option value="call">Call</option>
-                      <option value="meeting">Meeting</option>
-                      <option value="email">Email</option>
-                    </select>
-                    <input value={activityDate} onChange={e => setActivityDate(e.target.value)} type="date"
-                      className="flex-1 text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400" />
-                  </div>
-                  <textarea value={activityNote} onChange={e => setActivityNote(e.target.value)} placeholder="Notes…"
-                    rows={2} className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 resize-none" />
-                  <div className="flex gap-1.5">
-                    <button onClick={saveActivity} disabled={savingActivity || !activityNote.trim()}
-                      className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1">
-                      {savingActivity ? <Loader2 size={11} className="animate-spin" /> : null} Save
-                    </button>
-                    <button onClick={() => setAddingActivity(false)} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
-                  </div>
-                </div>
-              )}
-
               {/* Next action */}
               <div className="space-y-1">
                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Next Action</p>
