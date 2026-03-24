@@ -1,16 +1,13 @@
-// ─── Companies (Strategic Partners) /crm/strategic ───────────────────────────
-// Ecosystem partners and corporates.
-
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
-import { CompaniesViewClient } from "@/components/crm/companies-view-client";
+import { StrategicViewClient } from "@/components/crm/strategic-view-client";
 import type { Company } from "@/lib/types";
 
-export const metadata = { title: "Strategic" };
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Strategic Partners" };
 
 export default async function StrategicPage() {
   const supabase = createAdminClient();
-
   const { data: companies } = (await supabase
     .from("companies")
     .select("*")
@@ -21,8 +18,8 @@ export default async function StrategicPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Strategic" subtitle={`${companies?.length ?? 0} partners`} />
-      <CompaniesViewClient initialCompanies={companies ?? []} view="strategic" />
+      <Header title="Strategic Partners" subtitle={`${companies?.length ?? 0} partners`} />
+      <StrategicViewClient initialCompanies={companies ?? []} />
     </div>
   );
 }
