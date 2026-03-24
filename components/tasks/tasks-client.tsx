@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Search, X, AlertCircle, Clock, CheckCircle2, TrendingUp,
   Users, Flag, ChevronRight, AlignLeft, LayoutGrid, GitBranch,
-  Minus, ArrowUp, ArrowDown, Circle, Plus, Pencil, Check, Building2,
+  Minus, ArrowUp, ArrowDown, Circle, Plus, Check, Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -650,69 +650,81 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
 
-        {/* Overview */}
+        {/* Overview — double-click to edit */}
         <section className="px-4 py-3">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Overview</p>
-            {!editMode && (
-              <button onClick={() => setEditMode(true)} className="text-slate-400 hover:text-slate-600">
-                <Pencil className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-          {editMode ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase mb-1">Category</p>
-                  <select className={selectCls} value={editFields.cat} onChange={e => setEditFields(f => ({ ...f, cat: e.target.value }))}>
-                    {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase mb-1">Initiative</p>
-                  <select className={selectCls} value={editFields.init} onChange={e => setEditFields(f => ({ ...f, init: e.target.value }))}>
-                    {initiatives.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase mb-1">Status</p>
-                  <select className={selectCls} value={editFields.status} onChange={e => setEditFields(f => ({ ...f, status: e.target.value }))}>
-                    {STATUSES.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase mb-1">Priority</p>
-                  <select className={selectCls} value={editFields.prio} onChange={e => setEditFields(f => ({ ...f, prio: e.target.value }))}>
-                    {PRIORITIES.map(p => <option key={p}>{p}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase mb-1">Owner</p>
-                  <select className={selectCls} value={editFields.owner} onChange={e => setEditFields(f => ({ ...f, owner: e.target.value }))}>
-                    {OWNERS.map(o => <option key={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase mb-1">Start Date</p>
-                  <input type="date" className={selectCls} value={toInputDate(editFields.start)} onChange={e => setEditFields(f => ({ ...f, start: e.target.value }))} />
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase mb-1">Target Date</p>
-                  <input type="date" className={selectCls} value={toInputDate(editFields.due)} onChange={e => setEditFields(f => ({ ...f, due: e.target.value }))} />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={handleSave} className="flex items-center gap-1 px-2.5 py-1 bg-slate-900 text-white text-xs rounded-md hover:bg-slate-700">
-                  <Check className="w-3 h-3" /> Save
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+              Overview
+              {!editMode && <span className="ml-1 text-[9px] text-slate-300 normal-case tracking-normal font-normal">(double-click to edit)</span>}
+            </p>
+            {editMode && (
+              <div className="flex gap-1">
+                <button onClick={handleSave} className="flex items-center gap-1 px-2 py-0.5 bg-slate-900 text-white text-[10px] rounded hover:bg-slate-700">
+                  <Check className="w-2.5 h-2.5" /> Save
                 </button>
-                <button onClick={() => setEditMode(false)} className="px-2.5 py-1 border border-slate-200 text-xs rounded-md text-slate-600 hover:bg-slate-50">
+                <button onClick={() => setEditMode(false)} className="px-2 py-0.5 border border-slate-200 text-[10px] rounded text-slate-600 hover:bg-slate-50">
                   Cancel
                 </button>
               </div>
+            )}
+          </div>
+          {editMode ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase mb-1">Category</p>
+                <select className={selectCls} value={editFields.cat} onChange={e => setEditFields(f => ({ ...f, cat: e.target.value }))}>
+                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase mb-1">Initiative</p>
+                <select className={selectCls} value={editFields.init} onChange={e => setEditFields(f => ({ ...f, init: e.target.value }))}>
+                  {initiatives.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase mb-1">Status</p>
+                <select className={selectCls} value={editFields.status} onChange={e => setEditFields(f => ({ ...f, status: e.target.value }))}>
+                  {STATUSES.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase mb-1">Priority</p>
+                <select className={selectCls} value={editFields.prio} onChange={e => setEditFields(f => ({ ...f, prio: e.target.value }))}>
+                  {PRIORITIES.map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase mb-1">Owner</p>
+                <select className={selectCls} value={editFields.owner} onChange={e => setEditFields(f => ({ ...f, owner: e.target.value }))}>
+                  {OWNERS.map(o => <option key={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase mb-1">Start Date</p>
+                <input type="date" className={selectCls} value={toInputDate(editFields.start)} onChange={e => setEditFields(f => ({ ...f, start: e.target.value }))} />
+              </div>
+              <div className="col-span-2">
+                <p className="text-[10px] text-slate-400 uppercase mb-1">Target Date</p>
+                <input type="date" className={selectCls} value={toInputDate(editFields.due)} onChange={e => setEditFields(f => ({ ...f, due: e.target.value }))} />
+              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+            <div
+              onDoubleClick={() => setEditMode(true)}
+              className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs cursor-default select-none"
+              title="Double-click to edit"
+            >
+              <div>
+                <span className="text-slate-400">Category</span>
+                <div className="mt-0.5"><CatBadge cat={task.cat} /></div>
+              </div>
+              <div>
+                <span className="text-slate-400">Initiative</span>
+                <div className="mt-0.5 text-slate-700 text-xs">{
+                  ({ fundraise:"Fundraise", ecosystem:"Ecosystem", diligence:"Active Diligence", portfolio:"Portfolio Mgmt", "lp-relations":"LP Relationship" } as Record<string,string>)[task.init] ?? task.init
+                }</div>
+              </div>
               <div>
                 <span className="text-slate-400">Status</span>
                 <div className="mt-0.5"><StatusBadge status={task.status} /></div>
@@ -726,10 +738,13 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
               </div>
               <div>
                 <span className="text-slate-400">Owner</span>
-                <div className="mt-0.5"><OwnerAvatar owner={task.owner} /></div>
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  <OwnerAvatar owner={task.owner} />
+                  <span className="text-slate-700">{task.owner}</span>
+                </div>
               </div>
               <div>
-                <span className="text-slate-400">Days</span>
+                <span className="text-slate-400">Days left</span>
                 <div className="mt-0.5"><DaysChip daysLeft={task.daysLeft} /></div>
               </div>
               <div>
@@ -740,8 +755,8 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
                 <span className="text-slate-400">Target</span>
                 <div className="mt-0.5 text-slate-700">{task.due}</div>
               </div>
-              <div className="col-span-2 mt-1">
-                <div className="flex items-center justify-between text-xs mb-1">
+              <div className="col-span-2 mt-0.5">
+                <div className="flex items-center justify-between mb-1">
                   <span className="text-slate-400">Progress</span>
                   <span className="font-medium text-slate-700">{task.prog}%</span>
                 </div>
@@ -1214,89 +1229,55 @@ export function TasksClient() {
       {/* Top bar */}
       <div className="flex-shrink-0 bg-white border-b border-slate-200 px-5 pt-4 pb-3 space-y-3">
         {/* Title row */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-sm font-semibold text-slate-900">Task Intelligence</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Fund II close · portfolio · diligence · ecosystem — Mar 2026</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search tasks or companies…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-7 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md w-52 focus:outline-none focus:ring-1 focus:ring-blue-300"
-              />
-              {search && (
-                <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-md hover:bg-slate-700"
-            >
-              <Plus className="w-3 h-3" /> Add task
-            </button>
-          </div>
+        <div>
+          <h1 className="text-sm font-semibold text-slate-900">Task Intelligence</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Fund II close · portfolio · diligence · ecosystem — Mar 2026</p>
         </div>
 
-        {/* Stat cards */}
-        <div className="overflow-x-auto">
-          <div className="flex gap-2 min-w-[900px]">
-            {/* Total Tasks */}
-            <div className="flex-shrink-0 h-24 w-36 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50 flex flex-col justify-between">
-              <p className="text-[10px] text-slate-400 uppercase font-medium">Total Tasks</p>
-              <p className="text-2xl font-bold text-slate-700">{totalDisplay}</p>
-              <p className="text-[10px] text-slate-400">non-completed</p>
-            </div>
-            {/* Overdue */}
-            <div className="flex-shrink-0 h-24 w-36 rounded-xl border border-red-100 px-3 py-2.5 bg-red-50 flex flex-col justify-between">
-              <p className="text-[10px] text-red-400 uppercase font-medium">Overdue</p>
-              <p className="text-2xl font-bold text-red-600">{overdueCnt}</p>
-              <p className="text-[10px] text-red-400">need attention</p>
-            </div>
-            {/* At Risk */}
-            <div className="flex-shrink-0 h-24 w-36 rounded-xl border border-amber-100 px-3 py-2.5 bg-amber-50 flex flex-col justify-between">
-              <p className="text-[10px] text-amber-500 uppercase font-medium">At Risk</p>
-              <p className="text-2xl font-bold text-amber-600">{atRiskCnt}</p>
-              <p className="text-[10px] text-amber-400">watch closely</p>
-            </div>
-            {/* On Track */}
-            <div className="flex-shrink-0 h-24 w-36 rounded-xl border border-green-100 px-3 py-2.5 bg-green-50 flex flex-col justify-between">
-              <p className="text-[10px] text-green-500 uppercase font-medium">On Track</p>
-              <p className="text-2xl font-bold text-green-600">{onTrackCnt}</p>
-              <p className="text-[10px] text-green-400">progressing</p>
-            </div>
-            {/* Not Started */}
-            <div className="flex-shrink-0 h-24 w-36 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50 flex flex-col justify-between">
-              <p className="text-[10px] text-slate-400 uppercase font-medium">Not Started</p>
-              <p className="text-2xl font-bold text-slate-500">{notStartedCnt}</p>
-              <p className="text-[10px] text-slate-400">pending</p>
-            </div>
-            {/* Workload */}
-            <div className="flex-shrink-0 h-24 w-44 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50">
-              <p className="text-[10px] text-slate-400 uppercase font-medium mb-1.5">Workload</p>
-              <div className="space-y-1">
-                {(["Andrew", "Gene", "Lance"] as const).map(owner => {
-                  const cnt = ownerCounts[owner];
-                  const pct = (cnt / maxOwnerCount) * 100;
-                  const initial = owner[0];
-                  const barColor = owner === "Andrew" ? "bg-blue-400" : owner === "Gene" ? "bg-violet-400" : "bg-teal-400";
-                  return (
-                    <div key={owner} className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-slate-500 w-3 flex-shrink-0">{initial}</span>
-                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={cn("h-full rounded-full", barColor)} style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-[10px] text-slate-500 w-3 flex-shrink-0">{cnt}</span>
+        {/* Stat cards — full width */}
+        <div className="flex gap-2">
+          <div className="flex-1 h-24 min-w-[100px] rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50 flex flex-col justify-between">
+            <p className="text-[10px] text-slate-400 uppercase font-medium">Total Tasks</p>
+            <p className="text-2xl font-bold text-slate-700">{totalDisplay}</p>
+            <p className="text-[10px] text-slate-400">non-completed</p>
+          </div>
+          <div className="flex-1 h-24 min-w-[100px] rounded-xl border border-red-100 px-3 py-2.5 bg-red-50 flex flex-col justify-between">
+            <p className="text-[10px] text-red-400 uppercase font-medium">Overdue</p>
+            <p className="text-2xl font-bold text-red-600">{overdueCnt}</p>
+            <p className="text-[10px] text-red-400">need attention</p>
+          </div>
+          <div className="flex-1 h-24 min-w-[100px] rounded-xl border border-amber-100 px-3 py-2.5 bg-amber-50 flex flex-col justify-between">
+            <p className="text-[10px] text-amber-500 uppercase font-medium">At Risk</p>
+            <p className="text-2xl font-bold text-amber-600">{atRiskCnt}</p>
+            <p className="text-[10px] text-amber-400">watch closely</p>
+          </div>
+          <div className="flex-1 h-24 min-w-[100px] rounded-xl border border-green-100 px-3 py-2.5 bg-green-50 flex flex-col justify-between">
+            <p className="text-[10px] text-green-500 uppercase font-medium">On Track</p>
+            <p className="text-2xl font-bold text-green-600">{onTrackCnt}</p>
+            <p className="text-[10px] text-green-400">progressing</p>
+          </div>
+          <div className="flex-1 h-24 min-w-[100px] rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50 flex flex-col justify-between">
+            <p className="text-[10px] text-slate-400 uppercase font-medium">Not Started</p>
+            <p className="text-2xl font-bold text-slate-500">{notStartedCnt}</p>
+            <p className="text-[10px] text-slate-400">pending</p>
+          </div>
+          <div className="flex-1 h-24 min-w-[150px] rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50 flex flex-col justify-between">
+            <p className="text-[10px] text-slate-400 uppercase font-medium">Workload</p>
+            <div className="space-y-1">
+              {(["Andrew", "Gene", "Lance"] as const).map(owner => {
+                const cnt = ownerCounts[owner];
+                const pct = (cnt / maxOwnerCount) * 100;
+                const barColor = owner === "Andrew" ? "bg-blue-400" : owner === "Gene" ? "bg-violet-400" : "bg-teal-400";
+                return (
+                  <div key={owner} className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-500 w-9 flex-shrink-0">{owner[0]}</span>
+                    <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className={cn("h-full rounded-full", barColor)} style={{ width: `${pct}%` }} />
                     </div>
-                  );
-                })}
-              </div>
+                    <span className="text-[10px] text-slate-500 w-4 flex-shrink-0 text-right">{cnt}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1370,15 +1351,39 @@ export function TasksClient() {
           )}
         </div>
 
-        {/* Filters + view toggle */}
-        <div className="flex items-center justify-between">
-          <div className="flex gap-1 overflow-x-auto pb-0.5">
+        {/* Filters + search + add task + view toggle */}
+        <div className="flex items-center gap-2">
+          {/* Search */}
+          <div className="relative flex-shrink-0">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search tasks or companies…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-7 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md w-48 focus:outline-none focus:ring-1 focus:ring-blue-300"
+            />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          {/* Add task */}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-md hover:bg-slate-700"
+          >
+            <Plus className="w-3 h-3" /> Add task
+          </button>
+          {/* Filter pills */}
+          <div className="flex gap-1 overflow-x-auto pb-0.5 flex-1">
             {FILTER_PILLS.map(f => (
               <button
                 key={f}
                 onClick={() => setActiveFilter(f)}
                 className={cn(
-                  "px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors",
+                  "px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0",
                   activeFilter === f
                     ? "bg-slate-900 text-white"
                     : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -1388,7 +1393,8 @@ export function TasksClient() {
               </button>
             ))}
           </div>
-          <div className="flex gap-1 flex-shrink-0 ml-3">
+          {/* View toggle */}
+          <div className="flex gap-1 flex-shrink-0">
             {(["table", "kanban", "timeline"] as const).map(v => {
               const Icon = v === "table" ? AlignLeft : v === "kanban" ? LayoutGrid : GitBranch;
               return (

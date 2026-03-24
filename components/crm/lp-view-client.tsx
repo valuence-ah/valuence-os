@@ -968,7 +968,7 @@ export function LpViewClient({ initialCompanies }: Props) {
       <div className="px-5 py-4 border-b border-slate-200 bg-white">
         <div className="flex gap-3 mb-4">
           {/* Fund Target */}
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-500"><Target size={14} className="text-white" /></div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1">
@@ -980,7 +980,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             </div>
           </div>
           {/* Active Pipeline */}
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-violet-500"><BarChart2 size={14} className="text-white" /></div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Active Pipeline</p>
@@ -989,7 +989,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             </div>
           </div>
           {/* Expected Commitment */}
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-indigo-500"><DollarSign size={14} className="text-white" /></div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Expected Commitment</p>
@@ -998,7 +998,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             </div>
           </div>
           {/* Soft-circled */}
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-500"><TrendingUp size={14} className="text-white" /></div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
@@ -1010,7 +1010,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             </div>
           </div>
           {/* Committed */}
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-emerald-500"><CheckSquare size={14} className="text-white" /></div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Committed</p>
@@ -1019,7 +1019,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             </div>
           </div>
           {/* Conversion Rate */}
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-rose-500"><ArrowUpRight size={14} className="text-white" /></div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Conversion Rate</p>
