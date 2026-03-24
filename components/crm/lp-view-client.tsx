@@ -1124,7 +1124,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                     const isSorted = sortCol === col;
                     const SortIcon = isSorted ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
                     return (
-                      <th key={col} className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider relative select-none">
+                      <th key={col} className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 relative select-none">
                         <button className="flex items-center gap-1 hover:text-slate-800 transition-colors truncate"
                           onClick={() => { if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortCol(col); setSortDir("asc"); } }}>
                           <span className="truncate">{col}</span>

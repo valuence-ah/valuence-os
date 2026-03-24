@@ -644,7 +644,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>
                 {Object.keys(DEFAULT_COL_WIDTHS).map(col => (
-                  <th key={col} className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-200 whitespace-nowrap relative select-none">
+                  <th key={col} className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap relative select-none">
                     {col}
                     <div className="absolute right-0 top-0 h-full w-2 cursor-col-resize group flex items-center justify-center" onMouseDown={e => onResizeStart(col, e)}>
                       <div className="w-px h-4 bg-slate-300 group-hover:bg-blue-400 transition-colors" />
