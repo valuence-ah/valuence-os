@@ -399,6 +399,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [manualPartnerships, setManualPartnerships] = useState<{ id: string; name: string; note: string; date: string }[]>([]);
   const [showAddPartnership, setShowAddPartnership] = useState(false);
   const [newPartnerName, setNewPartnerName]         = useState("");
+  const [newPartnerType, setNewPartnerType]         = useState("Introduction");
   const [newPartnerNote, setNewPartnerNote]         = useState("");
   const [newPartnerDate, setNewPartnerDate]         = useState(() => new Date().toISOString().slice(0, 10));
   const [partnerCompanies, setPartnerCompanies]     = useState<{ id: string; name: string; types: string[] }[]>([]);
@@ -594,12 +595,12 @@ export function PipelineClient({ initialCompanies }: Props) {
         const map = raw ? JSON.parse(raw) : {};
         const ext = map[match.id] ?? {};
         const opps = ext.opportunities ?? [];
-        opps.push({ id: Math.random().toString(36).slice(2, 10), title: `Partnership: ${selected.name}`, type: "Value-add", urgency: "medium", description: newPartnerNote.trim(), due: newPartnerDate });
+        opps.push({ id: Math.random().toString(36).slice(2, 10), company: selected.name, companyId: selected.id, type: newPartnerType, urgency: "medium", description: newPartnerNote.trim(), due: newPartnerDate });
         map[match.id] = { ...ext, opportunities: opps };
         localStorage.setItem(LS_STRATEGIC, JSON.stringify(map));
       }
     } catch {}
-    setNewPartnerName(""); setPartnerSearch(""); setSelectedPartnerId(null); setNewPartnerNote(""); setNewPartnerDate(new Date().toISOString().slice(0, 10));
+    setNewPartnerName(""); setPartnerSearch(""); setSelectedPartnerId(null); setNewPartnerType("Introduction"); setNewPartnerNote(""); setNewPartnerDate(new Date().toISOString().slice(0, 10));
     setShowAddPartnership(false); setShowPartnerDropdown(false);
   }
 
@@ -1418,8 +1419,9 @@ export function PipelineClient({ initialCompanies }: Props) {
 
                 {showAddPartnership && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
-                    {/* Searchable partner name */}
-                    <div className="relative">
+                    {/* Company + Type row */}
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
                       <input value={partnerSearch}
                         onChange={e => { setPartnerSearch(e.target.value); setNewPartnerName(e.target.value); setSelectedPartnerId(null); setShowPartnerDropdown(true); }}
                         onFocus={() => setShowPartnerDropdown(true)}
@@ -1440,6 +1442,11 @@ export function PipelineClient({ initialCompanies }: Props) {
                           )}
                         </div>
                       )}
+                      </div>
+                      <select value={newPartnerType} onChange={e => setNewPartnerType(e.target.value)}
+                        className="w-32 flex-shrink-0 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
+                        {["Co-invest", "Introduction", "Pilot", "Diligence", "Customer", "Value-add"].map(t => <option key={t}>{t}</option>)}
+                      </select>
                     </div>
                     <input value={newPartnerNote} onChange={e => setNewPartnerNote(e.target.value)}
                       placeholder="Note (optional)"
@@ -1449,7 +1456,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     <div className="flex gap-2">
                       <button onClick={addManualPartnership}
                         className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">Add</button>
-                      <button onClick={() => { setShowAddPartnership(false); setPartnerSearch(""); setNewPartnerName(""); setSelectedPartnerId(null); }}
+                      <button onClick={() => { setShowAddPartnership(false); setPartnerSearch(""); setNewPartnerName(""); setSelectedPartnerId(null); setNewPartnerType("Introduction"); }}
                         className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
                     </div>
                   </div>

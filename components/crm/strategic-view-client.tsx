@@ -15,7 +15,7 @@ import {
 
 type StrategicRole = "Co-invest" | "Customer" | "Pilot" | "Diligence";
 type SignalType = "hot" | "warm" | "cold";
-type OppType = "Introduction" | "Pilot" | "Diligence" | "Customer" | "Value-add";
+type OppType = "Co-invest" | "Introduction" | "Pilot" | "Diligence" | "Customer" | "Value-add";
 type OppUrgency = "high" | "medium" | "low";
 type PortcoStatus = "Active pilot" | "Intro pending" | "Exploring" | "Not started";
 
@@ -1112,7 +1112,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         <div className="flex gap-2">
                           <select value={oppType} onChange={e => setOppType(e.target.value as OppType)}
                             className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
-                            {(["Introduction", "Pilot", "Diligence", "Customer", "Value-add"] as OppType[]).map(t => <option key={t}>{t}</option>)}
+                            {(["Co-invest", "Introduction", "Pilot", "Diligence", "Customer", "Value-add"] as OppType[]).map(t => <option key={t}>{t}</option>)}
                           </select>
                           <select value={oppUrgency} onChange={e => setOppUrgency(e.target.value as OppUrgency)}
                             className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
