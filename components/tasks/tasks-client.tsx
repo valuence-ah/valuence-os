@@ -366,8 +366,8 @@ function TableView({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => 
               <td className="px-3 py-2 whitespace-nowrap">
                 <CatBadge cat={t.cat} />
               </td>
-              <td className="px-3 py-2 whitespace-nowrap text-slate-500">
-                {INIT_LABELS[t.init] ?? t.init}
+              <td className="px-3 py-2 whitespace-nowrap">
+                <InitBadge init={t.init} />
               </td>
               <td className="px-3 py-2">
                 <div className="flex items-center gap-1.5">
@@ -593,6 +593,7 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
   const [commentText, setCommentText] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [noteText, setNoteText] = useState("");
+  const [confirmDeleteNote, setConfirmDeleteNote] = useState<string | null>(null); // "main" or note id
 
   // Sync when task changes externally
   useEffect(() => {
@@ -690,7 +691,7 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
                   {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                 </select>
               ) : (
-                <div className="cursor-pointer" onClick={() => setEditingField("cat")}>
+                <div className="cursor-pointer" onDoubleClick={() => setEditingField("cat")}>
                   <CatBadge cat={task.cat} />
                 </div>
               )}
@@ -706,7 +707,7 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
                   {initiatives.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}
                 </select>
               ) : (
-                <div className="cursor-pointer" onClick={() => setEditingField("init")}>
+                <div className="cursor-pointer" onDoubleClick={() => setEditingField("init")}>
                   <InitBadge init={task.init} />
                 </div>
               )}
@@ -722,7 +723,7 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
                   {STATUSES.map(s => <option key={s}>{s}</option>)}
                 </select>
               ) : (
-                <div className="cursor-pointer" onClick={() => setEditingField("status")}>
+                <div className="cursor-pointer" onDoubleClick={() => setEditingField("status")}>
                   <StatusBadge status={task.status} />
                 </div>
               )}
@@ -738,7 +739,7 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
                   {PRIORITIES.map(p => <option key={p}>{p}</option>)}
                 </select>
               ) : (
-                <div className="flex items-center gap-1 cursor-pointer" onClick={() => setEditingField("prio")}>
+                <div className="flex items-center gap-1 cursor-pointer" onDoubleClick={() => setEditingField("prio")}>
                   <span className={cn("w-1.5 h-1.5 rounded-full", PRIO_DOTS[task.prio])} />
                   <span className="text-slate-700">{task.prio}</span>
                 </div>
@@ -755,7 +756,7 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
                   {OWNERS.map(o => <option key={o}>{o}</option>)}
                 </select>
               ) : (
-                <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => setEditingField("owner")}>
+                <div className="flex items-center gap-1.5 cursor-pointer" onDoubleClick={() => setEditingField("owner")}>
                   <OwnerAvatar owner={task.owner} />
                   <span className="text-slate-700">{task.owner}</span>
                 </div>
@@ -782,7 +783,7 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
                   onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingField(null); }}
                 />
               ) : (
-                <span className="text-slate-700 cursor-pointer" onClick={() => setEditingField("start")}>{task.start}</span>
+                <span className="text-slate-700 cursor-pointer" onDoubleClick={() => setEditingField("start")}>{task.start || "—"}</span>
               )}
             </div>
 
@@ -800,7 +801,7 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
                   onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingField(null); }}
                 />
               ) : (
-                <span className="text-slate-700 cursor-pointer" onClick={() => setEditingField("due")}>{task.due}</span>
+                <span className="text-slate-700 cursor-pointer" onDoubleClick={() => setEditingField("due")}>{task.due || "—"}</span>
               )}
             </div>
 
@@ -830,23 +831,37 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
             {task.notes && (
               <div className="group flex items-start gap-1.5">
                 <p className="text-xs text-slate-600 leading-relaxed flex-1">{task.notes}</p>
-                <button
-                  onClick={() => onUpdate({ ...task, notes: "" })}
-                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 flex-shrink-0 mt-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
+                {confirmDeleteNote === "main" ? (
+                  <span className="flex items-center gap-1 flex-shrink-0">
+                    <button onMouseDown={() => { onUpdate({ ...task, notes: "" }); setConfirmDeleteNote(null); }} className="text-xs text-red-600 hover:underline font-medium">Yes</button>
+                    <button onMouseDown={() => setConfirmDeleteNote(null)} className="text-xs text-slate-400 hover:underline">No</button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeleteNote("main")}
+                    className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 flex-shrink-0 mt-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             )}
             {(task.noteItems ?? []).map((n: { id: string; txt: string }) => (
               <div key={n.id} className="group flex items-start gap-1.5">
                 <p className="text-xs text-slate-600 leading-relaxed flex-1">{n.txt}</p>
-                <button
-                  onClick={() => onUpdate({ ...task, noteItems: (task.noteItems ?? []).filter((x: { id: string; txt: string }) => x.id !== n.id) })}
-                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 flex-shrink-0 mt-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
+                {confirmDeleteNote === n.id ? (
+                  <span className="flex items-center gap-1 flex-shrink-0">
+                    <button onMouseDown={() => { onUpdate({ ...task, noteItems: (task.noteItems ?? []).filter((x: { id: string; txt: string }) => x.id !== n.id) }); setConfirmDeleteNote(null); }} className="text-xs text-red-600 hover:underline font-medium">Yes</button>
+                    <button onMouseDown={() => setConfirmDeleteNote(null)} className="text-xs text-slate-400 hover:underline">No</button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeleteNote(n.id)}
+                    className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 flex-shrink-0 mt-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             ))}
           </div>

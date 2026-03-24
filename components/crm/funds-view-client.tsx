@@ -1,12 +1,12 @@
 "use client";
 // ─── Funds & Co-investors CRM — metrics · table · detail panel ────────────────
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { Company } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   Search, X, Building2, TrendingUp, Users, AlertCircle,
-  CheckCircle2, Zap, ChevronRight, ExternalLink, MapPin,
+  CheckCircle2, Zap, ChevronRight, ExternalLink, MapPin, Plus, Check,
 } from "lucide-react";
 
 // ── Fund Intelligence Types ────────────────────────────────────────────────────
@@ -437,6 +437,9 @@ const FILTER_PILLS = [
 ] as const;
 type FilterId = (typeof FILTER_PILLS)[number]["id"];
 
+type OppUrgency = "high" | "medium" | "low";
+type OppType = "Co-invest" | "Introduction" | "Pilot" | "Diligence" | "Customer" | "Value-add";
+
 // ── Helper functions ───────────────────────────────────────────────────────────
 
 const AVATAR_COLORS = [
@@ -516,6 +519,21 @@ function roleBadgeClass(role: string): string {
   return "bg-slate-100 text-slate-600";
 }
 
+function urgencyColors(urgency: OppUrgency): string {
+  if (urgency === "high")   return "bg-red-100 text-red-600";
+  if (urgency === "medium") return "bg-amber-100 text-amber-600";
+  return "bg-slate-100 text-slate-500";
+}
+
+const OPP_TYPE_COLORS: Record<string, string> = {
+  "Introduction": "bg-amber-100 text-amber-700",
+  "Co-invest":    "bg-amber-100 text-amber-700",
+  "Pilot":        "bg-emerald-100 text-emerald-700",
+  "Diligence":    "bg-violet-100 text-violet-700",
+  "Customer":     "bg-blue-100 text-blue-700",
+  "Value-add":    "bg-slate-100 text-slate-600",
+};
+
 // ── Props ──────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -528,6 +546,47 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
   const [search, setSearch]             = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
   const [selectedId, setSelectedId]     = useState<string | null>(null);
+
+  // Panel animation
+  const [visible, setVisible] = useState(false);
+
+  // Panel tab
+  const [fundTab, setFundTab] = useState<"overview" | "opportunities">("overview");
+
+  // Add Fund modal
+  const [showAddFund, setShowAddFund]   = useState(false);
+  const [addFundName, setAddFundName]   = useState("");
+  const [addFundType, setAddFundType]   = useState("");
+  const [addFundLoc, setAddFundLoc]     = useState("");
+  const [addFundDesc, setAddFundDesc]   = useState("");
+
+  // Double-click field editing in overview
+  const [editingFundField, setEditingFundField] = useState<string | null>(null);
+  const [fundOverrides, setFundOverrides] = useState<Record<string, Partial<FundData>>>({});
+
+  // Portfolio overlap editing
+  const [showAddOverlap, setShowAddOverlap]   = useState(false);
+  const [newOverlapName, setNewOverlapName]   = useState("");
+  const [newOverlapRole, setNewOverlapRole]   = useState("Co-investor");
+  const [confirmRemoveOverlap, setConfirmRemoveOverlap] = useState<string | null>(null);
+
+  // Key contacts
+  const [selectedContact, setSelectedContact] = useState<string | null>(null);
+
+  // Relationship timeline
+  const [showAddRelationship, setShowAddRelationship] = useState(false);
+  const [newRelTitle, setNewRelTitle]   = useState("");
+  const [newRelDate, setNewRelDate]     = useState("");
+  const [fundTimelines, setFundTimelines] = useState<Record<string, { icon: string; title: string; date: string; colorClass: string }[]>>({});
+
+  // Opportunities / Tasks tab
+  const [fundOpps, setFundOpps] = useState<Record<string, { id: string; title: string; type: string; urgency: string; desc: string; due: string }[]>>({});
+  const [showFundOppForm, setShowFundOppForm] = useState(false);
+  const [fundOppTitle, setFundOppTitle]   = useState("");
+  const [fundOppType, setFundOppType]     = useState<OppType>("Introduction");
+  const [fundOppUrgency, setFundOppUrgency] = useState<OppUrgency>("medium");
+  const [fundOppDesc, setFundOppDesc]     = useState("");
+  const [fundOppDue, setFundOppDue]       = useState("");
 
   // Derived stats
   const stats = useMemo(() => ({
@@ -562,9 +621,137 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
     return list;
   }, [search, activeFilter]);
 
-  const selected = selectedId
+  // When selectedId changes, animate panel and reset tab
+  useEffect(() => {
+    if (selectedId) {
+      setVisible(false);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setVisible(true));
+      });
+      setFundTab("overview");
+      setEditingFundField(null);
+      setSelectedContact(null);
+      setShowAddOverlap(false);
+      setShowAddRelationship(false);
+      setShowFundOppForm(false);
+    } else {
+      setVisible(false);
+    }
+  }, [selectedId]);
+
+  const baseSelected = selectedId
     ? FUND_INTELLIGENCE.find(f => f.id === selectedId) ?? null
     : null;
+
+  // Merge with overrides
+  const selected = baseSelected
+    ? { ...baseSelected, ...(fundOverrides[selectedId!] ?? {}) }
+    : null;
+
+  function setFundFieldOverride(field: keyof FundData, value: string) {
+    if (!selectedId) return;
+    setFundOverrides(prev => ({
+      ...prev,
+      [selectedId]: { ...(prev[selectedId] ?? {}), [field]: value },
+    }));
+  }
+
+  // Get current portfolio overlap (overrides or base)
+  function getCurrentOverlap(): { initials: string; name: string; role: string }[] {
+    if (!selectedId || !baseSelected) return [];
+    const ov = fundOverrides[selectedId];
+    if (ov && ov.portfolioOverlap !== undefined) return ov.portfolioOverlap as { initials: string; name: string; role: string }[];
+    return baseSelected.portfolioOverlap;
+  }
+
+  function addOverlapItem() {
+    if (!selectedId || !newOverlapName.trim()) return;
+    const current = getCurrentOverlap();
+    const initials = newOverlapName.trim().split(/\s+/).map(w => w[0]?.toUpperCase() ?? "").join("").slice(0, 2);
+    const updated = [...current, { initials, name: newOverlapName.trim(), role: newOverlapRole }];
+    setFundOverrides(prev => ({
+      ...prev,
+      [selectedId]: { ...(prev[selectedId] ?? {}), portfolioOverlap: updated },
+    }));
+    setNewOverlapName(""); setNewOverlapRole("Co-investor"); setShowAddOverlap(false);
+  }
+
+  function removeOverlapItem(name: string) {
+    if (!selectedId) return;
+    const current = getCurrentOverlap();
+    const updated = current.filter(p => p.name !== name);
+    setFundOverrides(prev => ({
+      ...prev,
+      [selectedId]: { ...(prev[selectedId] ?? {}), portfolioOverlap: updated },
+    }));
+    setConfirmRemoveOverlap(null);
+  }
+
+  // Get merged timeline (manual entries first)
+  function getMergedTimeline() {
+    if (!selectedId || !baseSelected) return [];
+    const manual = fundTimelines[selectedId] ?? [];
+    return [...manual, ...baseSelected.timeline];
+  }
+
+  function addRelationshipEntry() {
+    if (!selectedId || !newRelTitle.trim()) return;
+    const entry = { icon: "●", title: newRelTitle.trim(), date: newRelDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), colorClass: "bg-amber-100 text-amber-700" };
+    setFundTimelines(prev => ({
+      ...prev,
+      [selectedId]: [entry, ...(prev[selectedId] ?? [])],
+    }));
+    setNewRelTitle(""); setNewRelDate(""); setShowAddRelationship(false);
+  }
+
+  function addFundOpportunity() {
+    if (!selectedId || !fundOppTitle.trim()) return;
+    const newOpp = {
+      id: String(Date.now()),
+      title: fundOppTitle.trim(),
+      type: fundOppType,
+      urgency: fundOppUrgency,
+      desc: fundOppDesc.trim(),
+      due: fundOppDue,
+    };
+    setFundOpps(prev => ({
+      ...prev,
+      [selectedId]: [newOpp, ...(prev[selectedId] ?? [])],
+    }));
+    // Bridge to crm_tasks and strategic_tasks_map
+    try {
+      const taskId = Date.now();
+      const linkedCos = selected ? [selected.co] : [];
+      const newTask = {
+        id: taskId,
+        title: fundOppTitle.trim(),
+        cat: "Ecosystem",
+        init: "ecosystem",
+        prio: fundOppUrgency === "high" ? "High" : fundOppUrgency === "medium" ? "Medium" : "Low",
+        status: "Not started",
+        prog: 0,
+        owner: "Andrew",
+        cos: linkedCos,
+        start: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        due: fundOppDue ? new Date(fundOppDue).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "",
+        daysLeft: 0,
+        notes: fundOppDesc.trim(),
+        risks: [],
+        deps: [],
+        comments: [],
+      };
+      const rawMap = localStorage.getItem("strategic_tasks_map") ?? "{}";
+      const map = JSON.parse(rawMap) as Record<string, unknown>;
+      map[String(taskId)] = newTask;
+      localStorage.setItem("strategic_tasks_map", JSON.stringify(map));
+      const rawCrm = localStorage.getItem("crm_tasks");
+      const crmTasks = rawCrm ? JSON.parse(rawCrm) as unknown[] : [];
+      crmTasks.push(newTask);
+      localStorage.setItem("crm_tasks", JSON.stringify(crmTasks));
+    } catch {}
+    setFundOppTitle(""); setFundOppType("Introduction"); setFundOppUrgency("medium"); setFundOppDesc(""); setFundOppDue("");
+    setShowFundOppForm(false);
+  }
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-50">
@@ -660,13 +847,19 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
         <span className="text-xs text-slate-400 ml-auto">
           {filtered.length} fund{filtered.length !== 1 ? "s" : ""}
         </span>
+        <button
+          onClick={() => setShowAddFund(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Plus size={13} /> Add Fund
+        </button>
       </div>
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden relative">
 
         {/* Table */}
-        <div className={cn("flex-1 overflow-auto", selectedId ? "mr-[384px]" : "")}>
+        <div className={cn("flex-1 overflow-auto", selectedId ? "mr-[480px]" : "")}>
           <table className="w-full text-xs border-collapse" style={{ minWidth: 1200 }}>
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>
@@ -889,285 +1082,589 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
         </div>
 
         {/* ── Side Panel ────────────────────────────────────────────────────── */}
-        {selected && (
-          <div className="absolute right-0 top-0 h-full w-96 bg-white border-l border-slate-200 flex flex-col shadow-xl z-20">
+        <div
+          className={cn(
+            "fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-30 flex flex-col transition-transform duration-300",
+            visible ? "translate-x-0" : "translate-x-full"
+          )}
+          style={{ width: 480 }}
+        >
+          {selected && (
+            <>
+              {/* Header */}
+              <div className="px-4 pt-4 pb-3 border-b border-slate-100 flex-shrink-0">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={cn(
+                        "w-10 h-10 rounded-lg bg-gradient-to-br flex items-center justify-center flex-shrink-0",
+                        hashColor(selected.co)
+                      )}
+                    >
+                      <span className="text-white font-bold text-xs">{selected.initials}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-slate-800 truncate">{selected.co}</p>
+                      <p className="text-xs text-slate-500">{selected.type} · {selected.loc}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedId(null)}
+                    className="text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0 ml-2 mt-0.5"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
 
-            {/* Header */}
-            <div className="px-4 pt-4 pb-3 border-b border-slate-100 flex-shrink-0">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
+                {/* Badges */}
+                <div className="flex flex-wrap gap-1">
+                  <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", coInvestBadgeClass(selected.coInvest))}>
+                    {selected.coInvestLabel}
+                  </span>
+                  {selected.leadCapable && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
+                      Lead capable
+                    </span>
+                  )}
+                  {selected.strategic && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700">
+                      Strategic
+                    </span>
+                  )}
+                  {selected.overdue && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-600">
+                      Overdue
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex border-b border-slate-200 flex-shrink-0">
+                {(["overview", "opportunities"] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setFundTab(tab)}
                     className={cn(
-                      "w-10 h-10 rounded-lg bg-gradient-to-br flex items-center justify-center flex-shrink-0",
-                      hashColor(selected.co)
+                      "flex-1 text-xs font-medium py-2 transition-colors",
+                      fundTab === tab ? "text-blue-600 border-b-2 border-blue-600" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
-                    <span className="text-white font-bold text-xs">{selected.initials}</span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-base font-semibold text-slate-800 truncate">{selected.co}</p>
-                    <p className="text-xs text-slate-500">{selected.type} · {selected.loc}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedId(null)}
-                  className="text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0 ml-2 mt-0.5"
-                >
-                  <X size={16} />
-                </button>
+                    {tab === "overview" ? "Overview" : "Opportunities / Tasks"}
+                  </button>
+                ))}
               </div>
 
-              {/* Badges */}
-              <div className="flex flex-wrap gap-1">
-                <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", coInvestBadgeClass(selected.coInvest))}>
-                  {selected.coInvestLabel}
-                </span>
-                {selected.leadCapable && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
-                    Lead capable
-                  </span>
-                )}
-                {selected.strategic && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700">
-                    Strategic
-                  </span>
-                )}
-                {selected.overdue && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-600">
-                    Overdue
-                  </span>
-                )}
-              </div>
-            </div>
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
 
-            {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-
-              {/* 1. Overview */}
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Overview</p>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-                  {(
-                    [
-                      { label: "AUM", value: selected.aum },
-                      { label: "Fund number", value: selected.fundNum },
-                      { label: "Check size", value: selected.checkSize },
-                      { label: "Stage focus", value: selected.stages.join(", ") },
-                      { label: "Deal flow", value: selected.dealFlowLabel },
-                      { label: "Owner", value: selected.owner },
-                      { label: "Last contact", value: selected.lastContact },
-                    ] as { label: string; value: string }[]
-                  ).map(({ label, value }) => (
-                    <div key={label}>
-                      <p className="text-[10px] text-slate-400 mb-0.5">{label}</p>
-                      <p className={cn(
-                        "text-xs font-medium",
-                        label === "Last contact" && selected.overdue ? "text-red-500" : "text-slate-700"
-                      )}>
-                        {value}
-                      </p>
-                    </div>
-                  ))}
-                  {/* Rel. health with bar */}
-                  <div>
-                    <p className="text-[10px] text-slate-400 mb-0.5">Relationship health</p>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className={cn("h-full rounded-full", relHealthBarColor(selected.relHealth))}
-                          style={{ width: `${selected.relHealth}%` }}
-                        />
+                {/* ── OVERVIEW TAB ───────────────────────────────────────────── */}
+                {fundTab === "overview" && (
+                  <>
+                    {/* 1. Overview — editable fields */}
+                    <div className="px-4 py-3">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Overview</p>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                        {(
+                          [
+                            { label: "AUM", field: "aum" as keyof FundData, value: selected.aum },
+                            { label: "Fund number", field: "fundNum" as keyof FundData, value: selected.fundNum },
+                            { label: "Check size", field: "checkSize" as keyof FundData, value: selected.checkSize },
+                            { label: "Stage focus", field: null, value: selected.stages.join(", ") },
+                            { label: "Deal flow", field: null, value: selected.dealFlowLabel },
+                            { label: "Owner", field: "owner" as keyof FundData, value: selected.owner },
+                            { label: "Last contact", field: "lastContact" as keyof FundData, value: selected.lastContact },
+                          ]
+                        ).map(({ label, field, value }) => (
+                          <div key={label}>
+                            <p className="text-[10px] text-slate-400 mb-0.5">{label}</p>
+                            {field && editingFundField === String(field) ? (
+                              <input
+                                autoFocus
+                                defaultValue={value}
+                                onBlur={e => { setFundFieldOverride(field, e.target.value); setEditingFundField(null); }}
+                                onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
+                                className="text-xs font-medium text-slate-700 border-b border-blue-400 focus:outline-none bg-transparent w-full py-0.5"
+                              />
+                            ) : (
+                              <p
+                                className={cn(
+                                  "text-xs font-medium",
+                                  label === "Last contact" && selected.overdue ? "text-red-500" : "text-slate-700",
+                                  field ? "cursor-default select-none hover:text-blue-600" : ""
+                                )}
+                                onDoubleClick={() => field && setEditingFundField(String(field))}
+                                title={field ? "Double-click to edit" : undefined}
+                              >
+                                {value}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                        {/* Rel. health with bar */}
+                        <div>
+                          <p className="text-[10px] text-slate-400 mb-0.5">Relationship health</p>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full", relHealthBarColor(selected.relHealth))}
+                                style={{ width: `${selected.relHealth}%` }}
+                              />
+                            </div>
+                            <span className={cn("text-xs font-semibold tabular-nums", relHealthTextColor(selected.relHealth))}>
+                              {selected.relHealth}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <span className={cn("text-xs font-semibold tabular-nums", relHealthTextColor(selected.relHealth))}>
-                        {selected.relHealth}
-                      </span>
                     </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* 2. Thesis Alignment */}
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Thesis Alignment</p>
-                <div className="flex flex-col gap-2">
-                  {selected.scores.map(score => (
-                    <div key={score.label} className="flex items-center gap-2">
-                      <span className="text-xs text-slate-500 w-36 flex-shrink-0">{score.label}</span>
-                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className={cn("h-full rounded-full", scoreBarColor(score.value))}
-                          style={{ width: `${score.value}%` }}
-                        />
+                    {/* 2. Thesis Alignment */}
+                    <div className="px-4 py-3">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Thesis Alignment</p>
+                      <div className="flex flex-col gap-2">
+                        {selected.scores.map(score => (
+                          <div key={score.label} className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 w-36 flex-shrink-0">{score.label}</span>
+                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full", scoreBarColor(score.value))}
+                                style={{ width: `${score.value}%` }}
+                              />
+                            </div>
+                            <span className={cn("text-xs font-medium w-7 text-right tabular-nums", score.colorClass)}>
+                              {score.value}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                      <span className={cn("text-xs font-medium w-7 text-right tabular-nums", score.colorClass)}>
-                        {score.value}
-                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* 3. Portfolio Overlap */}
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Portfolio Overlap</p>
-                {selected.portfolioOverlap.length > 0 ? (
-                  <div className="flex flex-col gap-2">
-                    {selected.portfolioOverlap.map((p, i) => (
-                      <div key={p.name} className="flex items-center gap-2">
-                        <div
-                          className={cn(
-                            "w-7 h-7 rounded-full bg-gradient-to-br flex items-center justify-center flex-shrink-0",
-                            overlapAvatarColor(i)
-                          )}
+                    {/* 3. Portfolio / Pipeline Overlap — editable */}
+                    <div className="px-4 py-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Portfolio / Pipeline Overlap</p>
+                        <button
+                          onClick={() => setShowAddOverlap(v => !v)}
+                          className="text-blue-600 hover:text-blue-700"
                         >
-                          <span className="text-white font-bold text-[9px]">{p.initials}</span>
-                        </div>
-                        <span className="text-xs font-medium text-slate-800 flex-1">{p.name}</span>
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", roleBadgeClass(p.role))}>
-                          {p.role}
-                        </span>
+                          <Plus size={13} />
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400">No overlap</p>
-                )}
-              </div>
 
-              {/* 4. Recent Investments */}
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Recent Investments</p>
-                {selected.recentInvest.length > 0 ? (
-                  <div className="flex flex-col gap-1.5">
-                    {selected.recentInvest.map(inv => (
-                      <div
-                        key={inv.name}
-                        className="flex items-start justify-between gap-2 rounded-lg border border-slate-100 px-2.5 py-2 bg-slate-50"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-slate-800 truncate">{inv.name}</p>
-                          <p className="text-[10px] text-slate-500">{inv.round}</p>
+                      {showAddOverlap && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-2 space-y-2">
+                          <input
+                            value={newOverlapName}
+                            onChange={e => setNewOverlapName(e.target.value)}
+                            placeholder="Company name"
+                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                          />
+                          <select
+                            value={newOverlapRole}
+                            onChange={e => setNewOverlapRole(e.target.value)}
+                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white"
+                          >
+                            <option>Co-investor</option>
+                            <option>Lead investor</option>
+                            <option>Portfolio company</option>
+                          </select>
+                          <div className="flex gap-2">
+                            <button onClick={addOverlapItem} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
+                            <button onClick={() => { setShowAddOverlap(false); setNewOverlapName(""); }} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
+                          </div>
                         </div>
-                        <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium whitespace-nowrap">
-                            {inv.sector}
-                          </span>
-                          <span className="text-[10px] text-slate-400">{inv.date}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400">No recent investments on record</p>
-                )}
-              </div>
-
-              {/* 5. Intelligence Feed */}
-              {selected.intel.length > 0 && (
-                <div className="px-4 py-3">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Intelligence Feed</p>
-                  <div className="flex flex-col gap-1.5">
-                    {selected.intel.map((item, i) => (
-                      <div key={i} className="rounded-lg border border-slate-200 px-2.5 py-2">
-                        <p className="text-xs font-medium text-slate-800">{item.headline}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{item.meta}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 6. Relationship Timeline */}
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Relationship Timeline</p>
-                <div className="flex flex-col">
-                  {selected.timeline.map((entry, i) => (
-                    <div key={i} className="flex items-start gap-2 relative">
-                      {i < selected.timeline.length - 1 && (
-                        <div className="absolute left-2.5 top-5 w-px bg-slate-200" style={{ height: "calc(100% - 4px)" }} />
                       )}
-                      <div
-                        className={cn(
-                          "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[9px] font-bold z-10",
-                          entry.colorClass
-                        )}
-                      >
-                        {entry.icon}
-                      </div>
-                      <div className="pb-3 min-w-0">
-                        <p className="text-xs font-medium text-slate-800">{entry.title}</p>
-                        <p className="text-[10px] text-slate-400">{entry.date}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* 7. Relationship Path */}
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Relationship Path</p>
-                <div className="flex items-center gap-1 flex-wrap">
-                  {selected.introPath.map((step, i) => (
-                    <div key={i} className="flex items-center gap-1">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium whitespace-nowrap">
-                        {step}
-                      </span>
-                      {i < selected.introPath.length - 1 && (
-                        <ChevronRight size={10} className="text-slate-300 flex-shrink-0" />
+                      {(() => {
+                        const overlap = getCurrentOverlap();
+                        return overlap.length > 0 ? (
+                          <div className="flex flex-col gap-2">
+                            {overlap.map((p, i) => (
+                              <div key={p.name} className="flex items-center gap-2">
+                                <div
+                                  className={cn(
+                                    "w-7 h-7 rounded-full bg-gradient-to-br flex items-center justify-center flex-shrink-0",
+                                    overlapAvatarColor(i)
+                                  )}
+                                >
+                                  <span className="text-white font-bold text-[9px]">{p.initials}</span>
+                                </div>
+                                <span className="text-xs font-medium text-slate-800 flex-1">{p.name}</span>
+                                <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", roleBadgeClass(p.role))}>
+                                  {p.role}
+                                </span>
+                                {confirmRemoveOverlap === p.name ? (
+                                  <span className="flex items-center gap-1 flex-shrink-0">
+                                    <button onMouseDown={() => removeOverlapItem(p.name)} className="text-xs text-red-600 hover:underline font-medium">Yes</button>
+                                    <button onMouseDown={() => setConfirmRemoveOverlap(null)} className="text-xs text-slate-400 hover:underline">No</button>
+                                  </span>
+                                ) : (
+                                  <button onClick={() => setConfirmRemoveOverlap(p.name)} className="text-slate-300 hover:text-red-400 flex-shrink-0">
+                                    <X size={11} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400">No overlap</p>
+                        );
+                      })()}
+                    </div>
+
+                    {/* 4. Recent Investments */}
+                    <div className="px-4 py-3">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Recent Investments</p>
+                      {selected.recentInvest.length > 0 ? (
+                        <div className="flex flex-col gap-1.5">
+                          {selected.recentInvest.map(inv => (
+                            <div
+                              key={inv.name}
+                              className="flex items-start justify-between gap-2 rounded-lg border border-slate-100 px-2.5 py-2 bg-slate-50"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-slate-800 truncate">{inv.name}</p>
+                                <p className="text-[10px] text-slate-500">{inv.round}</p>
+                              </div>
+                              <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium whitespace-nowrap">
+                                  {inv.sector}
+                                </span>
+                                <span className="text-[10px] text-slate-400">{inv.date}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400">No recent investments on record</p>
                       )}
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* 8. Key Contacts */}
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Key Contacts</p>
-                <div className="flex flex-col gap-1">
-                  {selected.keyContacts.map((contact, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 rounded-lg border border-slate-100 px-2.5 py-2 bg-slate-50"
-                    >
-                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center flex-shrink-0">
-                        <span className="text-white font-bold text-[8px]">{contact[0]}</span>
+                    {/* 5. Intelligence Feed */}
+                    {selected.intel.length > 0 && (
+                      <div className="px-4 py-3">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Intelligence Feed</p>
+                        <div className="flex flex-col gap-1.5">
+                          {selected.intel.map((item, i) => (
+                            <div key={i} className="rounded-lg border border-slate-200 px-2.5 py-2">
+                              <p className="text-xs font-medium text-slate-800">{item.headline}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">{item.meta}</p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <span className="text-xs text-slate-700">{contact}</span>
+                    )}
+
+                    {/* 6. Key Contacts — 200px, scrollable, clickable */}
+                    <div className="px-4 py-3">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Key Contacts</p>
+                      <div className="overflow-y-auto flex flex-col gap-1.5" style={{ maxHeight: 200 }}>
+                        {selected.keyContacts.map((contact, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setSelectedContact(selectedContact === contact ? null : contact)}
+                            className="flex items-center gap-2 rounded-lg border border-slate-100 px-2.5 py-2 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 transition-colors text-left w-full"
+                          >
+                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center flex-shrink-0">
+                              <span className="text-white font-bold text-[8px]">{contact[0]}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-slate-700 truncate">{contact}</p>
+                            </div>
+                            <ChevronRight size={12} className="text-slate-300 flex-shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                      {/* Contact detail expansion */}
+                      {selectedContact && (
+                        <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs font-semibold text-blue-800">{selectedContact.replace(/\s*\(.*\)$/, "")}</p>
+                            <button onClick={() => setSelectedContact(null)} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                          </div>
+                          {selectedContact.match(/\(([^)]+)\)/) && (
+                            <p className="text-[10px] text-blue-600">{selectedContact.match(/\(([^)]+)\)/)?.[1]}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ))}
+
+                    {/* 7. Relationship Timeline — with + Add button */}
+                    <div className="px-4 py-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Relationship Timeline</p>
+                        <button onClick={() => setShowAddRelationship(v => !v)} className="text-blue-600 hover:text-blue-700">
+                          <Plus size={13} />
+                        </button>
+                      </div>
+
+                      {showAddRelationship && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
+                          <input
+                            value={newRelTitle}
+                            onChange={e => setNewRelTitle(e.target.value)}
+                            placeholder="Relationship event title"
+                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                          />
+                          <input
+                            type="date"
+                            value={newRelDate}
+                            onChange={e => setNewRelDate(e.target.value)}
+                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                          />
+                          <div className="flex gap-2">
+                            <button onClick={addRelationshipEntry} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
+                            <button onClick={() => { setShowAddRelationship(false); setNewRelTitle(""); setNewRelDate(""); }} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col">
+                        {getMergedTimeline().map((entry, i) => {
+                          const allEntries = getMergedTimeline();
+                          return (
+                            <div key={i} className="flex items-start gap-2 relative">
+                              {i < allEntries.length - 1 && (
+                                <div className="absolute left-2.5 top-5 w-px bg-slate-200" style={{ height: "calc(100% - 4px)" }} />
+                              )}
+                              <div
+                                className={cn(
+                                  "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[9px] font-bold z-10",
+                                  entry.colorClass
+                                )}
+                              >
+                                {entry.icon}
+                              </div>
+                              <div className="pb-3 min-w-0">
+                                <p className="text-xs font-medium text-slate-800">{entry.title}</p>
+                                <p className="text-[10px] text-slate-400">{entry.date}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ── OPPORTUNITIES / TASKS TAB ──────────────────────────────── */}
+                {fundTab === "opportunities" && (
+                  <div className="px-4 py-3 space-y-4">
+                    {/* Opportunities */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Opportunities</p>
+                        <button onClick={() => setShowFundOppForm(v => !v)} className="text-blue-600 hover:text-blue-700">
+                          <Plus size={14} />
+                        </button>
+                      </div>
+
+                      {showFundOppForm && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3 space-y-2">
+                          <input
+                            value={fundOppTitle}
+                            onChange={e => setFundOppTitle(e.target.value)}
+                            placeholder="Opportunity / task title"
+                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                          />
+                          <div className="flex gap-2">
+                            <select
+                              value={fundOppType}
+                              onChange={e => setFundOppType(e.target.value as OppType)}
+                              className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white"
+                            >
+                              {(["Co-invest", "Introduction", "Pilot", "Diligence", "Customer", "Value-add"] as OppType[]).map(t => (
+                                <option key={t}>{t}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={fundOppUrgency}
+                              onChange={e => setFundOppUrgency(e.target.value as OppUrgency)}
+                              className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white"
+                            >
+                              <option value="high">High</option>
+                              <option value="medium">Medium</option>
+                              <option value="low">Low</option>
+                            </select>
+                          </div>
+                          <textarea
+                            value={fundOppDesc}
+                            onChange={e => setFundOppDesc(e.target.value)}
+                            placeholder="Description (optional)"
+                            rows={2}
+                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 resize-none"
+                          />
+                          <div className="flex items-center gap-2">
+                            <label className="text-[10px] text-slate-500 flex-shrink-0">Action date</label>
+                            <input
+                              type="date"
+                              value={fundOppDue}
+                              onChange={e => setFundOppDue(e.target.value)}
+                              className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={addFundOpportunity} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
+                            <button onClick={() => { setShowFundOppForm(false); setFundOppTitle(""); setFundOppDesc(""); setFundOppDue(""); }} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
+                          </div>
+                        </div>
+                      )}
+
+                      {(fundOpps[selected.id] ?? []).length === 0 && !showFundOppForm && (
+                        <p className="text-xs text-slate-400">No opportunities yet</p>
+                      )}
+                      <div className="space-y-2">
+                        {(fundOpps[selected.id] ?? []).map(opp => {
+                          const isOverdue = opp.due && new Date(opp.due) < new Date(new Date().toDateString());
+                          return (
+                            <div key={opp.id} className={cn("border rounded-lg p-2.5 bg-white", isOverdue ? "border-red-300 bg-red-50" : "border-slate-200")}>
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-xs font-semibold text-slate-800 min-w-0 truncate">{opp.title}</p>
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", OPP_TYPE_COLORS[opp.type] ?? "bg-slate-100 text-slate-600")}>{opp.type}</span>
+                                  <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", urgencyColors(opp.urgency as OppUrgency))}>{opp.urgency}</span>
+                                  {isOverdue && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">Overdue</span>}
+                                </div>
+                              </div>
+                              {opp.desc && <p className="text-xs text-slate-500 mt-0.5">{opp.desc}</p>}
+                              {opp.due && (
+                                <p className={cn("text-[10px] mt-0.5", isOverdue ? "text-red-500 font-medium" : "text-slate-400")}>
+                                  Due {opp.due}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Linked tasks from localStorage crm_tasks */}
+                    {(() => {
+                      try {
+                        const raw = localStorage.getItem("crm_tasks");
+                        if (!raw) return null;
+                        const allTasks = JSON.parse(raw) as Array<{ id: number; title: string; status: string; prio: string; due: string; cos: string[]; cat: string }>;
+                        const linked = allTasks.filter(t => t.cos?.some((c: string) => c.toLowerCase() === (selected?.co ?? "").toLowerCase()));
+                        if (linked.length === 0) return null;
+                        return (
+                          <div>
+                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Linked Tasks</p>
+                            <div className="space-y-1.5">
+                              {linked.map(t => (
+                                <div key={t.id} className="border border-slate-200 rounded-lg p-2 bg-white flex items-start justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium text-slate-700 truncate">{t.title}</p>
+                                    {t.due && <p className="text-[10px] text-slate-400 mt-0.5">Due {t.due}</p>}
+                                  </div>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{t.status}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      } catch { return null; }
+                    })()}
+                  </div>
+                )}
+
+              </div>
+
+              {/* Footer buttons */}
+              <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0">
+                <div className="flex gap-2">
+                  <button className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                    <ExternalLink size={11} />
+                    Email
+                  </button>
+                  <button className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors">
+                    <ExternalLink size={11} />
+                    Co-invest brief
+                  </button>
+                  <button className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-100 text-violet-700 hover:bg-violet-200 transition-colors">
+                    <ExternalLink size={11} />
+                    Find overlap
+                  </button>
                 </div>
               </div>
-
-              {/* Next action */}
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Next Action</p>
-                <p className="text-xs text-slate-700">{selected.nextAction}</p>
-              </div>
-
-            </div>
-
-            {/* Footer buttons */}
-            <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0">
-              <div className="flex gap-2">
-                <button className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
-                  <ExternalLink size={11} />
-                  Email
-                </button>
-                <button className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors">
-                  <ExternalLink size={11} />
-                  Co-invest brief
-                </button>
-                <button className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-100 text-violet-700 hover:bg-violet-200 transition-colors">
-                  <ExternalLink size={11} />
-                  Find overlap
-                </button>
-              </div>
-            </div>
-
-          </div>
-        )}
+            </>
+          )}
+        </div>
 
       </div>
+
+      {/* ── Add Fund Modal ───────────────────────────────────────────────────── */}
+      {showAddFund && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-bold text-slate-800">Add Fund</h2>
+              <button onClick={() => setShowAddFund(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Fund Name *</label>
+                <input
+                  value={addFundName}
+                  onChange={e => setAddFundName(e.target.value)}
+                  placeholder="e.g. Lowercarbon Capital"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
+                <input
+                  value={addFundType}
+                  onChange={e => setAddFundType(e.target.value)}
+                  placeholder="e.g. Climate VC, Corporate VC"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Location</label>
+                <input
+                  value={addFundLoc}
+                  onChange={e => setAddFundLoc(e.target.value)}
+                  placeholder="e.g. San Francisco, USA"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
+                <textarea
+                  value={addFundDesc}
+                  onChange={e => setAddFundDesc(e.target.value)}
+                  placeholder="Brief description…"
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => {
+                  // Close modal without persisting (hardcoded data)
+                  setAddFundName(""); setAddFundType(""); setAddFundLoc(""); setAddFundDesc("");
+                  setShowAddFund(false);
+                }}
+                disabled={!addFundName.trim()}
+                className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Check size={14} /> Add Fund
+              </button>
+              <button
+                onClick={() => setShowAddFund(false)}
+                className="flex-1 py-2 bg-white border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

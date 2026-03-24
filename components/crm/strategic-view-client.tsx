@@ -555,13 +555,14 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     if (oppCompanyId) {
       upsertPortcoStrategicMap(oppCompany.trim(), oppCompanyId, selected.id, selected.name, oppType, oppDue);
     }
-    // Bridge: create task in tasks page via localStorage
+    // Bridge: create task in tasks page via localStorage (writes to both keys so /tasks picks it up on mount)
     if (oppTitle.trim()) {
       try {
-        const raw = localStorage.getItem("strategic_tasks_map") ?? "{}";
-        const map = JSON.parse(raw) as Record<string, unknown>;
         const taskId = Date.now();
-        map[String(taskId)] = {
+        const linkedCos = selected
+          ? (oppCompany.trim() ? [selected.name, oppCompany.trim()] : [selected.name])
+          : [];
+        const newTask = {
           id: taskId,
           title: oppTitle.trim(),
           cat: "Ecosystem",
@@ -570,7 +571,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
           status: "Not started",
           prog: 0,
           owner: "Andrew",
-          cos: selected ? [selected.name] : [],
+          cos: linkedCos,
           start: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
           due: oppDue ? new Date(oppDue).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "",
           daysLeft: 0,
@@ -579,7 +580,16 @@ export function StrategicViewClient({ initialCompanies }: Props) {
           deps: [],
           comments: [],
         };
+        // Write to strategic_tasks_map
+        const rawMap = localStorage.getItem("strategic_tasks_map") ?? "{}";
+        const map = JSON.parse(rawMap) as Record<string, unknown>;
+        map[String(taskId)] = newTask;
         localStorage.setItem("strategic_tasks_map", JSON.stringify(map));
+        // ALSO write directly to crm_tasks so pipeline/funds see it immediately
+        const rawCrm = localStorage.getItem("crm_tasks");
+        const crmTasks = rawCrm ? JSON.parse(rawCrm) as unknown[] : [];
+        crmTasks.push(newTask);
+        localStorage.setItem("crm_tasks", JSON.stringify(crmTasks));
       } catch {}
     }
     setOppTitle("");

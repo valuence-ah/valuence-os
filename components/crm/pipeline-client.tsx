@@ -1544,15 +1544,21 @@ export function PipelineClient({ initialCompanies }: Props) {
                     try {
                       const raw = localStorage.getItem("crm_tasks");
                       if (!raw || !selected) return null;
-                      const allTasks = JSON.parse(raw) as Array<{id: number; title: string; status: string; due: string; cos: string[]}>;
+                      const allTasks = JSON.parse(raw) as Array<{id: number; title: string; status: string; due: string; cos: string[]; notes?: string}>;
                       const linked = allTasks.filter(t => t.cos?.some((c: string) => c.toLowerCase() === selected.name.toLowerCase()));
                       if (linked.length === 0) return null;
                       return linked.map(t => (
-                        <div key={t.id} className="h-auto py-1.5 flex items-center gap-2 border-t border-slate-100">
-                          <span className="text-xs text-slate-400">→</span>
-                          <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{t.title}</span>
-                          {t.due && <span className="text-xs text-slate-400 flex-shrink-0">{t.due}</span>}
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 flex-shrink-0">{t.status}</span>
+                        <div key={t.id} className="py-2 border-t border-slate-100">
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-medium text-slate-700 truncate max-w-[160px]">{t.title}</span>
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 flex-shrink-0">{t.status}</span>
+                              </div>
+                              {t.notes && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{t.notes}</p>}
+                              {t.due && <p className="text-[10px] text-slate-400 mt-0.5">{t.due}</p>}
+                            </div>
+                          </div>
                         </div>
                       ));
                     } catch { return null; }
