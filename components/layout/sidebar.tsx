@@ -29,6 +29,7 @@ import {
   Globe,
   MoreHorizontal,
   Shield,
+  CheckSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -47,12 +48,13 @@ const CRM_ITEMS = [
 // ── Top-level sections (excluding CRM which is handled separately) ─────────────
 const TOP_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/tasks",     icon: CheckSquare,     label: "Tasks"     },
 ];
 
 const INTELLIGENCE_ITEMS = [
-  { href: "/sourcing",  icon: Radar,       label: "Sourcing"    },
-  { href: "/portfolio", icon: BarChart3,   label: "Portfolio"   },
-  { href: "/memos",     icon: FileText,    label: "IC Memos"    },
+  { href: "/sourcing",  icon: Radar,        label: "Sourcing"    },
+  { href: "/portfolio", icon: BarChart3,    label: "Portfolio"   },
+  { href: "/memos",     icon: FileText,     label: "IC Memos"    },
 ];
 
 const DEALS_ITEMS = [
