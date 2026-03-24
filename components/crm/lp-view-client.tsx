@@ -116,8 +116,8 @@ function AlignmentBar({ label, value }: { label: string; value: number }) {
   return (
     <div>
       <div className="flex justify-between mb-1">
-        <span className="text-[11px] text-slate-600">{label}</span>
-        <span className="text-[11px] font-semibold text-slate-700">{value}%</span>
+        <span className="text-xs text-slate-600">{label}</span>
+        <span className="text-xs font-semibold text-slate-700">{value}%</span>
       </div>
       <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
         <div className={cn("h-full rounded-full", value >= 75 ? "bg-emerald-500" : value >= 50 ? "bg-amber-400" : "bg-slate-300")} style={{ width: `${value}%` }} />
@@ -201,7 +201,7 @@ function KanbanView({ companies, onSelect, selectedId, lastTouchMap }: {
             <div className={cn("flex items-center gap-2 px-3 py-2 rounded-t-xl border border-b-0", STAGE_BG[stage] ?? "bg-slate-50", "border-slate-200")}>
               <span className={cn("w-2 h-2 rounded-full flex-shrink-0", STAGE_DOT[stage])} />
               <span className={cn("text-xs font-semibold flex-1", STAGE_TEXT[stage])}>{stage}</span>
-              <span className="text-[11px] text-slate-400">{items.length}</span>
+              <span className="text-xs text-slate-400">{items.length}</span>
             </div>
             {total > 0 && <div className="px-3 py-1 bg-white border-x border-slate-200"><span className="text-[10px] text-slate-400">{fmt(total)}</span></div>}
             <div className="flex flex-col gap-2 p-2 bg-slate-50 border border-slate-200 rounded-b-xl min-h-[80px] overflow-y-auto max-h-[calc(100vh-320px)]">
@@ -218,7 +218,7 @@ function KanbanView({ companies, onSelect, selectedId, lastTouchMap }: {
                         {co.lp_type && <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-0.5 inline-block", getLpTypeBadge(co.lp_type))}>{co.lp_type}</span>}
                       </div>
                     </div>
-                    {co.commitment_goal && <p className="text-[11px] text-slate-600 tabular-nums">{fmt(co.commitment_goal)}</p>}
+                    {co.commitment_goal && <p className="text-xs text-slate-600 tabular-nums">{fmt(co.commitment_goal)}</p>}
                     {touch && (
                       <div className="flex items-center gap-1 mt-1">
                         <InteractionIcon type={touch.type} />
@@ -229,7 +229,7 @@ function KanbanView({ companies, onSelect, selectedId, lastTouchMap }: {
                   </div>
                 );
               })}
-              {items.length === 0 && <p className="text-[11px] text-slate-300 text-center py-4">Empty</p>}
+              {items.length === 0 && <p className="text-xs text-slate-300 text-center py-4">Empty</p>}
             </div>
           </div>
         );
@@ -239,7 +239,7 @@ function KanbanView({ companies, onSelect, selectedId, lastTouchMap }: {
           <div className="flex items-center gap-2 px-3 py-2 rounded-t-xl border border-b-0 bg-slate-50 border-slate-200">
             <span className="w-2 h-2 rounded-full flex-shrink-0 bg-slate-300" />
             <span className="text-xs font-semibold flex-1 text-slate-500">No Stage</span>
-            <span className="text-[11px] text-slate-400">{unassigned.length}</span>
+            <span className="text-xs text-slate-400">{unassigned.length}</span>
           </div>
           <div className="flex flex-col gap-2 p-2 bg-slate-50 border border-slate-200 rounded-b-xl min-h-[80px]">
             {unassigned.map(co => (
@@ -290,7 +290,7 @@ function MapView({ companies, onSelect, selectedId }: { companies: Company[]; on
             <div key={reg} className={cn("rounded-xl border p-3", REGION_COLOR[reg])}>
               <p className={cn("text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full inline-block mb-2", REGION_HEADER[reg])}>{reg}</p>
               <p className="text-2xl font-bold text-slate-800">{items.length}</p>
-              <p className="text-[11px] text-slate-500">LP{items.length !== 1 ? "s" : ""}</p>
+              <p className="text-xs text-slate-500">LP{items.length !== 1 ? "s" : ""}</p>
               {total > 0 && <p className="text-xs font-semibold text-slate-700 mt-1">{fmt(total)}</p>}
             </div>
           );
@@ -830,7 +830,7 @@ export function LpViewClient({ initialCompanies }: Props) {
               ) : (
                 <div className="border border-blue-200 rounded-xl bg-blue-50 p-3 space-y-2">
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-[11px] font-semibold text-slate-700">Contact Details</p>
+                    <p className="text-xs font-semibold text-slate-700">Contact Details</p>
                     <button onClick={() => { setShowAddLPContact(false); setAddLPContact(EMPTY_CONTACT); }} className="text-slate-400 hover:text-slate-600"><X size={12} /></button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -976,7 +976,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                 <button onClick={() => setEditingFundTarget(true)} className="text-slate-300 hover:text-slate-500"><Pencil size={9} /></button>
               </div>
               <p className="text-lg font-bold text-slate-900 leading-tight truncate">{fundTarget > 0 ? fmt(fundTarget) : <span className="text-slate-300 text-sm">Click ✏ to set</span>}</p>
-              <p className="text-[11px] text-slate-400">{companies.length} LPs</p>
+              <p className="text-xs text-slate-400">{companies.length} LPs</p>
             </div>
           </div>
           {/* Active Pipeline */}
@@ -985,7 +985,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Active Pipeline</p>
               <p className="text-lg font-bold text-slate-900 leading-tight">{metrics.activeCount}</p>
-              <p className="text-[11px] text-slate-400">{fmt(metrics.pipelineAmt || null)}</p>
+              <p className="text-xs text-slate-400">{fmt(metrics.pipelineAmt || null)}</p>
             </div>
           </div>
           {/* Expected Commitment */}
@@ -994,7 +994,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Expected Commitment</p>
               <p className="text-lg font-bold text-slate-900 leading-tight">{fmt(metrics.totalExpected || null)}</p>
-              <p className="text-[11px] text-slate-400">probability-weighted</p>
+              <p className="text-xs text-slate-400">probability-weighted</p>
             </div>
           </div>
           {/* Soft-circled */}
@@ -1006,7 +1006,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                 <span className="text-[10px] text-slate-300 font-normal">(DD Stage)</span>
               </div>
               <p className="text-lg font-bold text-slate-900 leading-tight">{fmt(metrics.softAmt || null)}</p>
-              {fundTarget > 0 && <p className="text-[11px] text-slate-400">{pct(metrics.softPct / 100)} of target</p>}
+              {fundTarget > 0 && <p className="text-xs text-slate-400">{pct(metrics.softPct / 100)} of target</p>}
             </div>
           </div>
           {/* Committed */}
@@ -1015,7 +1015,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Committed</p>
               <p className="text-lg font-bold text-slate-900 leading-tight">{fmt(metrics.committedAmt || null)}</p>
-              {fundTarget > 0 && <p className="text-[11px] text-slate-400">{pct(metrics.committedPct / 100)} of target</p>}
+              {fundTarget > 0 && <p className="text-xs text-slate-400">{pct(metrics.committedPct / 100)} of target</p>}
             </div>
           </div>
           {/* Conversion Rate */}
@@ -1024,7 +1024,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Conversion Rate</p>
               <p className="text-lg font-bold text-slate-900 leading-tight">{metrics.convRate}%</p>
-              <p className="text-[11px] text-slate-400">committed / total</p>
+              <p className="text-xs text-slate-400">committed / total</p>
             </div>
           </div>
         </div>
@@ -1124,7 +1124,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                     const isSorted = sortCol === col;
                     const SortIcon = isSorted ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
                     return (
-                      <th key={col} className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider relative select-none">
+                      <th key={col} className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider relative select-none">
                         <button className="flex items-center gap-1 hover:text-slate-800 transition-colors truncate"
                           onClick={() => { if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortCol(col); setSortDir("asc"); } }}>
                           <span className="truncate">{col}</span>
@@ -1156,7 +1156,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                       className={cn("border-b border-slate-100 cursor-pointer transition-colors group", isActive ? "bg-blue-50" : "hover:bg-slate-50 bg-white")}>
                       <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}><input type="checkbox" className="rounded border-slate-300" /></td>
                       <td className="px-3 py-2.5"><div className="flex items-center gap-2"><CompanyLogo company={co} size="sm" /><span className={cn("font-medium text-sm truncate", isActive ? "text-blue-700" : "text-slate-800")}>{co.name}</span></div></td>
-                      <td className="px-3 py-2.5">{co.lp_type ? <span className={cn("text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap", getLpTypeBadge(co.lp_type))}>{co.lp_type}</span> : <span className="text-slate-300 text-xs">—</span>}</td>
+                      <td className="px-3 py-2.5">{co.lp_type ? <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap", getLpTypeBadge(co.lp_type))}>{co.lp_type}</span> : <span className="text-slate-300 text-xs">—</span>}</td>
                       <td className="px-3 py-2.5 text-xs text-slate-600">{PRIORITY_TO_TIER[co.priority ?? ""] ?? "—"}</td>
                       <td className="px-3 py-2.5">{co.lp_stage ? <div className="flex items-center gap-1.5"><span className={cn("w-2 h-2 rounded-full flex-shrink-0", STAGE_DOT[co.lp_stage])} /><span className={cn("text-xs font-medium truncate", STAGE_TEXT[co.lp_stage])}>{co.lp_stage}</span></div> : <span className="text-slate-300 text-xs">—</span>}</td>
                       <td className="px-3 py-2.5 text-right text-xs text-slate-700 tabular-nums">{fmt(co.commitment_goal)}</td>
@@ -1164,7 +1164,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                       <td className="px-3 py-2.5"><div className="flex items-center gap-1.5"><div className="w-10 h-1.5 bg-slate-100 rounded-full overflow-hidden flex-shrink-0"><div className={cn("h-full rounded-full", p > 0 ? "bg-emerald-500" : "bg-slate-200")} style={{ width: `${p * 100}%` }} /></div><span className={cn("text-xs tabular-nums", p > 0 ? "text-emerald-600 font-medium" : "text-slate-400")}>{pct(p)}</span></div></td>
                       <td className="px-3 py-2.5">{touch ? <div className="flex items-center gap-1.5"><InteractionIcon type={touch.type} /><span className={cn("text-xs", overdue ? "text-red-500 font-medium" : "text-slate-500")}>{timeAgo(touch.date)}</span>{overdue && <AlertCircle size={10} className="text-red-400" />}</div> : <span className="text-slate-300 text-xs">Never</span>}</td>
                       <td className="px-3 py-2.5 text-xs text-slate-500">{co.last_contact_date ? formatDate(co.last_contact_date) : <span className="text-slate-300">—</span>}</td>
-                      <td className="px-3 py-2.5"><span className={cn("text-[11px] px-2 py-0.5 rounded-full font-medium", getDdqColor(ddqLabel))}>{ddqLabel}</span></td>
+                      <td className="px-3 py-2.5"><span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", getDdqColor(ddqLabel))}>{ddqLabel}</span></td>
                       <td className="px-3 py-2.5 text-xs">{ci?.interest ? <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", ci.interest === "Yes" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500")}>{ci.interest}</span> : <span className="text-slate-300">—</span>}</td>
                       <td className="px-3 py-2.5 text-xs text-slate-500">{ci?.interest === "Yes" && ci.sector ? ci.sector : <span className="text-slate-300">—</span>}</td>
                       <td className="px-3 py-2.5 text-xs text-slate-500">{ow ?? <span className="text-slate-300">—</span>}</td>
@@ -1191,10 +1191,10 @@ export function LpViewClient({ initialCompanies }: Props) {
                 <CompanyLogo company={selected} size="lg" />
                 <div className="min-w-0 flex-1">
                   <h2 className="text-base font-bold text-slate-900 truncate">{selected.name}</h2>
-                  {selected.lp_type && <span className={cn("text-[11px] px-2 py-0.5 rounded-full font-medium", getLpTypeBadge(selected.lp_type))}>{selected.lp_type}</span>}
+                  {selected.lp_type && <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", getLpTypeBadge(selected.lp_type))}>{selected.lp_type}</span>}
                   <div className="flex items-center gap-3 mt-1">
-                    {(editCity || editCountry) && <span className="flex items-center gap-1 text-[11px] text-slate-400"><MapPin size={9} />{[editCity, editCountry].filter(Boolean).join(", ")}</span>}
-                    {selected.website && <a href={selected.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[11px] text-blue-500 hover:underline"><ExternalLink size={9} />Website</a>}
+                    {(editCity || editCountry) && <span className="flex items-center gap-1 text-xs text-slate-400"><MapPin size={9} />{[editCity, editCountry].filter(Boolean).join(", ")}</span>}
+                    {selected.website && <a href={selected.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-500 hover:underline"><ExternalLink size={9} />Website</a>}
                   </div>
                 </div>
               </div>
@@ -1235,7 +1235,7 @@ export function LpViewClient({ initialCompanies }: Props) {
 
               {/* LP Engagement */}
               <div className="pt-2 border-t border-slate-100">
-                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">LP Engagement</h3>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">LP Engagement</h3>
                 <div className="space-y-3">
                   {/* Row 1: LP Type | Stage */}
                   <div className="grid grid-cols-2 gap-3">
@@ -1286,7 +1286,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                     </div>
                     <div>
                       <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">DDQ Status</p>
-                      <span className={cn("text-[11px] px-2 py-1 rounded-full font-medium inline-block mt-0.5", getDdqColor(getDdqLabel(selected.lp_stage)))}>
+                      <span className={cn("text-xs px-2 py-1 rounded-full font-medium inline-block mt-0.5", getDdqColor(getDdqLabel(selected.lp_stage)))}>
                         {getDdqLabel(selected.lp_stage)}
                       </span>
                     </div>
@@ -1341,7 +1341,7 @@ export function LpViewClient({ initialCompanies }: Props) {
               {/* Mandate Alignment */}
               {mandateScores && (
                 <div className="pt-4 border-t border-slate-100">
-                  <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Mandate Alignment</h3>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Mandate Alignment</h3>
                   <div className="space-y-3">
                     <AlignmentBar label="Relationship strength" value={mandateScores.stageScore} />
                     <AlignmentBar label="Ticket size fit"       value={mandateScores.ticketScore} />
@@ -1354,7 +1354,7 @@ export function LpViewClient({ initialCompanies }: Props) {
               {/* Contacts — 300px scrollable */}
               <div className="pt-4 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Contacts</h3>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Contacts</h3>
                   <button onClick={() => { setContactsManaging(v => !v); setShowAddContactForm(false); }} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                     {contactsManaging ? "Done" : <>Manage <ChevronRight size={11} /></>}
                   </button>
@@ -1369,9 +1369,9 @@ export function LpViewClient({ initialCompanies }: Props) {
                         <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5"><User size={11} className="text-violet-600" /></div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}{c.is_primary_contact && <span className="ml-1.5 text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">Primary</span>}</p>
-                          {c.title && <p className="text-[11px] text-slate-500 truncate">{c.title}</p>}
-                          {c.email && <p className="text-[11px] text-blue-600 truncate">{c.email}</p>}
-                          {(c.location_city || c.location_country) && <p className="text-[11px] text-slate-400">{[c.location_city, c.location_country].filter(Boolean).join(", ")}</p>}
+                          {c.title && <p className="text-xs text-slate-500 truncate">{c.title}</p>}
+                          {c.email && <p className="text-xs text-blue-600 truncate">{c.email}</p>}
+                          {(c.location_city || c.location_country) && <p className="text-xs text-slate-400">{[c.location_city, c.location_country].filter(Boolean).join(", ")}</p>}
                         </div>
                         <button onClick={async () => { if (!confirm(`Remove ${c.first_name}?`)) return; await supabase.from("contacts").delete().eq("id", c.id); setContacts(prev => prev.filter(x => x.id !== c.id)); }}
                           className="w-6 h-6 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:border-red-200 hover:text-red-400 flex-shrink-0"><X size={11} /></button>
@@ -1379,7 +1379,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                     ))}
                     {showAddContactForm ? (
                       <div className="border border-blue-200 rounded-xl bg-blue-50 p-3 space-y-2">
-                        <p className="text-[11px] font-semibold text-slate-700">New Contact</p>
+                        <p className="text-xs font-semibold text-slate-700">New Contact</p>
                         <div className="grid grid-cols-2 gap-2">
                           <input className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="First name *" value={newContact.first_name} onChange={e => setNewContact(p => ({ ...p, first_name: e.target.value }))} />
                           <input className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Last name" value={newContact.last_name} onChange={e => setNewContact(p => ({ ...p, last_name: e.target.value }))} />
@@ -1408,9 +1408,9 @@ export function LpViewClient({ initialCompanies }: Props) {
                       <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5"><User size={11} className="text-violet-600" /></div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}{c.is_primary_contact && <span className="ml-1.5 text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">Primary</span>}</p>
-                        {c.title && <p className="text-[11px] text-slate-500 truncate">{c.title}</p>}
-                        {c.email && <p className="text-[11px] text-blue-600 truncate">{c.email}</p>}
-                        {(c.location_city || c.location_country) && <p className="text-[11px] text-slate-400 flex items-center gap-0.5"><MapPin size={9} />{[c.location_city, c.location_country].filter(Boolean).join(", ")}</p>}
+                        {c.title && <p className="text-xs text-slate-500 truncate">{c.title}</p>}
+                        {c.email && <p className="text-xs text-blue-600 truncate">{c.email}</p>}
+                        {(c.location_city || c.location_country) && <p className="text-xs text-slate-400 flex items-center gap-0.5"><MapPin size={9} />{[c.location_city, c.location_country].filter(Boolean).join(", ")}</p>}
                       </div>
                       <div className="flex gap-1.5 text-slate-400 flex-shrink-0">
                         {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-500"><Mail size={11} /></a>}
@@ -1424,7 +1424,7 @@ export function LpViewClient({ initialCompanies }: Props) {
               {/* Activity Timeline */}
               <div className="pt-4 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Activity Timeline</h3>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Activity Timeline</h3>
                   <button onClick={() => setAddingActivity(v => !v)}
                     className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 flex items-center gap-1">
                     <Plus size={11} /> Add Activity
@@ -1509,7 +1509,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                               <InteractionIcon type={int.type} />
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium text-slate-700 leading-tight truncate">{int.subject ?? int.type.charAt(0).toUpperCase() + int.type.slice(1)}</p>
-                                {int.body && <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{int.body}</p>}
+                                {int.body && <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{int.body}</p>}
                                 <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(int.date)}</p>
                               </div>
                             </div>
@@ -1525,8 +1525,8 @@ export function LpViewClient({ initialCompanies }: Props) {
               {/* Open Tasks */}
               <div className="pt-4 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Open Tasks</h3>
-                  <button className="text-[11px] text-blue-500 hover:underline">+ Add</button>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Open Tasks</h3>
+                  <button className="text-xs text-blue-500 hover:underline">+ Add</button>
                 </div>
                 <div className="space-y-2">
                   {[{ label: "Send fund materials", due: "Due today", overdue: true }, { label: "Schedule follow-up call", due: "Due in 3 days", overdue: false }].map((task, i) => (

@@ -181,14 +181,14 @@ function ScoreBar({ label, value, onChange }: { label: string; value: number; on
   return (
     <div>
       <div className="flex justify-between mb-1">
-        <span className="text-[11px] text-slate-600">{label}</span>
+        <span className="text-xs text-slate-600">{label}</span>
         {editing ? (
           <input value={input} onChange={e => setInput(e.target.value)}
             onBlur={() => { const v = Math.min(100, Math.max(0, parseInt(input) || 0)); onChange(v); setEditing(false); }}
             onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-            className="w-8 text-[11px] font-semibold text-slate-700 text-right border-b border-blue-400 outline-none bg-transparent" />
+            className="w-8 text-xs font-semibold text-slate-700 text-right border-b border-blue-400 outline-none bg-transparent" />
         ) : (
-          <span className="text-[11px] font-semibold text-slate-700 cursor-pointer hover:text-blue-600"
+          <span className="text-xs font-semibold text-slate-700 cursor-pointer hover:text-blue-600"
             onClick={() => { setInput(String(value)); setEditing(true); }}>{value}%</span>
         )}
       </div>
@@ -584,7 +584,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
           { label: "Cooling Off",         value: metrics.cooling,   icon: <AlertCircle size={14} className="text-red-400" /> },
         ].map(m => (
           <div key={m.label} className="flex-1 bg-slate-50 rounded-xl border border-slate-200 px-3 py-2.5">
-            <div className="flex items-center gap-1.5 mb-1">{m.icon}<span className="text-[11px] text-slate-500 font-medium">{m.label}</span></div>
+            <div className="flex items-center gap-1.5 mb-1">{m.icon}<span className="text-xs text-slate-500 font-medium">{m.label}</span></div>
             <p className="text-xl font-bold text-slate-800">{m.value}</p>
           </div>
         ))}
@@ -625,7 +625,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>
                 {Object.keys(DEFAULT_COL_WIDTHS).map(col => (
-                  <th key={col} className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-200 whitespace-nowrap relative select-none">
+                  <th key={col} className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-200 whitespace-nowrap relative select-none">
                     {col}
                     <div className="absolute right-0 top-0 h-full w-2 cursor-col-resize group flex items-center justify-center" onMouseDown={e => onResizeStart(col, e)}>
                       <div className="w-px h-4 bg-slate-300 group-hover:bg-blue-400 transition-colors" />
@@ -667,7 +667,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                           <div className={cn("h-full rounded-full", healthColor(h))} style={{ width: `${h}%` }} />
                         </div>
-                        <span className={cn("text-[11px] font-semibold tabular-nums w-7 text-right", healthTextColor(h))}>{Math.round(h)}</span>
+                        <span className={cn("text-xs font-semibold tabular-nums w-7 text-right", healthTextColor(h))}>{Math.round(h)}</span>
                       </div>
                     </td>
                     {/* Utility */}
@@ -745,17 +745,17 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                 <div className="min-w-0 flex-1">
                   <h2 className="text-base font-bold text-slate-900 truncate">{selected.name}</h2>
                   {selected.sectors?.[0] && (
-                    <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700 mt-0.5">{selected.sectors[0]}</span>
+                    <span className="inline-block text-xs px-2 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700 mt-0.5">{selected.sectors[0]}</span>
                   )}
                   <div className="flex items-center gap-3 mt-1 flex-wrap">
                     {(selected.location_city || selected.location_country) && (
-                      <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <span className="flex items-center gap-1 text-xs text-slate-400">
                         <MapPin size={9} />{[selected.location_city, selected.location_country].filter(Boolean).join(", ")}
                       </span>
                     )}
                     {selected.website && (
                       <a href={selected.website} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-[11px] text-blue-500 hover:underline">
+                        className="flex items-center gap-1 text-xs text-blue-500 hover:underline">
                         <ExternalLink size={9} />Website
                       </a>
                     )}
@@ -771,7 +771,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
             <div className="flex border-b border-slate-200 flex-shrink-0">
               {(["overview", "opportunities", "intelligence", "tasks"] as const).map(tab => (
                 <button key={tab} onClick={() => setPanelTab(tab)}
-                  className={cn("flex-1 text-[11px] font-medium py-2 capitalize transition-colors",
+                  className={cn("flex-1 text-xs font-medium py-2 capitalize transition-colors",
                     panelTab === tab ? "text-blue-600 border-b-2 border-blue-600" : "text-slate-500 hover:text-slate-700")}>
                   {tab}
                 </button>
@@ -792,24 +792,24 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     {sig === "hot" && (
                       <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
                         <p className="text-xs font-semibold text-emerald-700">Hot signal — Engage now</p>
-                        {selectedExt.signal_note && <p className="text-[11px] text-emerald-600 mt-0.5">{selectedExt.signal_note}</p>}
+                        {selectedExt.signal_note && <p className="text-xs text-emerald-600 mt-0.5">{selectedExt.signal_note}</p>}
                       </div>
                     )}
                     {sig === "warm" && (
                       <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
                         <p className="text-xs font-semibold text-amber-700">Warm — Follow up recommended</p>
-                        {selectedExt.signal_note && <p className="text-[11px] text-amber-600 mt-0.5">{selectedExt.signal_note}</p>}
+                        {selectedExt.signal_note && <p className="text-xs text-amber-600 mt-0.5">{selectedExt.signal_note}</p>}
                       </div>
                     )}
 
                     {/* Profile */}
                     <div>
-                      <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Profile</h3>
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Profile</h3>
                       <div className="space-y-2">
 
                         {/* Sector row */}
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-slate-400 w-24 flex-shrink-0">Sector</span>
+                          <span className="text-xs text-slate-400 w-24 flex-shrink-0">Sector</span>
                           <div className="flex items-center gap-1.5 flex-1 min-w-0">
                             <input
                               value={selected.sectors?.[0] ?? ""}
@@ -822,7 +822,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                                 await saveCompanyField(selected.id, { sectors: val ? [val] : [] });
                               }}
                               placeholder="e.g. Energy & Materials"
-                              className="flex-1 text-[11px] text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
+                              className="flex-1 text-xs text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
                             />
                             <button
                               onClick={generateSector}
@@ -837,7 +837,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
                         {/* Location row — City + Country side by side */}
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-slate-400 w-24 flex-shrink-0">Location</span>
+                          <span className="text-xs text-slate-400 w-24 flex-shrink-0">Location</span>
                           <div className="flex items-center gap-1.5 flex-1 min-w-0">
                             <input
                               value={selected.location_city ?? ""}
@@ -849,9 +849,9 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                                 await saveCompanyField(selected.id, { location_city: e.target.value.trim() || null });
                               }}
                               placeholder="City"
-                              className="flex-1 text-[11px] text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
+                              className="flex-1 text-xs text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
                             />
-                            <span className="text-slate-300 text-[11px]">/</span>
+                            <span className="text-slate-300 text-xs">/</span>
                             <input
                               value={selected.location_country ?? ""}
                               onChange={e => {
@@ -862,14 +862,14 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                                 await saveCompanyField(selected.id, { location_country: e.target.value.trim() || null });
                               }}
                               placeholder="Country"
-                              className="flex-1 text-[11px] text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
+                              className="flex-1 text-xs text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
                             />
                           </div>
                         </div>
 
                         {/* Website row */}
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-slate-400 w-24 flex-shrink-0">Website</span>
+                          <span className="text-xs text-slate-400 w-24 flex-shrink-0">Website</span>
                           <input
                             value={selected.website ?? ""}
                             onChange={e => {
@@ -880,20 +880,20 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                               await saveCompanyField(selected.id, { website: e.target.value.trim() || null });
                             }}
                             placeholder="https://…"
-                            className="flex-1 text-[11px] text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5 min-w-0"
+                            className="flex-1 text-xs text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5 min-w-0"
                           />
                         </div>
 
                         {/* Last Contact row */}
                         <div className="flex items-start gap-2">
-                          <span className="text-[11px] text-slate-400 w-24 flex-shrink-0">Last Contact</span>
-                          <span className="text-[11px] text-slate-700">{formatDate(selected.last_contact_date)}</span>
+                          <span className="text-xs text-slate-400 w-24 flex-shrink-0">Last Contact</span>
+                          <span className="text-xs text-slate-700">{formatDate(selected.last_contact_date)}</span>
                         </div>
 
                         {/* Description row */}
                         <div className="flex items-start gap-2">
                           <div className="w-24 flex-shrink-0 flex items-center gap-1">
-                            <span className="text-[11px] text-slate-400">Description</span>
+                            <span className="text-xs text-slate-400">Description</span>
                             <button
                               onClick={generateDescription}
                               disabled={loadingDesc}
@@ -905,8 +905,8 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                           </div>
                           <div className="flex-1 min-w-0">
                             {selected.description
-                              ? <p className="text-[11px] text-slate-700 leading-relaxed">{selected.description}</p>
-                              : <p className="text-[11px] text-slate-400 italic">No description yet — click ✨ to generate</p>
+                              ? <p className="text-xs text-slate-700 leading-relaxed">{selected.description}</p>
+                              : <p className="text-xs text-slate-400 italic">No description yet — click ✨ to generate</p>
                             }
                           </div>
                         </div>
@@ -916,11 +916,11 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
                     {/* Roles */}
                     <div>
-                      <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Roles</h3>
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Roles</h3>
                       <div className="grid grid-cols-2 gap-1.5">
                         {ROLES.map(role => (
                           <button key={role} onClick={() => toggleRole(role)}
-                            className={cn("flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-colors",
+                            className={cn("flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors",
                               selectedExt.roles.includes(role)
                                 ? "bg-blue-600 text-white border-blue-600"
                                 : "bg-white text-slate-600 border-slate-200 hover:border-blue-300")}>
@@ -933,7 +933,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
                     {/* Owner */}
                     <div>
-                      <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Owner</h3>
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Owner</h3>
                       <div className="flex gap-2">
                         {OWNERS.map(o => (
                           <button key={o} onClick={() => setOwner(o)}
@@ -947,7 +947,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
                     {/* Relationship scores */}
                     <div>
-                      <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Relationship Scores</h3>
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Relationship Scores</h3>
                       <div className="space-y-2.5">
                         <ScoreBar label="Strategic Focus Alignment" value={selectedExt.scores.strategic_focus} onChange={v => setScore("strategic_focus", v)} />
                         <ScoreBar label="Relationship Strength" value={selectedExt.scores.relationship} onChange={v => setScore("relationship", v)} />
@@ -960,7 +960,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     {/* Contacts section */}
                     <div className="pt-2 border-t border-slate-100">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Contacts</h3>
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Contacts</h3>
                         <a href={`/crm/companies/${selected.id}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                           Manage <ChevronRight size={11} />
                         </a>
@@ -977,9 +977,9 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
-                              {c.title && <p className="text-[11px] text-slate-400 truncate">{c.title}</p>}
+                              {c.title && <p className="text-xs text-slate-400 truncate">{c.title}</p>}
                               {c.email && (
-                                <a href={`mailto:${c.email}`} className="flex items-center gap-1 text-[11px] text-blue-500 hover:underline truncate">
+                                <a href={`mailto:${c.email}`} className="flex items-center gap-1 text-xs text-blue-500 hover:underline truncate">
                                   <Mail size={9} /> {c.email}
                                 </a>
                               )}
@@ -992,7 +992,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     {/* Activity Timeline */}
                     <div className="pt-2 border-t border-slate-100">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Activity Timeline</h3>
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Activity Timeline</h3>
                         <button
                           onClick={async () => {
                             if (!selected) return;
@@ -1050,7 +1050,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                                       <InteractionIcon type={int.type} />
                                       <div className="flex-1 min-w-0">
                                         <p className="text-xs font-medium text-slate-700 leading-tight truncate">{int.subject ?? int.type.charAt(0).toUpperCase() + int.type.slice(1)}</p>
-                                        {int.body && <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{int.body}</p>}
+                                        {int.body && <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{int.body}</p>}
                                         <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(int.date)}</p>
                                       </div>
                                     </div>
@@ -1072,7 +1072,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                   {/* Opportunities list */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Opportunities</h3>
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Opportunities</h3>
                       <button onClick={() => setShowOppForm(v => !v)} className="text-blue-600 hover:text-blue-700">
                         <Plus size={14} />
                       </button>
@@ -1109,7 +1109,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     )}
 
                     {selectedExt.opportunities.length === 0 && !showOppForm && (
-                      <p className="text-[11px] text-slate-400">No opportunities yet</p>
+                      <p className="text-xs text-slate-400">No opportunities yet</p>
                     )}
                     <div className="space-y-2">
                       {selectedExt.opportunities.map(opp => (
@@ -1122,7 +1122,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                             </span>
                           </div>
                           <p className="text-xs font-semibold text-slate-800">{opp.title}</p>
-                          {opp.description && <p className="text-[11px] text-slate-500 mt-0.5">{opp.description}</p>}
+                          {opp.description && <p className="text-xs text-slate-500 mt-0.5">{opp.description}</p>}
                           {opp.due && <p className="text-[10px] text-slate-400 mt-0.5">Due {formatDate(opp.due)}</p>}
                         </div>
                       ))}
@@ -1132,7 +1132,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                   {/* Portco matches */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Portco Matches</h3>
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Portco Matches</h3>
                       <button onClick={() => setShowMatchForm(v => !v)} className="text-blue-600 hover:text-blue-700">
                         <Plus size={14} />
                       </button>
@@ -1157,7 +1157,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     )}
 
                     {selectedExt.portco_matches.length === 0 && !showMatchForm && (
-                      <p className="text-[11px] text-slate-400">No portco matches yet</p>
+                      <p className="text-xs text-slate-400">No portco matches yet</p>
                     )}
                     <div className="space-y-1.5">
                       {selectedExt.portco_matches.map((m, idx) => (
@@ -1176,7 +1176,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                 <div className="space-y-4">
                   {/* Refresh button */}
                   <div className="flex items-center justify-between">
-                    <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Intel Feed</h3>
+                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Intel Feed</h3>
                     <button
                       onClick={loadIntelligence}
                       disabled={loadingIntel}
@@ -1203,7 +1203,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
                   {/* Add intel form */}
                   <div className="flex items-center justify-between">
-                    <p className="text-[11px] text-slate-400">Manually add intel</p>
+                    <p className="text-xs text-slate-400">Manually add intel</p>
                     <button onClick={() => setShowIntelForm(v => !v)} className="text-blue-600 hover:text-blue-700">
                       <Plus size={14} />
                     </button>
@@ -1231,7 +1231,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                   )}
 
                   {selectedExt.intel.length === 0 && !showIntelForm && !loadingIntel && (
-                    <p className="text-[11px] text-slate-400">No intel yet — click &quot;Refresh Intelligence&quot; to load</p>
+                    <p className="text-xs text-slate-400">No intel yet — click &quot;Refresh Intelligence&quot; to load</p>
                   )}
                   <div className="space-y-2.5">
                     {selectedExt.intel.map(item => (
@@ -1240,7 +1240,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                           <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide bg-emerald-50 px-1.5 py-0.5 rounded mb-1 inline-block">SIGNAL</span>
                         )}
                         <p className="text-xs font-medium text-slate-800">{item.headline}</p>
-                        {item.summary && <p className="text-[11px] text-slate-500 mt-0.5">{item.summary}</p>}
+                        {item.summary && <p className="text-xs text-slate-500 mt-0.5">{item.summary}</p>}
                         <div className="flex items-center gap-2 mt-1">
                           {item.source && item.url ? (
                             <a href={item.url} target="_blank" rel="noopener noreferrer"
@@ -1260,7 +1260,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
               {panelTab === "tasks" && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Tasks</h3>
+                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Tasks</h3>
                     <button onClick={() => setShowTaskForm(v => !v)} className="text-blue-600 hover:text-blue-700">
                       <Plus size={14} />
                     </button>
@@ -1280,7 +1280,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                   )}
 
                   {selectedExt.tasks.length === 0 && !showTaskForm && (
-                    <p className="text-[11px] text-slate-400">No tasks yet</p>
+                    <p className="text-xs text-slate-400">No tasks yet</p>
                   )}
                   <div className="space-y-1.5">
                     {selectedExt.tasks.map(task => (

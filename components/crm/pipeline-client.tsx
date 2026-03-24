@@ -878,7 +878,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   <CompanyLogo company={c} />
                   <div className="flex-1 min-w-0">
                     {/* Line 1 — Company name */}
-                    <p className={cn("text-sm font-semibold truncate", isActive ? "text-blue-700" : "text-slate-800")}>
+                    <p className={cn("text-xs font-semibold truncate", isActive ? "text-blue-700" : "text-slate-800")}>
                       {c.name}
                     </p>
                     {/* Line 2 — Status */}
@@ -914,7 +914,7 @@ export function PipelineClient({ initialCompanies }: Props) {
         <div className="flex-1 flex items-center justify-center bg-slate-50">
           <div className="text-center text-slate-400">
             <Building2 size={40} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Select a company to view details</p>
+            <p className="text-xs">Select a company to view details</p>
           </div>
         </div>
       ) : (
@@ -925,7 +925,7 @@ export function PipelineClient({ initialCompanies }: Props) {
             <div className="flex items-center gap-4">
               <CompanyLogo company={selected} />
               <div>
-                <h1 className="text-lg font-bold text-slate-900">{selected.name}</h1>
+                <h1 className="text-base font-bold text-slate-900">{selected.name}</h1>
                 <div className="flex items-center gap-1.5 mt-0.5">
 
                   {/* ── Priority badge ── */}
@@ -933,7 +933,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     <button
                       onClick={() => { setShowPriorityPicker(p => !p); setShowStagePicker(false); setShowStatusPicker(false); }}
                       className={cn(
-                        "inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none transition-colors",
+                        "inline-flex items-center h-5 px-2.5 rounded-full text-xs font-medium leading-none transition-colors",
                         selected.priority ? PRIORITY_COLORS[selected.priority] : "bg-slate-100 text-slate-400"
                       )}
                     >
@@ -978,7 +978,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   <div className="relative inline-flex items-center" onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}>
                     <button
                       onClick={() => { setShowStagePicker(p => !p); setShowPriorityPicker(false); setShowStatusPicker(false); }}
-                      className="inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors capitalize"
+                      className="inline-flex items-center h-5 px-2.5 rounded-full text-xs font-medium leading-none bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors capitalize"
                     >
                       {selected.stage ? selected.stage.replace(/_/g, " ") : "No Stage"}
                     </button>
@@ -1008,7 +1008,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   <div className="relative inline-flex items-center" onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}>
                     <button
                       onClick={() => { setShowStatusPicker(p => !p); setShowPriorityPicker(false); setShowStagePicker(false); }}
-                      className={cn("inline-flex items-center h-5 px-2.5 rounded-full text-[11px] font-medium leading-none transition-colors hover:opacity-80",
+                      className={cn("inline-flex items-center h-5 px-2.5 rounded-full text-xs font-medium leading-none transition-colors hover:opacity-80",
                         selected.deal_status ? STATUS_COLORS[selected.deal_status] : "bg-slate-100 text-slate-500"
                       )}
                     >
@@ -1086,8 +1086,8 @@ export function PipelineClient({ initialCompanies }: Props) {
                     >
                       {logoFinding ? <><Loader2 size={12} className="animate-spin" /> Finding…</> : <><Sparkles size={12} /> Auto-find logo</>}
                     </button>
-                    {logoMsg && <p className="text-[11px] text-slate-500">{logoMsg}</p>}
-                    <button onClick={() => setShowLogoPicker(false)} className="text-[11px] text-slate-400 hover:text-slate-600 w-full text-center">Cancel</button>
+                    {logoMsg && <p className="text-xs text-slate-500">{logoMsg}</p>}
+                    <button onClick={() => setShowLogoPicker(false)} className="text-xs text-slate-400 hover:text-slate-600 w-full text-center">Cancel</button>
                   </div>
                 )}
               </div>
@@ -1122,7 +1122,7 @@ export function PipelineClient({ initialCompanies }: Props) {
               {editing ? (
                 <div className="flex items-center gap-2">
                   {autoSaving && (
-                    <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                    <span className="flex items-center gap-1 text-xs text-slate-400">
                       <Loader2 size={10} className="animate-spin" /> Saving…
                     </span>
                   )}
@@ -1148,13 +1148,13 @@ export function PipelineClient({ initialCompanies }: Props) {
                 {/* Row 1: Domain/Website, Type, Sector, Sub-sector */}
                 <Field label="Domain / Website">
                   {editing ? (
-                    <input className="input text-sm" value={editForm.website ?? ""} onChange={e => setEF("website", e.target.value)} placeholder="https://…" />
+                    <input className="input text-xs" value={editForm.website ?? ""} onChange={e => setEF("website", e.target.value)} placeholder="https://…" />
                   ) : (
                     selected.website
-                      ? <a href={selected.website} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1 truncate">
+                      ? <a href={selected.website} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 truncate">
                           <Link2 size={12} className="flex-shrink-0" />{selected.website.replace(/^https?:\/\//, "")}
                         </a>
-                      : <span className="text-sm text-slate-300">—</span>
+                      : <span className="text-xs text-slate-300">—</span>
                   )}
                 </Field>
 
@@ -1173,7 +1173,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                         <span key={o.value} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{o.label}</span>
                       ) : null;
                     })}
-                    {!editing && !(selected.types ?? []).length && <span className="text-sm text-slate-300">—</span>}
+                    {!editing && !(selected.types ?? []).length && <span className="text-xs text-slate-300">—</span>}
                   </div>
                 </Field>
 
@@ -1193,54 +1193,54 @@ export function PipelineClient({ initialCompanies }: Props) {
                         <span key={s} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{s}</span>
                       ) : null;
                     })}
-                    {!editing && !(selected.sectors ?? []).length && <span className="text-sm text-slate-300">—</span>}
+                    {!editing && !(selected.sectors ?? []).length && <span className="text-xs text-slate-300">—</span>}
                   </div>
                 </Field>
 
                 <Field label="Sub-sector">
                   {editing ? (
-                    <select className="select text-sm" value={editForm.sub_type ?? ""} onChange={e => setEF("sub_type", e.target.value || null)}>
+                    <select className="select text-xs" value={editForm.sub_type ?? ""} onChange={e => setEF("sub_type", e.target.value || null)}>
                       <option value="">Select sub-sector</option>
                       {SUB_SECTOR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   ) : (
-                    <span className="text-sm text-slate-700">{selected.sub_type ?? "—"}</span>
+                    <span className="text-xs text-slate-700">{selected.sub_type ?? "—"}</span>
                   )}
                 </Field>
 
                 {/* Row 2: Status, Investment Round, Location, Last Contact */}
                 <Field label="Status">
                   {editing ? (
-                    <select className="select text-sm" value={editForm.deal_status ?? ""} onChange={e => setEF("deal_status", e.target.value as DealStatus || null)}>
+                    <select className="select text-xs" value={editForm.deal_status ?? ""} onChange={e => setEF("deal_status", e.target.value as DealStatus || null)}>
                       <option value="">Not set</option>
                       {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                     </select>
                   ) : (
                     selected.deal_status
                       ? <span className={cn("inline-block text-xs px-2 py-1 rounded-md font-medium", STATUS_COLORS[selected.deal_status])}>{STATUS_LABELS[selected.deal_status]}</span>
-                      : <span className="text-sm text-slate-300">—</span>
+                      : <span className="text-xs text-slate-300">—</span>
                   )}
                 </Field>
 
                 <Field label="Investment Round">
                   {editing ? (
-                    <select className="select text-sm" value={editForm.stage ?? ""} onChange={e => setEF("stage", e.target.value || null)}>
+                    <select className="select text-xs" value={editForm.stage ?? ""} onChange={e => setEF("stage", e.target.value || null)}>
                       <option value="">Not set</option>
                       {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
                     </select>
                   ) : (
-                    <span className="text-sm text-slate-700 capitalize">{selected.stage?.replace("_", " ") ?? "—"}</span>
+                    <span className="text-xs text-slate-700 capitalize">{selected.stage?.replace("_", " ") ?? "—"}</span>
                   )}
                 </Field>
 
                 <Field label="Location">
                   {editing ? (
                     <div className="flex gap-2">
-                      <input className="input text-sm flex-1" value={editForm.location_city ?? ""} onChange={e => setEF("location_city", e.target.value || null)} placeholder="City" />
-                      <input className="input text-sm flex-1" value={editForm.location_country ?? ""} onChange={e => setEF("location_country", e.target.value || null)} placeholder="Country" />
+                      <input className="input text-xs flex-1" value={editForm.location_city ?? ""} onChange={e => setEF("location_city", e.target.value || null)} placeholder="City" />
+                      <input className="input text-xs flex-1" value={editForm.location_country ?? ""} onChange={e => setEF("location_country", e.target.value || null)} placeholder="Country" />
                     </div>
                   ) : (
-                    <span className="text-sm text-slate-700 flex items-center gap-1">
+                    <span className="text-xs text-slate-700 flex items-center gap-1">
                       <MapPin size={12} className="text-slate-400" />
                       {[selected.location_city, selected.location_country].filter(Boolean).join(", ") || "—"}
                     </span>
@@ -1248,7 +1248,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </Field>
 
                 <Field label="Last Contact">
-                  <span className="text-sm text-slate-700 flex items-center gap-1">
+                  <span className="text-xs text-slate-700 flex items-center gap-1">
                     <Calendar size={12} className="text-slate-400" />
                     {formatDate(selected.last_contact_date)}
                   </span>
@@ -1265,13 +1265,13 @@ export function PipelineClient({ initialCompanies }: Props) {
                 <button
                   onClick={handleGenerateDesc}
                   disabled={generatingDesc}
-                  className="text-[11px] px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
+                  className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
                   title="Generate description with Claude"
                 >
                   {generatingDesc ? <><Loader2 size={10} className="animate-spin" /> Generating…</> : <><Sparkles size={10} /> Generate with Claude</>}
                 </button>
               </div>
-              <p className="text-sm text-slate-700 leading-relaxed">
+              <p className="text-xs text-slate-700 leading-relaxed">
                 {selected.description ?? <span className="text-slate-300 italic">No description yet — click Generate with Claude.</span>}
               </p>
             </section>
@@ -1306,14 +1306,14 @@ export function PipelineClient({ initialCompanies }: Props) {
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Internal Notes</h2>
                 {editing ? (
                   <textarea
-                    className="textarea text-sm w-full min-h-[120px]"
+                    className="textarea text-xs w-full min-h-[120px]"
                     rows={5}
                     value={editForm.notes ?? ""}
                     onChange={e => setEF("notes", e.target.value || null)}
                     placeholder="Private notes visible only to your team…"
                   />
                 ) : (
-                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
                     {selected.notes ?? <span className="text-slate-300 italic">No notes</span>}
                   </p>
                 )}
@@ -1351,7 +1351,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   {loadingDetail ? (
                     <div className="h-12 bg-slate-50 rounded-lg animate-pulse" />
                   ) : contacts.length === 0 ? (
-                    <div className="text-sm text-slate-300 italic pt-2">No contacts linked yet</div>
+                    <div className="text-xs text-slate-300 italic pt-2">No contacts linked yet</div>
                   ) : contacts.map(c => (
                     <button
                       key={c.id}
@@ -1367,11 +1367,11 @@ export function PipelineClient({ initialCompanies }: Props) {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <p className="text-sm font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                          <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
                           {c.is_primary_contact && <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">Primary</span>}
                         </div>
                         <p className="text-xs text-slate-500 truncate">{c.title ?? c.type ?? "—"}</p>
-                        {c.email && <p className="text-[11px] text-blue-500 truncate">{c.email}</p>}
+                        {c.email && <p className="text-xs text-blue-500 truncate">{c.email}</p>}
                         <div className="flex items-center gap-3 mt-1">
                           {c.last_contact_date && (
                             <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
@@ -1531,11 +1531,11 @@ export function PipelineClient({ initialCompanies }: Props) {
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 {ev.url && (
                                   <a href={ev.url} target="_blank" rel="noopener noreferrer"
-                                    className="text-[11px] text-blue-600 hover:underline flex items-center gap-0.5">
+                                    className="text-xs text-blue-600 hover:underline flex items-center gap-0.5">
                                     <ExternalLink size={10} /> View
                                   </a>
                                 )}
-                                <span className="text-[11px] text-slate-400 whitespace-nowrap">{formatDate(ev.date)}</span>
+                                <span className="text-xs text-slate-400 whitespace-nowrap">{formatDate(ev.date)}</span>
                               </div>
                             </div>
                           </div>
@@ -1855,8 +1855,8 @@ export function PipelineClient({ initialCompanies }: Props) {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-slate-800">{c.first_name} {c.last_name}</p>
-                                {c.email && <p className="text-[11px] text-blue-600 truncate">{c.email}</p>}
-                                <p className="text-[11px] text-slate-400 truncate">
+                                {c.email && <p className="text-xs text-blue-600 truncate">{c.email}</p>}
+                                <p className="text-xs text-slate-400 truncate">
                                   {[c.title, [c.location_city, c.location_country].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}
                                 </p>
                               </div>
@@ -2056,7 +2056,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
                           <p className="text-xs text-slate-500 truncate">{c.title ?? c.type ?? "—"}</p>
-                          {c.email && <p className="text-[11px] text-blue-600 truncate">{c.email}</p>}
+                          {c.email && <p className="text-xs text-blue-600 truncate">{c.email}</p>}
                         </div>
                         <div className="flex gap-1.5 flex-shrink-0">
                           <button
@@ -2162,12 +2162,12 @@ export function PipelineClient({ initialCompanies }: Props) {
                 {/* Last Contact + Last Meeting */}
                 <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-100">
                   <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Mail size={10} /> Last Contact</label>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Mail size={10} /> Last Contact</label>
                     <p className="text-sm text-slate-800 mt-1">{lastEmail ? formatDate(lastEmail) : "—"}</p>
                     <p className="text-[10px] text-slate-400">via email</p>
                   </div>
                   <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Calendar size={10} /> Last Meeting</label>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Calendar size={10} /> Last Meeting</label>
                     <p className="text-sm text-slate-800 mt-1">{lastMeeting ? formatDate(lastMeeting) : "—"}</p>
                     <p className="text-[10px] text-slate-400">via Fireflies / Outlook</p>
                   </div>
@@ -2175,13 +2175,13 @@ export function PipelineClient({ initialCompanies }: Props) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">First Name</label>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">First Name</label>
                     {contactEditing
                       ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.first_name ?? ""} onChange={e => setCF("first_name", e.target.value)} />
                       : <p className="text-sm text-slate-800 mt-1">{cp.first_name || "—"}</p>}
                   </div>
                   <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Last Name</label>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Last Name</label>
                     {contactEditing
                       ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.last_name ?? ""} onChange={e => setCF("last_name", e.target.value)} />
                       : <p className="text-sm text-slate-800 mt-1">{cp.last_name || "—"}</p>}
@@ -2189,14 +2189,14 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Title</label>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Title</label>
                   {contactEditing
                     ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.title ?? ""} onChange={e => setCF("title", e.target.value || null)} />
                     : <p className="text-sm text-slate-800 mt-1">{cp.title || "—"}</p>}
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Email{allEmails.length !== 1 ? "s" : ""}</label>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Email{allEmails.length !== 1 ? "s" : ""}</label>
                   {contactEditing ? (
                     <div className="mt-1 space-y-2">
                       {(contactForm.emailList ?? [""]).map((em, idx) => (
@@ -2229,14 +2229,14 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Phone</label>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Phone</label>
                   {contactEditing
                     ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.phone ?? ""} onChange={e => setCF("phone", e.target.value || null)} />
                     : <p className="text-sm text-slate-800 mt-1">{cp.phone || "—"}</p>}
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">LinkedIn</label>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">LinkedIn</label>
                   {contactEditing
                     ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.linkedin_url ?? ""} onChange={e => setCF("linkedin_url", e.target.value || null)} />
                     : cp.linkedin_url
@@ -2246,13 +2246,13 @@ export function PipelineClient({ initialCompanies }: Props) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">City</label>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">City</label>
                     {contactEditing
                       ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.location_city ?? ""} onChange={e => setCF("location_city", e.target.value || null)} />
                       : <p className="text-sm text-slate-800 mt-1">{cp.location_city || "—"}</p>}
                   </div>
                   <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Country</label>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Country</label>
                     {contactEditing
                       ? <input className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" value={contactForm.location_country ?? ""} onChange={e => setCF("location_country", e.target.value || null)} />
                       : <p className="text-sm text-slate-800 mt-1">{cp.location_country || "—"}</p>}
@@ -2260,7 +2260,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Notes</label>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Notes</label>
                   {contactEditing
                     ? <textarea className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" rows={4} value={contactForm.notes ?? ""} onChange={e => setCF("notes", e.target.value || null)} />
                     : <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap leading-relaxed">{cp.notes || <span className="text-slate-300 italic">No notes</span>}</p>}
