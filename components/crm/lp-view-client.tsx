@@ -686,7 +686,7 @@ export function LpViewClient({ initialCompanies }: Props) {
   // 90-day stats from interactions
   const ninetyDaysAgo = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
   const emails90d   = interactions.filter(i => i.type === "email"   && i.date >= ninetyDaysAgo).length;
-  const meetings90d = interactions.filter(i => i.type === "meeting"  && i.date >= ninetyDaysAgo).length;
+  const meetings90d = interactions.filter(i => (i.type === "meeting" || i.type === "call") && i.date >= ninetyDaysAgo).length;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -1348,8 +1348,11 @@ export function LpViewClient({ initialCompanies }: Props) {
                   </button>
                 </div>
 
+                {/* Scrollable activity content */}
+                <div className="h-[300px] overflow-y-auto pr-1 space-y-3">
+
                 {/* 3 Activity Tiles */}
-                <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="grid grid-cols-3 gap-2">
                   <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
                     <Mail size={14} className="text-blue-500 mx-auto mb-1" />
                     <p className="text-lg font-bold text-blue-700">{emails90d}</p>
@@ -1433,6 +1436,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                     </div>
                   </div>
                 )}
+                </div>{/* end scrollable activity content */}
               </div>
 
               {/* Open Tasks */}
