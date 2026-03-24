@@ -630,20 +630,48 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
     return d.toISOString().slice(0, 10);
   }
 
+  const [visible, setVisible] = useState(false);
+  useEffect(() => { requestAnimationFrame(() => setVisible(true)); return () => setVisible(false); }, []);
+
   return (
-    <div className="w-96 flex-shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-hidden h-full">
+    <div
+      className={cn("fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-30 flex flex-col transition-transform duration-300", visible ? "translate-x-0" : "translate-x-full")}
+      style={{ width: 480 }}
+    >
       {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-200 flex items-start gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-1">
-            <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", PRIO_DOTS[task.prio])} />
+      <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100">
+        <div className="flex-1 min-w-0 pr-3">
+          <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+            <span className={cn("w-2 h-2 rounded-full flex-shrink-0", PRIO_DOTS[task.prio])} />
             <CatBadge cat={task.cat} />
             <StatusBadge status={task.status} />
           </div>
-          <p className="text-sm font-semibold text-slate-800 leading-snug">{task.title}</p>
+          <p className="text-base font-bold text-slate-900 leading-snug">{task.title}</p>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 flex-shrink-0 mt-0.5">
+        <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 flex-shrink-0">
           <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex gap-2 px-5 py-3 border-b border-slate-100">
+        <button
+          onClick={handleMarkComplete}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 flex-1 justify-center"
+        >
+          <CheckCircle2 className="w-3.5 h-3.5" /> Mark Complete
+        </button>
+        <button
+          onClick={() => setAddingComment(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 flex-1 justify-center"
+        >
+          <Plus className="w-3.5 h-3.5" /> Add Update
+        </button>
+        <button
+          onClick={() => setEditMode(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 flex-1 justify-center"
+        >
+          Edit
         </button>
       </div>
 
@@ -874,21 +902,6 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
         </section>
       </div>
 
-      {/* Footer */}
-      <div className="px-4 py-3 border-t border-slate-200 flex gap-2">
-        <button
-          onClick={handleMarkComplete}
-          className="flex items-center gap-1 px-2.5 py-1.5 bg-green-600 text-white text-xs rounded-md hover:bg-green-700"
-        >
-          <CheckCircle2 className="w-3 h-3" /> Mark Complete
-        </button>
-        <button
-          onClick={() => setAddingComment(true)}
-          className="flex items-center gap-1 px-2.5 py-1.5 border border-slate-200 text-xs rounded-md text-slate-600 hover:bg-slate-50"
-        >
-          <Plus className="w-3 h-3" /> Add Update
-        </button>
-      </div>
     </div>
   );
 }
@@ -1418,7 +1431,7 @@ export function TasksClient() {
       </div>
 
       {/* Content area */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className={cn("flex flex-1 overflow-hidden transition-all duration-300", selectedTask ? "mr-[480px]" : "")}>
         {view === "table" && (
           <TableView tasks={filteredTasks} onSelect={setSelectedTask} />
         )}
@@ -1428,16 +1441,16 @@ export function TasksClient() {
         {view === "timeline" && (
           <TimelineView tasks={filteredTasks} onSelect={setSelectedTask} />
         )}
-
-        {selectedTask && (
-          <SidePanel
-            task={selectedTask}
-            onClose={() => setSelectedTask(null)}
-            onUpdate={handleUpdateTask}
-            initiatives={initiatives}
-          />
-        )}
       </div>
+
+      {selectedTask && (
+        <SidePanel
+          task={selectedTask}
+          onClose={() => setSelectedTask(null)}
+          onUpdate={handleUpdateTask}
+          initiatives={initiatives}
+        />
+      )}
 
       {/* Add Task Modal */}
       {showAddModal && (
