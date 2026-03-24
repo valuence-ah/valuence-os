@@ -6,6 +6,7 @@
 // column picker, and clear-filters button.
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   DataGrid,
   type Column,
@@ -72,7 +73,9 @@ function makeComboEditor<TRow>(options: string[]) {
   };
 }
 
-// ─── Multi-select editor factory (array values) ───────────────────────────────
+// ─── Multi-select editor factory (array values, portal-based) ────────────────
+// Uses createPortal to escape react-data-grid's `contain: strict` context which
+// otherwise breaks `position: fixed` dropdown positioning.
 
 function makeMultiSelectEditor<TRow>(options: string[]) {
   return function MultiSelectEditor({ row, column, onRowChange, onClose }: RenderEditCellProps<TRow>) {
@@ -81,11 +84,14 @@ function makeMultiSelectEditor<TRow>(options: string[]) {
     const [selected, setSelected] = useState<string[]>(initial);
     const containerRef = useRef<HTMLDivElement>(null);
     const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null);
+    const isOverDropdown = useRef(false);
+    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
+      setMounted(true);
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
-        setDropPos({ top: rect.bottom + 2, left: rect.left, width: Math.max(rect.width, 200) });
+        setDropPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
       }
       containerRef.current?.focus();
     }, []);
@@ -99,48 +105,81 @@ function makeMultiSelectEditor<TRow>(options: string[]) {
       onClose(true);
     }
 
+    const dropdown = mounted && dropPos ? createPortal(
+      <div
+        onMouseEnter={() => { isOverDropdown.current = true; }}
+        onMouseLeave={() => { isOverDropdown.current = false; }}
+        style={{
+          position: "fixed", top: dropPos.top, left: dropPos.left,
+          minWidth: dropPos.width, background: "#fff",
+          border: "1px solid #e2e8f0", borderRadius: 10,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.14)", zIndex: 99999,
+          overflow: "hidden", fontFamily: "inherit",
+        }}
+      >
+        <div style={{ padding: "6px 0" }}>
+          {options.map(opt => {
+            const checked = selected.includes(opt);
+            return (
+              <div
+                key={opt}
+                onMouseDown={(e) => { e.preventDefault(); toggle(opt); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "8px 14px", cursor: "pointer", userSelect: "none",
+                  background: checked ? "#eff6ff" : "transparent",
+                  transition: "background 0.1s",
+                }}
+              >
+                {/* Checkbox */}
+                <div style={{
+                  width: 16, height: 16, flexShrink: 0, borderRadius: 4,
+                  border: `2px solid ${checked ? "#3b82f6" : "#d1d5db"}`,
+                  background: checked ? "#3b82f6" : "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.12s",
+                }}>
+                  {checked && (
+                    <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                      <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </div>
+                <span style={{ fontSize: 12.5, color: checked ? "#1d4ed8" : "#374151", fontWeight: checked ? 500 : 400 }}>
+                  {opt}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ borderTop: "1px solid #f1f5f9", padding: "8px 14px" }}>
+          <div
+            onMouseDown={(e) => { e.preventDefault(); commit(); }}
+            style={{
+              padding: "6px 0", fontSize: 12, fontWeight: 600,
+              color: "#fff", background: "#3b82f6", borderRadius: 6,
+              cursor: "pointer", textAlign: "center",
+            }}
+          >
+            ✓ Apply
+          </div>
+        </div>
+      </div>,
+      document.body
+    ) : null;
+
     return (
       <div
         ref={containerRef}
         tabIndex={0}
-        style={{ width: "100%", height: "100%", padding: "0 6px", display: "flex", alignItems: "center", background: "#fff", outline: "none", cursor: "pointer" }}
-        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) commit(); }}
+        style={{ width: "100%", height: "100%", padding: "0 8px", display: "flex", alignItems: "center", background: "#fff", outline: "none", cursor: "pointer" }}
+        onBlur={() => { if (!isOverDropdown.current) commit(); }}
         onKeyDown={(e) => { if (e.key === "Escape") onClose(false); if (e.key === "Enter") commit(); }}
       >
-        <span style={{ fontSize: 11, color: "#374151", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 12, color: selected.length > 0 ? "#374151" : "#9ca3af", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {selected.length > 0 ? selected.join(", ") : "Select…"}
         </span>
-        {dropPos && (
-          <div style={{ position: "fixed", top: dropPos.top, left: dropPos.left, minWidth: dropPos.width, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.15)", zIndex: 99999, overflow: "hidden" }}>
-            {options.map(opt => {
-              const checked = selected.includes(opt);
-              return (
-                <div
-                  key={opt}
-                  onMouseDown={(e) => { e.preventDefault(); toggle(opt); }}
-                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", fontSize: 12, background: checked ? "#eff6ff" : "transparent", color: checked ? "#1e40af" : "#374151", userSelect: "none" }}
-                >
-                  <div style={{ width: 14, height: 14, border: `1.5px solid ${checked ? "#3b82f6" : "#d1d5db"}`, borderRadius: 3, background: checked ? "#3b82f6" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.1s" }}>
-                    {checked && (
-                      <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                        <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </div>
-                  {opt}
-                </div>
-              );
-            })}
-            <div style={{ borderTop: "1px solid #f1f5f9", padding: "5px 12px" }}>
-              <div
-                onMouseDown={(e) => { e.preventDefault(); commit(); }}
-                style={{ fontSize: 11, color: "#3b82f6", cursor: "pointer", fontWeight: 600, textAlign: "center", padding: "2px 0" }}
-              >
-                ✓ Apply
-              </div>
-            </div>
-          </div>
-        )}
+        {dropdown}
       </div>
     );
   };

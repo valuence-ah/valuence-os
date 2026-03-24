@@ -6,7 +6,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import Parser from "rss-parser";
 
-const parser = new Parser({ timeout: 10000 });
+const parser = new Parser({
+  timeout: 10000,
+  headers: {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/rss+xml,*/*;q=0.8",
+  },
+});
 
 export async function POST(
   _req: NextRequest,
