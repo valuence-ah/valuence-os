@@ -5,13 +5,15 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import Parser from "rss-parser";
 
-const parser = new Parser({
-  timeout: 10000,
-  headers: {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/rss+xml,*/*;q=0.8",
-  },
-});
+const parser = new Parser(); // parseString() only — HTTP handled manually
+
+const FETCH_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/rss+xml,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Cache-Control": "no-cache",
+  "Referer": "https://www.google.com/",
+};
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -34,7 +36,10 @@ export async function GET() {
   for (const source of sources) {
     const feedUrl = source.feed_url || `${source.website_url.replace(/\/$/, "")}/feed`;
     try {
-      const feed = await parser.parseURL(feedUrl);
+      const res = await fetch(feedUrl, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(12000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const xmlText = await res.text();
+      const feed = await parser.parseString(xmlText);
       const keywords: string[] = source.keywords ?? [];
 
       const items = (feed.items ?? [])

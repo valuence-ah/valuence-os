@@ -1,18 +1,21 @@
 // ─── POST /api/feeds/[id]/fetch
-// Fetches the RSS feed for a given source, upserts new articles into feed_articles,
-// updates article_count + last_fetched_at on the source.
+// Fetches the RSS feed for a given source using native fetch() (not parseURL)
+// so we can send proper browser headers that bypass bot-blocking (e.g. FinSMEs 403).
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import Parser from "rss-parser";
 
-const parser = new Parser({
-  timeout: 10000,
-  headers: {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/rss+xml,*/*;q=0.8",
-  },
-});
+// Parser only used for parseString() — HTTP is handled manually via fetch()
+const parser = new Parser();
+
+const FETCH_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/rss+xml,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Cache-Control": "no-cache",
+  "Referer": "https://www.google.com/",
+};
 
 export async function POST(
   _req: NextRequest,
@@ -34,12 +37,27 @@ export async function POST(
 
   const feedUrl = source.feed_url || `${source.website_url.replace(/\/$/, "")}/feed`;
 
-  // Parse the RSS feed
-  let feed;
+  // Fetch the XML ourselves with browser-like headers
+  let xmlText: string;
   try {
-    feed = await parser.parseURL(feedUrl);
+    const res = await fetch(feedUrl, {
+      headers: FETCH_HEADERS,
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) {
+      return NextResponse.json({ error: `Failed to fetch feed: Error: Status code ${res.status}` }, { status: 502 });
+    }
+    xmlText = await res.text();
   } catch (err) {
     return NextResponse.json({ error: `Failed to fetch feed: ${String(err)}` }, { status: 502 });
+  }
+
+  // Parse XML string (no HTTP involved)
+  let feed;
+  try {
+    feed = await parser.parseString(xmlText);
+  } catch (err) {
+    return NextResponse.json({ error: `Failed to parse feed XML: ${String(err)}` }, { status: 502 });
   }
 
   if (!feed.items || feed.items.length === 0) {
@@ -62,13 +80,12 @@ export async function POST(
       published_at: item.pubDate ? new Date(item.pubDate).toISOString() : null,
       tags: [] as string[],
     }))
-    .filter((a) => a.url); // must have a URL
+    .filter((a) => a.url);
 
   if (items.length === 0) {
     return NextResponse.json({ inserted: 0, message: "No matching items after keyword filter" });
   }
 
-  // Upsert (skip duplicates by URL)
   const { data: inserted, error: insErr } = await supabase
     .from("feed_articles")
     .upsert(items, { onConflict: "url", ignoreDuplicates: true })
@@ -78,13 +95,11 @@ export async function POST(
     return NextResponse.json({ error: insErr.message }, { status: 500 });
   }
 
-  // Get updated count
   const { count } = await supabase
     .from("feed_articles")
     .select("id", { count: "exact", head: true })
     .eq("source_id", id);
 
-  // Update source metadata
   await supabase
     .from("feed_sources")
     .update({

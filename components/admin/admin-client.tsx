@@ -73,116 +73,136 @@ function makeComboEditor<TRow>(options: string[]) {
   };
 }
 
-// ─── Multi-select editor factory (array values, portal-based) ────────────────
-// Uses createPortal to escape react-data-grid's `contain: strict` context which
-// otherwise breaks `position: fixed` dropdown positioning.
+// ─── TypeCell: self-contained multi-select that saves directly to Supabase ────
+// Completely bypasses react-data-grid's editor/save mechanism to avoid bugs
+// with onClose(true) + stale closures. Uses a portal dropdown + direct DB save.
 
-function makeMultiSelectEditor<TRow>(options: string[]) {
-  return function MultiSelectEditor({ row, column, onRowChange, onClose }: RenderEditCellProps<TRow>) {
-    const raw = (row as Record<string, unknown>)[column.key as string];
-    const initial: string[] = Array.isArray(raw) ? (raw as string[]) : (raw ? [String(raw)] : []);
-    const [selected, setSelected] = useState<string[]>(initial);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null);
-    const isOverDropdown = useRef(false);
-    const [mounted, setMounted] = useState(false);
+const TYPE_OPTIONS = ["startup","limited partner","investor","strategic partner","ecosystem_partner","other"];
+const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
+  "startup":           { bg: "#eff6ff", color: "#1d4ed8" },
+  "limited partner":   { bg: "#f0fdf4", color: "#15803d" },
+  "investor":          { bg: "#faf5ff", color: "#7e22ce" },
+  "strategic partner": { bg: "#fff7ed", color: "#c2410c" },
+  "ecosystem_partner": { bg: "#ecfdf5", color: "#065f46" },
+  "other":             { bg: "#f8fafc", color: "#64748b" },
+};
 
-    useEffect(() => {
-      setMounted(true);
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        setDropPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
-      }
-      containerRef.current?.focus();
-    }, []);
+function TypeCell({
+  row,
+  onSaved,
+}: {
+  row: CompanyRow;
+  onSaved: (id: string, types: string[]) => void;
+}) {
+  const supabase = createClient();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const cellRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-    function toggle(opt: string) {
-      setSelected(prev => prev.includes(opt) ? prev.filter(x => x !== opt) : [...prev, opt]);
+  const current: string[] = Array.isArray(row.types) ? row.types : [];
+
+  function openDropdown(e: React.MouseEvent) {
+    e.stopPropagation();
+    setSelected([...current]);
+    if (cellRef.current) {
+      const rect = cellRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
     }
+    setOpen(true);
+  }
 
-    function commit() {
-      onRowChange({ ...row, [column.key]: selected });
-      onClose(true);
+  function toggle(opt: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setSelected(prev => prev.includes(opt) ? prev.filter(x => x !== opt) : [...prev, opt]);
+  }
+
+  async function apply(e: React.MouseEvent) {
+    e.stopPropagation();
+    setOpen(false);
+    if (!row.id) return;
+    setSaving(true);
+    await supabase.from("companies").update({ types: selected }).eq("id", row.id);
+    setSaving(false);
+    onSaved(row.id, selected);
+  }
+
+  function cancel(e: React.MouseEvent) {
+    e.stopPropagation();
+    setOpen(false);
+  }
+
+  // Close when clicking outside
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as Node;
+      if (cellRef.current?.contains(target)) return;
+      setOpen(false);
     }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
-    const dropdown = mounted && dropPos ? createPortal(
-      <div
-        onMouseEnter={() => { isOverDropdown.current = true; }}
-        onMouseLeave={() => { isOverDropdown.current = false; }}
-        style={{
-          position: "fixed", top: dropPos.top, left: dropPos.left,
-          minWidth: dropPos.width, background: "#fff",
-          border: "1px solid #e2e8f0", borderRadius: 10,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.14)", zIndex: 99999,
-          overflow: "hidden", fontFamily: "inherit",
-        }}
-      >
-        <div style={{ padding: "6px 0" }}>
-          {options.map(opt => {
-            const checked = selected.includes(opt);
-            return (
-              <div
-                key={opt}
-                onMouseDown={(e) => { e.preventDefault(); toggle(opt); }}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "8px 14px", cursor: "pointer", userSelect: "none",
-                  background: checked ? "#eff6ff" : "transparent",
-                  transition: "background 0.1s",
-                }}
-              >
-                {/* Checkbox */}
-                <div style={{
-                  width: 16, height: 16, flexShrink: 0, borderRadius: 4,
-                  border: `2px solid ${checked ? "#3b82f6" : "#d1d5db"}`,
-                  background: checked ? "#3b82f6" : "#fff",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "all 0.12s",
-                }}>
-                  {checked && (
-                    <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                      <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </div>
-                <span style={{ fontSize: 12.5, color: checked ? "#1d4ed8" : "#374151", fontWeight: checked ? 500 : 400 }}>
-                  {opt}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ borderTop: "1px solid #f1f5f9", padding: "8px 14px" }}>
-          <div
-            onMouseDown={(e) => { e.preventDefault(); commit(); }}
-            style={{
-              padding: "6px 0", fontSize: 12, fontWeight: 600,
-              color: "#fff", background: "#3b82f6", borderRadius: 6,
-              cursor: "pointer", textAlign: "center",
-            }}
-          >
-            ✓ Apply
-          </div>
-        </div>
-      </div>,
-      document.body
-    ) : null;
-
-    return (
-      <div
-        ref={containerRef}
-        tabIndex={0}
-        style={{ width: "100%", height: "100%", padding: "0 8px", display: "flex", alignItems: "center", background: "#fff", outline: "none", cursor: "pointer" }}
-        onBlur={() => { if (!isOverDropdown.current) commit(); }}
-        onKeyDown={(e) => { if (e.key === "Escape") onClose(false); if (e.key === "Enter") commit(); }}
-      >
-        <span style={{ fontSize: 12, color: selected.length > 0 ? "#374151" : "#9ca3af", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {selected.length > 0 ? selected.join(", ") : "Select…"}
+  return (
+    <div
+      ref={cellRef}
+      onClick={openDropdown}
+      style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer", gap: 3, flexWrap: "wrap" }}
+      title="Click to edit"
+    >
+      {current.length === 0 ? (
+        <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#cbd5e1" }}>
+          {saving ? "Saving…" : "Click to set"}
         </span>
-        {dropdown}
-      </div>
-    );
-  };
+      ) : (
+        current.map(v => {
+          const c = TYPE_COLORS[v.toLowerCase()] ?? { bg: "#f1f5f9", color: "#475569" };
+          return (
+            <span key={v} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500, whiteSpace: "nowrap" }}>
+              {v}
+            </span>
+          );
+        })
+      )}
+
+      {open && pos && createPortal(
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 99999, overflow: "hidden", fontFamily: "inherit" }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div style={{ padding: "6px 0" }}>
+            {TYPE_OPTIONS.map(opt => {
+              const checked = selected.includes(opt);
+              const c = TYPE_COLORS[opt] ?? { bg: "#f1f5f9", color: "#475569" };
+              return (
+                <div
+                  key={opt}
+                  onClick={(e) => toggle(opt, e)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", cursor: "pointer", userSelect: "none", background: checked ? "#f0f9ff" : "transparent" }}
+                >
+                  <div style={{ width: 16, height: 16, flexShrink: 0, borderRadius: 4, border: `2px solid ${checked ? "#3b82f6" : "#d1d5db"}`, background: checked ? "#3b82f6" : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {checked && <svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                  <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500 }}>{opt}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ borderTop: "1px solid #f1f5f9", padding: "8px 14px", display: "flex", gap: 8 }}>
+            <div onClick={apply} style={{ flex: 1, padding: "6px 0", fontSize: 12, fontWeight: 600, color: "#fff", background: "#3b82f6", borderRadius: 6, cursor: "pointer", textAlign: "center" }}>
+              ✓ Apply
+            </div>
+            <div onClick={cancel} style={{ flex: 1, padding: "6px 0", fontSize: 12, color: "#64748b", background: "#f1f5f9", borderRadius: 6, cursor: "pointer", textAlign: "center" }}>
+              Cancel
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -297,31 +317,15 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 180,
         sortable: true,
         resizable: true,
-        renderCell: ({ row }: { row: CompanyRow }) => {
-          const vals = Array.isArray(row.types) ? row.types : (row.types ? [String(row.types)] : []);
-          if (vals.length === 0) return null;
-          const colorMap: Record<string, { bg: string; color: string }> = {
-            "startup":          { bg: "#eff6ff", color: "#1d4ed8" },
-            "limited partner":  { bg: "#f0fdf4", color: "#15803d" },
-            "investor":         { bg: "#faf5ff", color: "#7e22ce" },
-            "strategic partner":{ bg: "#fff7ed", color: "#c2410c" },
-            "ecosystem_partner":{ bg: "#ecfdf5", color: "#065f46" },
-            "other":            { bg: "#f8fafc", color: "#64748b" },
-          };
-          return (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, padding: "2px 0", alignItems: "center" }}>
-              {vals.map(v => {
-                const c = colorMap[v.toLowerCase()] ?? { bg: "#f1f5f9", color: "#475569" };
-                return (
-                  <span key={v} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500, whiteSpace: "nowrap" }}>
-                    {v}
-                  </span>
-                );
-              })}
-            </div>
-          );
-        },
-        renderEditCell: makeMultiSelectEditor<CompanyRow>(["startup","limited partner","investor","strategic partner","ecosystem_partner","other"]),
+        editable: false,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <TypeCell
+            row={row}
+            onSaved={(id, types) => {
+              setCompanies(prev => prev.map(c => c.id === id ? { ...c, types } : c));
+            }}
+          />
+        ),
       },
       {
         key: "lp_stage",
@@ -562,7 +566,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         editable: false,
       },
     ],
-    []
+    [setCompanies]
   );
 
   // ─── Contact columns ───────────────────────────────────────────────────────
