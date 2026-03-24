@@ -18,8 +18,9 @@ import {
 import "react-data-grid/lib/styles.css";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
-import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles } from "lucide-react";
+import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss } from "lucide-react";
 import { AiConfigPanel } from "@/components/admin/ai-config-panel";
+import { FeedsManager } from "@/components/admin/feeds-manager";
 
 // ─── Row types ────────────────────────────────────────────────────────────────
 
@@ -81,7 +82,7 @@ interface AdminClientProps {
 export function AdminClient({ initialCompanies, initialContacts }: AdminClientProps) {
   const supabase = createClient();
 
-  const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config">("companies");
+  const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "feeds">("companies");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<ToastState>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -963,10 +964,20 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           >
             <Sparkles size={11} /> AI Config
           </button>
+          <button
+            onClick={() => { setActiveTab("feeds"); setSearch(""); }}
+            className={`px-3 py-1.5 border-l border-slate-200 transition-colors flex items-center gap-1 ${
+              activeTab === "feeds"
+                ? "bg-blue-600 text-white"
+                : "bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <Rss size={11} /> Feeds
+          </button>
         </div>
 
-        {/* Search */}
-        <div className="relative flex-1 max-w-xs">
+        {/* Search — hidden on feeds tab */}
+        <div className={`relative flex-1 max-w-xs ${activeTab === "feeds" ? "invisible" : ""}`}>
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -1149,9 +1160,11 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         </button>
       </div>
 
-      {/* ── Grid or AI Config panel ── */}
+      {/* ── Grid or AI Config panel or Feeds ── */}
       <div className="flex-1 overflow-hidden admin-grid">
-        {isAiConfig ? (
+        {activeTab === "feeds" ? (
+          <FeedsManager />
+        ) : isAiConfig ? (
           <AiConfigPanel />
         ) : isCompanies ? (
           <DataGrid<CompanyRow, unknown, string>
