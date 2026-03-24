@@ -14,6 +14,14 @@ import {
 } from "lucide-react";
 import { PdfCover } from "@/components/ui/pdf-cover";
 
+// ── Strategic partnerships (portco ↔ strategic) ───────────────────────────────
+const PARTNER_STATUS_COLORS: Record<string, string> = {
+  "Active pilot":  "bg-emerald-100 text-emerald-700",
+  "Intro pending": "bg-amber-100 text-amber-700",
+  "Exploring":     "bg-blue-100 text-blue-700",
+  "Not started":   "bg-slate-100 text-slate-500",
+};
+
 // ── Status display helpers ────────────────────────────────────────────────────
 
 // Values match Excel "Status" column exactly (stored as snake_case in DB)
@@ -381,6 +389,14 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [showStagePicker,    setShowStagePicker]    = useState(false);
   const [showStatusPicker,   setShowStatusPicker]   = useState(false);
 
+  // Strategic Partnerships (populated from portco_strategic_map localStorage)
+  const [portcoPartnerships, setPortcoPartnerships] = useState<{ strategicId: string; strategicName: string; portcoId: string; status: string; due: string }[]>([]);
+  const [manualPartnerships, setManualPartnerships] = useState<{ id: string; name: string; note: string; date: string }[]>([]);
+  const [showAddPartnership, setShowAddPartnership] = useState(false);
+  const [newPartnerName, setNewPartnerName]         = useState("");
+  const [newPartnerNote, setNewPartnerNote]         = useState("");
+  const [newPartnerDate, setNewPartnerDate]         = useState(() => new Date().toISOString().slice(0, 10));
+
   // Auto-save
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoSaving, setAutoSaving]     = useState(false);
@@ -522,6 +538,37 @@ export function PipelineClient({ initialCompanies }: Props) {
       loadEmails(selectedId);
     }
   }, [selectedId, loadDetail, loadEmails]);
+
+  // Load strategic partnerships from localStorage when selected company changes
+  useEffect(() => {
+    if (!selected) { setPortcoPartnerships([]); setManualPartnerships([]); return; }
+    try {
+      const raw = localStorage.getItem("portco_strategic_map");
+      const map = raw ? JSON.parse(raw) : {};
+      setPortcoPartnerships(map[selected.name] ?? []);
+    } catch { setPortcoPartnerships([]); }
+    try {
+      const raw = localStorage.getItem("pipeline_manual_partnerships");
+      const map = raw ? JSON.parse(raw) : {};
+      setManualPartnerships(map[selected.id] ?? []);
+    } catch { setManualPartnerships([]); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  function addManualPartnership() {
+    if (!selected || !newPartnerName.trim()) return;
+    const newEntry = { id: Math.random().toString(36).slice(2, 10), name: newPartnerName.trim(), note: newPartnerNote.trim(), date: newPartnerDate };
+    const updated = [...manualPartnerships, newEntry];
+    setManualPartnerships(updated);
+    try {
+      const raw = localStorage.getItem("pipeline_manual_partnerships");
+      const map = raw ? JSON.parse(raw) : {};
+      map[selected.id] = updated;
+      localStorage.setItem("pipeline_manual_partnerships", JSON.stringify(map));
+    } catch {}
+    setNewPartnerName(""); setNewPartnerNote(""); setNewPartnerDate(new Date().toISOString().slice(0, 10));
+    setShowAddPartnership(false);
+  }
 
   // ── Edit handlers ─────────────────────────────────────────────────────────
   function startEdit() {
@@ -1301,22 +1348,59 @@ export function PipelineClient({ initialCompanies }: Props) {
                 )}
               </section>
 
-              {/* Internal Notes */}
+              {/* Strategic Partnerships */}
               <section>
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Internal Notes</h2>
-                {editing ? (
-                  <textarea
-                    className="textarea text-xs w-full min-h-[120px]"
-                    rows={5}
-                    value={editForm.notes ?? ""}
-                    onChange={e => setEF("notes", e.target.value || null)}
-                    placeholder="Private notes visible only to your team…"
-                  />
-                ) : (
-                  <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
-                    {selected.notes ?? <span className="text-slate-300 italic">No notes</span>}
-                  </p>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Strategic Partnerships</h2>
+                  <button onClick={() => setShowAddPartnership(v => !v)}
+                    className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                    <Plus size={11} /> Add
+                  </button>
+                </div>
+
+                {showAddPartnership && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
+                    <input value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)}
+                      placeholder="Partner name"
+                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                    <input value={newPartnerNote} onChange={e => setNewPartnerNote(e.target.value)}
+                      placeholder="Note (optional)"
+                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                    <input type="date" value={newPartnerDate} onChange={e => setNewPartnerDate(e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                    <div className="flex gap-2">
+                      <button onClick={addManualPartnership}
+                        className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">Add</button>
+                      <button onClick={() => setShowAddPartnership(false)}
+                        className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
+                    </div>
+                  </div>
                 )}
+
+                {portcoPartnerships.length === 0 && manualPartnerships.length === 0 && !showAddPartnership && (
+                  <p className="text-xs text-slate-300 italic">No strategic partnerships yet</p>
+                )}
+
+                <div className="space-y-1.5">
+                  {portcoPartnerships.map(p => (
+                    <div key={p.strategicId} className="py-1.5 border-b border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-700">{p.strategicName}</span>
+                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>
+                      </div>
+                      {p.due && <p className="text-[10px] text-slate-400 mt-0.5">Due {formatDate(p.due)}</p>}
+                    </div>
+                  ))}
+                  {manualPartnerships.map(p => (
+                    <div key={p.id} className="py-1.5 border-b border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-700">{p.name}</span>
+                        {p.date && <span className="text-[10px] text-slate-400">{formatDate(p.date)}</span>}
+                      </div>
+                      {p.note && <p className="text-[10px] text-slate-400 mt-0.5">{p.note}</p>}
+                    </div>
+                  ))}
+                </div>
               </section>
             </div>
 

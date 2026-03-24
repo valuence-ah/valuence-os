@@ -29,7 +29,7 @@ interface StrategicExt {
   next_action_due: string;
   owner: string;
   scores: { strategic_focus: number; relationship: number; portco: number; responsiveness: number };
-  portco_matches: { portco: string; status: PortcoStatus }[];
+  portco_matches: { portco: string; portcoId: string; status: PortcoStatus; due: string }[];
   opportunities: { id: string; title: string; type: string; urgency: OppUrgency; description: string; due: string }[];
   intel: { id: string; headline: string; source: string; url?: string; date: string; is_signal: boolean; summary?: string }[];
   tasks: { id: string; text: string; done: boolean; due: string }[];
@@ -52,6 +52,18 @@ const DEFAULT_EXT: StrategicExt = {
 };
 
 const LS_KEY = "strategic_ext_map";
+const PS_MAP_KEY = "portco_strategic_map"; // portco name → [{strategicId, strategicName, status, due}]
+
+function upsertPortcoStrategicMap(portcoName: string, portcoId: string, strategicId: string, strategicName: string, status: string, due: string) {
+  try {
+    const raw = localStorage.getItem(PS_MAP_KEY);
+    const map: Record<string, { strategicId: string; strategicName: string; portcoId: string; status: string; due: string }[]> = raw ? JSON.parse(raw) : {};
+    const existing = map[portcoName] ?? [];
+    const filtered = existing.filter(e => e.strategicId !== strategicId);
+    map[portcoName] = [...filtered, { strategicId, strategicName, portcoId, status, due }];
+    localStorage.setItem(PS_MAP_KEY, JSON.stringify(map));
+  } catch {}
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -243,7 +255,9 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   // Portco match form
   const [showMatchForm, setShowMatchForm]   = useState(false);
   const [matchPortco, setMatchPortco]       = useState("");
+  const [matchPortcoId, setMatchPortcoId]   = useState("");
   const [matchStatus, setMatchStatus]       = useState<PortcoStatus>("Not started");
+  const [matchDue, setMatchDue]             = useState("");
 
   // Intel form
   const [showIntelForm, setShowIntelForm]   = useState(false);
@@ -259,6 +273,9 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [showTaskForm, setShowTaskForm]     = useState(false);
   const [taskText, setTaskText]             = useState("");
   const [taskDue, setTaskDue]               = useState("");
+
+  // Inline field editing (double-click to edit)
+  const [editingField, setEditingField]     = useState<string | null>(null);
 
   // Description auto-generate
   const [loadingDesc, setLoadingDesc]       = useState(false);
@@ -417,6 +434,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   function selectCompany(id: string) {
     setSelectedId(id);
     setPanelTab("overview");
+    setEditingField(null);
     setShowOppForm(false);
     setShowMatchForm(false);
     setShowIntelForm(false);
@@ -537,9 +555,10 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
   function addMatch() {
     if (!selected || !matchPortco.trim()) return;
-    const newMatch = { portco: matchPortco.trim(), status: matchStatus };
+    const newMatch = { portco: matchPortco.trim(), portcoId: matchPortcoId, status: matchStatus, due: matchDue };
     saveExt(selected.id, { portco_matches: [...selectedExt.portco_matches, newMatch] });
-    setMatchPortco(""); setMatchStatus("Not started"); setShowMatchForm(false);
+    upsertPortcoStrategicMap(matchPortco.trim(), matchPortcoId, selected.id, selected.name, matchStatus, matchDue);
+    setMatchPortco(""); setMatchPortcoId(""); setMatchStatus("Not started"); setMatchDue(""); setShowMatchForm(false);
   }
 
   function addIntel() {
@@ -811,25 +830,22 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-slate-400 w-24 flex-shrink-0">Sector</span>
                           <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                            <input
-                              value={selected.sectors?.[0] ?? ""}
-                              onChange={e => {
-                                const val = e.target.value;
-                                setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, sectors: val ? [val] : [] } : c));
-                              }}
-                              onBlur={async e => {
-                                const val = e.target.value.trim();
-                                await saveCompanyField(selected.id, { sectors: val ? [val] : [] });
-                              }}
-                              placeholder="e.g. Energy & Materials"
-                              className="flex-1 text-xs text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
-                            />
-                            <button
-                              onClick={generateSector}
-                              disabled={loadingSector}
-                              className="text-[10px] text-violet-500 hover:text-violet-700 flex-shrink-0 flex items-center gap-0.5"
-                              title="Auto-generate sector"
-                            >
+                            {editingField === "sector" ? (
+                              <input autoFocus
+                                value={selected.sectors?.[0] ?? ""}
+                                onChange={e => { const v = e.target.value; setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, sectors: v ? [v] : [] } : c)); }}
+                                onBlur={async e => { await saveCompanyField(selected.id, { sectors: e.target.value.trim() ? [e.target.value.trim()] : [] }); setEditingField(null); }}
+                                onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
+                                className="flex-1 text-xs text-slate-700 border-b border-blue-400 focus:outline-none bg-transparent py-0.5"
+                              />
+                            ) : (
+                              <span onDoubleClick={() => setEditingField("sector")}
+                                className="flex-1 text-xs text-slate-700 py-0.5 cursor-default select-none">
+                                {selected.sectors?.[0] || <span className="text-slate-300 italic text-[10px]">Double-click to edit</span>}
+                              </span>
+                            )}
+                            <button onClick={generateSector} disabled={loadingSector}
+                              className="text-[10px] text-violet-500 hover:text-violet-700 flex-shrink-0" title="Auto-generate sector">
                               {loadingSector ? <Loader2 size={10} className="animate-spin" /> : "✨"}
                             </button>
                           </div>
@@ -839,49 +855,60 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-slate-400 w-24 flex-shrink-0">Location</span>
                           <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                            <input
-                              value={selected.location_city ?? ""}
-                              onChange={e => {
-                                const val = e.target.value;
-                                setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, location_city: val } : c));
-                              }}
-                              onBlur={async e => {
-                                await saveCompanyField(selected.id, { location_city: e.target.value.trim() || null });
-                              }}
-                              placeholder="City"
-                              className="flex-1 text-xs text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
-                            />
-                            <span className="text-slate-300 text-xs">/</span>
-                            <input
-                              value={selected.location_country ?? ""}
-                              onChange={e => {
-                                const val = e.target.value;
-                                setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, location_country: val } : c));
-                              }}
-                              onBlur={async e => {
-                                await saveCompanyField(selected.id, { location_country: e.target.value.trim() || null });
-                              }}
-                              placeholder="Country"
-                              className="flex-1 text-xs text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5"
-                            />
+                            {editingField === "city" ? (
+                              <input autoFocus
+                                value={selected.location_city ?? ""}
+                                onChange={e => { const v = e.target.value; setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, location_city: v } : c)); }}
+                                onBlur={async e => { await saveCompanyField(selected.id, { location_city: e.target.value.trim() || null }); setEditingField(null); }}
+                                onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
+                                placeholder="City"
+                                className="flex-1 text-xs text-slate-700 border-b border-blue-400 focus:outline-none bg-transparent py-0.5"
+                              />
+                            ) : (
+                              <span onDoubleClick={() => setEditingField("city")}
+                                className="flex-1 text-xs text-slate-700 py-0.5 cursor-default select-none">
+                                {selected.location_city || <span className="text-slate-300 italic text-[10px]">City</span>}
+                              </span>
+                            )}
+                            <span className="text-slate-300 text-xs flex-shrink-0">/</span>
+                            {editingField === "country" ? (
+                              <input autoFocus
+                                value={selected.location_country ?? ""}
+                                onChange={e => { const v = e.target.value; setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, location_country: v } : c)); }}
+                                onBlur={async e => { await saveCompanyField(selected.id, { location_country: e.target.value.trim() || null }); setEditingField(null); }}
+                                onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
+                                placeholder="Country"
+                                className="flex-1 text-xs text-slate-700 border-b border-blue-400 focus:outline-none bg-transparent py-0.5"
+                              />
+                            ) : (
+                              <span onDoubleClick={() => setEditingField("country")}
+                                className="flex-1 text-xs text-slate-700 py-0.5 cursor-default select-none">
+                                {selected.location_country || <span className="text-slate-300 italic text-[10px]">Country</span>}
+                              </span>
+                            )}
                           </div>
                         </div>
 
                         {/* Website row */}
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-slate-400 w-24 flex-shrink-0">Website</span>
-                          <input
-                            value={selected.website ?? ""}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, website: val } : c));
-                            }}
-                            onBlur={async e => {
-                              await saveCompanyField(selected.id, { website: e.target.value.trim() || null });
-                            }}
-                            placeholder="https://…"
-                            className="flex-1 text-xs text-slate-700 border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none bg-transparent py-0.5 min-w-0"
-                          />
+                          <div className="flex-1 min-w-0">
+                            {editingField === "website" ? (
+                              <input autoFocus
+                                value={selected.website ?? ""}
+                                onChange={e => { const v = e.target.value; setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, website: v } : c)); }}
+                                onBlur={async e => { await saveCompanyField(selected.id, { website: e.target.value.trim() || null }); setEditingField(null); }}
+                                onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
+                                placeholder="https://…"
+                                className="w-full text-xs text-slate-700 border-b border-blue-400 focus:outline-none bg-transparent py-0.5"
+                              />
+                            ) : (
+                              <span onDoubleClick={() => setEditingField("website")}
+                                className="text-xs text-slate-700 py-0.5 cursor-default select-none truncate block">
+                                {selected.website || <span className="text-slate-300 italic text-[10px]">Double-click to edit</span>}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         {/* Last Contact row */}
@@ -894,20 +921,25 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         <div className="flex items-start gap-2">
                           <div className="w-24 flex-shrink-0 flex items-center gap-1">
                             <span className="text-xs text-slate-400">Description</span>
-                            <button
-                              onClick={generateDescription}
-                              disabled={loadingDesc}
-                              className="text-[10px] text-violet-500 hover:text-violet-700 flex-shrink-0"
-                              title="Auto-generate description"
-                            >
+                            <button onClick={generateDescription} disabled={loadingDesc}
+                              className="text-[10px] text-violet-500 hover:text-violet-700 flex-shrink-0" title="Auto-generate description">
                               {loadingDesc ? <Loader2 size={10} className="animate-spin" /> : "✨"}
                             </button>
                           </div>
                           <div className="flex-1 min-w-0">
-                            {selected.description
-                              ? <p className="text-xs text-slate-700 leading-relaxed">{selected.description}</p>
-                              : <p className="text-xs text-slate-400 italic">No description yet — click ✨ to generate</p>
-                            }
+                            {editingField === "description" ? (
+                              <textarea autoFocus rows={3}
+                                value={selected.description ?? ""}
+                                onChange={e => { const v = e.target.value; setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, description: v } : c)); }}
+                                onBlur={async e => { await saveCompanyField(selected.id, { description: e.target.value.trim() || null }); setEditingField(null); }}
+                                className="w-full text-xs text-slate-700 border border-blue-400 rounded px-1.5 py-1 focus:outline-none resize-none bg-white"
+                              />
+                            ) : (
+                              <p onDoubleClick={() => setEditingField("description")}
+                                className="text-xs text-slate-700 leading-relaxed cursor-default select-none">
+                                {selected.description || <span className="text-slate-400 italic">No description yet — click ✨ to generate</span>}
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -1140,15 +1172,20 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
                     {showMatchForm && (
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3 space-y-2">
-                        <select value={matchPortco} onChange={e => setMatchPortco(e.target.value)}
+                        <select value={matchPortco} onChange={e => { const opt = e.target.options[e.target.selectedIndex]; setMatchPortco(e.target.value); setMatchPortcoId(opt.dataset.id ?? ""); }}
                           className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
                           <option value="">Select portfolio company…</option>
-                          {pipelineCompanies.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                          {pipelineCompanies.map(c => <option key={c.id} value={c.name} data-id={c.id}>{c.name}</option>)}
                         </select>
                         <select value={matchStatus} onChange={e => setMatchStatus(e.target.value as PortcoStatus)}
                           className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400">
                           {(["Active pilot", "Intro pending", "Exploring", "Not started"] as PortcoStatus[]).map(s => <option key={s}>{s}</option>)}
                         </select>
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] text-slate-500 flex-shrink-0">Action date</label>
+                          <input type="date" value={matchDue} onChange={e => setMatchDue(e.target.value)}
+                            className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                        </div>
                         <div className="flex gap-2">
                           <button onClick={addMatch} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
                           <button onClick={() => setShowMatchForm(false)} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
@@ -1161,9 +1198,12 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     )}
                     <div className="space-y-1.5">
                       {selectedExt.portco_matches.map((m, idx) => (
-                        <div key={idx} className="flex items-center justify-between py-1.5 border-b border-slate-100">
-                          <span className="text-xs font-medium text-slate-700">{m.portco}</span>
-                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", PORTCO_STATUS_COLORS[m.status])}>{m.status}</span>
+                        <div key={idx} className="py-1.5 border-b border-slate-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-slate-700">{m.portco}</span>
+                            <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", PORTCO_STATUS_COLORS[m.status])}>{m.status}</span>
+                          </div>
+                          {m.due && <p className="text-[10px] text-slate-400 mt-0.5">Due {formatDate(m.due)}</p>}
                         </div>
                       ))}
                     </div>
