@@ -9,7 +9,7 @@ import {
   Search, X, ExternalLink, Mail, Phone, User, MapPin, ChevronRight,
   Download, Plus, Target, TrendingUp, DollarSign,
   BarChart2, AlertCircle, CheckSquare, Video,
-  ChevronDown, MoreHorizontal, Loader2, ArrowUpRight, FileText,
+  ChevronDown, ChevronUp, ChevronsUpDown, MoreHorizontal, Loader2, ArrowUpRight, FileText,
   Pencil, Check, LayoutGrid, List, Globe, Wand2, Send, Copy, RefreshCw,
 } from "lucide-react";
 
@@ -89,7 +89,7 @@ function pct(p: number) { return p === 0 ? "0%" : `${Math.round(p * 100)}%`; }
 const DEFAULT_COL_WIDTHS: Record<string, number> = {
   Company: 180, "LP Type": 110, Tier: 75, Stage: 150,
   "Commit Goal": 110, Expected: 100, "Prob %": 100,
-  "Last Touchpoint": 130, "Next Follow-up": 120,
+  "Last Touchpoint": 130, "Last Contact": 120,
   "DDQ Status": 110, "Co-invest": 90, "Sector": 90,
   Owner: 90, City: 80, Country: 90,
 };
@@ -331,7 +331,7 @@ function MapView({ companies, onSelect, selectedId }: { companies: Company[]; on
 
 // ── Filter pills ──────────────────────────────────────────────────────────────
 const FILTER_PILLS = [
-  { id: "all",      label: "All stages" },
+  { id: "all",      label: "All" },
   { id: "anchor",   label: "Anchor" },
   { id: "family",   label: "Family Office" },
   { id: "overdue",  label: "Overdue follow-ups" },
@@ -370,6 +370,12 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [editLpType, setEditLpType]   = useState("");
   const [editCity, setEditCity]       = useState("");
   const [editCountry, setEditCountry] = useState("");
+
+  // Sort + city/country filters
+  const [sortCol, setSortCol]     = useState<string | null>(null);
+  const [sortDir, setSortDir]     = useState<"asc" | "desc">("asc");
+  const [filterCity, setFilterCity]       = useState("");
+  const [filterCountry, setFilterCountry] = useState("");
 
   // localStorage maps — co-invest, owner
   const [coinvestMap, setCoinvestMap] = useState<Record<string, { interest: "Yes" | "No" | ""; sector: string }>>({});
@@ -485,18 +491,53 @@ export function LpViewClient({ initialCompanies }: Props) {
     };
   }, [companies, fundTarget]);
 
-  // Filtered
+  // Unique cities + countries for dropdowns
+  const uniqueCities    = useMemo(() => [...new Set(companies.map(c => c.location_city).filter(Boolean) as string[])].sort(), [companies]);
+  const uniqueCountries = useMemo(() => [...new Set(companies.map(c => c.location_country).filter(Boolean) as string[])].sort(), [companies]);
+
+  // Filtered + sorted
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return companies.filter(c => {
+    let list = companies.filter(c => {
       if (q && !c.name.toLowerCase().includes(q) && !(c.location_city ?? "").toLowerCase().includes(q) && !(c.lp_type ?? "").toLowerCase().includes(q)) return false;
+      if (filterCity    && c.location_city    !== filterCity)    return false;
+      if (filterCountry && c.location_country !== filterCountry) return false;
       if (activeFilter === "anchor")   return c.lp_type === "Anchor";
       if (activeFilter === "family")   return c.lp_type === "Family Office";
       if (activeFilter === "overdue") { const last = lastTouchMap[c.id]?.date; return !last || (Date.now() - new Date(last).getTime()) / 86_400_000 > 30; }
       if (activeFilter === "coinvest") return coinvestMap[c.id]?.interest === "Yes";
       return true;
     });
-  }, [companies, search, activeFilter, lastTouchMap, coinvestMap]);
+
+    if (sortCol) {
+      list = [...list].sort((a, b) => {
+        let av: string | number | null = null;
+        let bv: string | number | null = null;
+        const col = sortCol;
+        if (col === "Company")        { av = a.name;                               bv = b.name; }
+        else if (col === "LP Type")   { av = a.lp_type ?? "";                      bv = b.lp_type ?? ""; }
+        else if (col === "Tier")      { av = a.priority ?? "";                     bv = b.priority ?? ""; }
+        else if (col === "Stage")     { av = a.lp_stage ?? "";                     bv = b.lp_stage ?? ""; }
+        else if (col === "Commit Goal") { av = a.commitment_goal ?? 0;             bv = b.commitment_goal ?? 0; }
+        else if (col === "Expected")  { av = (a.commitment_goal ?? 0) * calcProb(a.lp_stage); bv = (b.commitment_goal ?? 0) * calcProb(b.lp_stage); }
+        else if (col === "Prob %")    { av = calcProb(a.lp_stage);                 bv = calcProb(b.lp_stage); }
+        else if (col === "Last Touchpoint") { av = lastTouchMap[a.id]?.date ?? ""; bv = lastTouchMap[b.id]?.date ?? ""; }
+        else if (col === "Last Contact") { av = a.last_contact_date ?? "";         bv = b.last_contact_date ?? ""; }
+        else if (col === "DDQ Status") { av = getDdqLabel(a.lp_stage);             bv = getDdqLabel(b.lp_stage); }
+        else if (col === "Co-invest") { av = coinvestMap[a.id]?.interest ?? "";    bv = coinvestMap[b.id]?.interest ?? ""; }
+        else if (col === "Sector")    { av = coinvestMap[a.id]?.sector ?? "";      bv = coinvestMap[b.id]?.sector ?? ""; }
+        else if (col === "Owner")     { av = ownerMap[a.id] ?? "";                 bv = ownerMap[b.id] ?? ""; }
+        else if (col === "City")      { av = a.location_city ?? "";                bv = b.location_city ?? ""; }
+        else if (col === "Country")   { av = a.location_country ?? "";             bv = b.location_country ?? ""; }
+        if (av === null || av === "") return sortDir === "asc" ? 1 : -1;
+        if (bv === null || bv === "") return sortDir === "asc" ? -1 : 1;
+        const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
+
+    return list;
+  }, [companies, search, activeFilter, lastTouchMap, coinvestMap, filterCity, filterCountry, sortCol, sortDir, ownerMap]);
 
   // Load detail
   const loadDetail = useCallback(async (id: string) => {
@@ -1019,6 +1060,20 @@ export function LpViewClient({ initialCompanies }: Props) {
             </button>
           ))}
         </div>
+        {/* City filter */}
+        <select value={filterCity} onChange={e => setFilterCity(e.target.value)}
+          className={cn("text-xs border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors",
+            filterCity ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600")}>
+          <option value="">All Cities</option>
+          {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        {/* Country filter */}
+        <select value={filterCountry} onChange={e => setFilterCountry(e.target.value)}
+          className={cn("text-xs border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors",
+            filterCountry ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600")}>
+          <option value="">All Countries</option>
+          {uniqueCountries.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
         <div className="flex-1" />
         <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
           {([["table", List], ["kanban", LayoutGrid], ["map", Globe]] as const).map(([mode, Icon]) => (
@@ -1052,14 +1107,22 @@ export function LpViewClient({ initialCompanies }: Props) {
               <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-3 py-2.5"><input type="checkbox" className="rounded border-slate-300" /></th>
-                  {Object.keys(DEFAULT_COL_WIDTHS).map(col => (
-                    <th key={col} className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider relative select-none">
-                      <span className="truncate block">{col}</span>
-                      <div className="absolute right-0 top-0 h-full w-2 cursor-col-resize group flex items-center justify-center" onMouseDown={e => onResizeStart(col, e)}>
-                        <div className="w-px h-4 bg-slate-300 group-hover:bg-blue-400 transition-colors" />
-                      </div>
-                    </th>
-                  ))}
+                  {Object.keys(DEFAULT_COL_WIDTHS).map(col => {
+                    const isSorted = sortCol === col;
+                    const SortIcon = isSorted ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
+                    return (
+                      <th key={col} className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider relative select-none">
+                        <button className="flex items-center gap-1 hover:text-slate-800 transition-colors truncate"
+                          onClick={() => { if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortCol(col); setSortDir("asc"); } }}>
+                          <span className="truncate">{col}</span>
+                          <SortIcon size={10} className={isSorted ? "text-blue-500 flex-shrink-0" : "text-slate-300 flex-shrink-0"} />
+                        </button>
+                        <div className="absolute right-0 top-0 h-full w-2 cursor-col-resize group flex items-center justify-center" onMouseDown={e => onResizeStart(col, e)}>
+                          <div className="w-px h-4 bg-slate-300 group-hover:bg-blue-400 transition-colors" />
+                        </div>
+                      </th>
+                    );
+                  })}
                   <th className="w-10 px-3 py-2.5" />
                 </tr>
               </thead>
