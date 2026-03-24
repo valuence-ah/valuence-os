@@ -15,7 +15,7 @@ import {
 
 type StrategicRole = "Co-invest" | "Customer" | "Pilot" | "Diligence";
 type SignalType = "hot" | "warm" | "cold";
-type OppType = "Co-invest" | "Pilot" | "Diligence" | "Customer" | "Value-add";
+type OppType = "Introduction" | "Pilot" | "Diligence" | "Customer" | "Value-add";
 type OppUrgency = "high" | "medium" | "low";
 type PortcoStatus = "Active pilot" | "Intro pending" | "Exploring" | "Not started";
 
@@ -30,7 +30,7 @@ interface StrategicExt {
   owner: string;
   scores: { strategic_focus: number; relationship: number; portco: number; responsiveness: number };
   portco_matches: { portco: string; portcoId: string; status: PortcoStatus; due: string }[];
-  opportunities: { id: string; title: string; type: string; urgency: OppUrgency; description: string; due: string }[];
+  opportunities: { id: string; title?: string; company?: string; companyId?: string; type: string; urgency: OppUrgency; description: string; due: string }[];
   intel: { id: string; headline: string; source: string; url?: string; date: string; is_signal: boolean; summary?: string }[];
   tasks: { id: string; text: string; done: boolean; due: string }[];
 }
@@ -80,11 +80,12 @@ const FILTER_PILLS = [
 type FilterId = (typeof FILTER_PILLS)[number]["id"];
 
 const OPP_TYPE_COLORS: Record<string, string> = {
-  "Co-invest":  "bg-amber-100 text-amber-700",
-  "Pilot":      "bg-emerald-100 text-emerald-700",
-  "Diligence":  "bg-violet-100 text-violet-700",
-  "Customer":   "bg-blue-100 text-blue-700",
-  "Value-add":  "bg-slate-100 text-slate-600",
+  "Introduction": "bg-amber-100 text-amber-700",
+  "Co-invest":    "bg-amber-100 text-amber-700",  // backwards compat
+  "Pilot":        "bg-emerald-100 text-emerald-700",
+  "Diligence":    "bg-violet-100 text-violet-700",
+  "Customer":     "bg-blue-100 text-blue-700",
+  "Value-add":    "bg-slate-100 text-slate-600",
 };
 
 const PORTCO_STATUS_COLORS: Record<PortcoStatus, string> = {
@@ -245,19 +246,16 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [savingPartner, setSavingPartner]   = useState(false);
 
   // Opportunity form
-  const [showOppForm, setShowOppForm]       = useState(false);
-  const [oppTitle, setOppTitle]             = useState("");
-  const [oppType, setOppType]               = useState<OppType>("Co-invest");
-  const [oppUrgency, setOppUrgency]         = useState<OppUrgency>("medium");
-  const [oppDesc, setOppDesc]               = useState("");
-  const [oppDue, setOppDue]                 = useState("");
-
-  // Portco match form
-  const [showMatchForm, setShowMatchForm]   = useState(false);
-  const [matchPortco, setMatchPortco]       = useState("");
-  const [matchPortcoId, setMatchPortcoId]   = useState("");
-  const [matchStatus, setMatchStatus]       = useState<PortcoStatus>("Not started");
-  const [matchDue, setMatchDue]             = useState("");
+  const [showOppForm, setShowOppForm]         = useState(false);
+  const [oppType, setOppType]                 = useState<OppType>("Introduction");
+  const [oppUrgency, setOppUrgency]           = useState<OppUrgency>("medium");
+  const [oppCompany, setOppCompany]           = useState("");
+  const [oppCompanyId, setOppCompanyId]       = useState("");
+  const [oppSearch, setOppSearch]             = useState("");
+  const [showOppDropdown, setShowOppDropdown] = useState(false);
+  const [oppDesc, setOppDesc]                 = useState("");
+  const [oppDue, setOppDue]                   = useState("");
+  const [confirmDeleteOppId, setConfirmDeleteOppId] = useState<string | null>(null);
 
   // Intel form
   const [showIntelForm, setShowIntelForm]   = useState(false);
@@ -436,7 +434,6 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     setPanelTab("overview");
     setEditingField(null);
     setShowOppForm(false);
-    setShowMatchForm(false);
     setShowIntelForm(false);
     setShowTaskForm(false);
     loadDetail(id);
@@ -546,29 +543,19 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     saveExt(selected.id, { opportunities: selectedExt.opportunities.filter(o => o.id !== id) });
   }
 
-  function deleteMatch(idx: number) {
-    if (!selected) return;
-    saveExt(selected.id, { portco_matches: selectedExt.portco_matches.filter((_, i) => i !== idx) });
-  }
-
   function addOpportunity() {
-    if (!selected || !oppTitle.trim()) return;
-    const newOpp = { id: genId(), title: oppTitle.trim(), type: oppType, urgency: oppUrgency, description: oppDesc.trim(), due: oppDue };
-    const newTask = { id: genId(), text: oppTitle.trim(), done: false, due: oppDue };
+    if (!selected || !oppCompany.trim()) return;
+    const newOpp = { id: genId(), company: oppCompany.trim(), companyId: oppCompanyId, type: oppType, urgency: oppUrgency, description: oppDesc.trim(), due: oppDue };
+    const newTask = { id: genId(), text: `${oppType}: ${oppCompany.trim()}`, done: false, due: oppDue };
     saveExt(selected.id, {
       opportunities: [...selectedExt.opportunities, newOpp],
       tasks: [...selectedExt.tasks, newTask],
     });
-    setOppTitle(""); setOppType("Co-invest"); setOppUrgency("medium"); setOppDesc(""); setOppDue("");
+    if (oppCompanyId) {
+      upsertPortcoStrategicMap(oppCompany.trim(), oppCompanyId, selected.id, selected.name, oppType, oppDue);
+    }
+    setOppCompany(""); setOppCompanyId(""); setOppSearch(""); setOppType("Introduction"); setOppUrgency("medium"); setOppDesc(""); setOppDue("");
     setShowOppForm(false);
-  }
-
-  function addMatch() {
-    if (!selected || !matchPortco.trim()) return;
-    const newMatch = { portco: matchPortco.trim(), portcoId: matchPortcoId, status: matchStatus, due: matchDue };
-    saveExt(selected.id, { portco_matches: [...selectedExt.portco_matches, newMatch] });
-    upsertPortcoStrategicMap(matchPortco.trim(), matchPortcoId, selected.id, selected.name, matchStatus, matchDue);
-    setMatchPortco(""); setMatchPortcoId(""); setMatchStatus("Not started"); setMatchDue(""); setShowMatchForm(false);
   }
 
   function addIntel() {
@@ -1111,7 +1098,6 @@ export function StrategicViewClient({ initialCompanies }: Props) {
               {/* ── OPPORTUNITIES TAB ────────────────────────────────────── */}
               {panelTab === "opportunities" && (
                 <div className="space-y-4">
-                  {/* Opportunities list */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Opportunities</h3>
@@ -1122,19 +1108,40 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
                     {showOppForm && (
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3 space-y-2">
-                        <input value={oppTitle} onChange={e => setOppTitle(e.target.value)} placeholder="Title"
-                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                        {/* Key Opportunity | Priority */}
                         <div className="flex gap-2">
                           <select value={oppType} onChange={e => setOppType(e.target.value as OppType)}
-                            className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400">
-                            {(["Co-invest", "Pilot", "Diligence", "Customer", "Value-add"] as OppType[]).map(t => <option key={t}>{t}</option>)}
+                            className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
+                            {(["Introduction", "Pilot", "Diligence", "Customer", "Value-add"] as OppType[]).map(t => <option key={t}>{t}</option>)}
                           </select>
                           <select value={oppUrgency} onChange={e => setOppUrgency(e.target.value as OppUrgency)}
-                            className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400">
+                            className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
                             <option value="high">High</option>
                             <option value="medium">Medium</option>
                             <option value="low">Low</option>
                           </select>
+                        </div>
+                        {/* Company — searchable or free text */}
+                        <div className="relative">
+                          <input value={oppSearch}
+                            onChange={e => { setOppSearch(e.target.value); setOppCompany(e.target.value); setOppCompanyId(""); setShowOppDropdown(true); }}
+                            onFocus={() => setShowOppDropdown(true)}
+                            onBlur={() => setTimeout(() => setShowOppDropdown(false), 150)}
+                            placeholder="Company / opportunity name"
+                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                          {showOppDropdown && (
+                            <div className="absolute z-20 top-full left-0 right-0 bg-white border border-slate-200 rounded shadow-lg max-h-36 overflow-y-auto mt-0.5">
+                              {pipelineCompanies.filter(c => !oppSearch || c.name.toLowerCase().includes(oppSearch.toLowerCase())).slice(0, 10).map(c => (
+                                <button key={c.id} onMouseDown={() => { setOppCompany(c.name); setOppSearch(c.name); setOppCompanyId(c.id); setShowOppDropdown(false); }}
+                                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 text-slate-700 font-medium">
+                                  {c.name}
+                                </button>
+                              ))}
+                              {oppSearch && pipelineCompanies.filter(c => c.name.toLowerCase().includes(oppSearch.toLowerCase())).length === 0 && (
+                                <p className="px-3 py-2 text-xs text-slate-400 italic">No match — will be added as-is</p>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <textarea value={oppDesc} onChange={e => setOppDesc(e.target.value)} placeholder="Description (optional)"
                           rows={2} className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 resize-none" />
@@ -1145,7 +1152,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         </div>
                         <div className="flex gap-2">
                           <button onClick={addOpportunity} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
-                          <button onClick={() => setShowOppForm(false)} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
+                          <button onClick={() => { setShowOppForm(false); setOppCompany(""); setOppSearch(""); setOppCompanyId(""); }} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
                         </div>
                       </div>
                     )}
@@ -1156,82 +1163,32 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     <div className="space-y-2">
                       {selectedExt.opportunities.map(opp => {
                         const isOverdue = opp.due && new Date(opp.due) < new Date(new Date().toDateString());
+                        const label = opp.company || opp.title || "";
                         return (
                           <div key={opp.id} className={cn("border rounded-lg p-2.5 bg-white", isOverdue ? "border-red-300 bg-red-50" : "border-slate-200")}>
-                            <div className="flex items-start justify-between gap-2 mb-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-xs font-semibold text-slate-800 min-w-0 truncate">{label}</p>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
                                 <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", OPP_TYPE_COLORS[opp.type] ?? "bg-slate-100 text-slate-600")}>{opp.type}</span>
                                 <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium",
                                   opp.urgency === "high" ? "bg-red-100 text-red-600" : opp.urgency === "medium" ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-500")}>
                                   {opp.urgency}
                                 </span>
                                 {isOverdue && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">Overdue</span>}
+                                {confirmDeleteOppId === opp.id ? (
+                                  <span className="flex items-center gap-1">
+                                    <button onMouseDown={() => { deleteOpportunity(opp.id); setConfirmDeleteOppId(null); }} className="text-xs text-red-600 hover:underline font-medium">Yes</button>
+                                    <button onMouseDown={() => setConfirmDeleteOppId(null)} className="text-xs text-slate-400 hover:underline">No</button>
+                                  </span>
+                                ) : (
+                                  <button onClick={() => setConfirmDeleteOppId(opp.id)} className="text-slate-400 hover:text-red-500"><X size={12} /></button>
+                                )}
                               </div>
-                              <button onClick={() => deleteOpportunity(opp.id)} className="text-slate-300 hover:text-red-400 flex-shrink-0 mt-0.5"><X size={12} /></button>
                             </div>
-                            <p className="text-xs font-semibold text-slate-800">{opp.title}</p>
                             {opp.description && <p className="text-xs text-slate-500 mt-0.5">{opp.description}</p>}
                             {opp.due && (
                               <p className={cn("text-[10px] mt-0.5", isOverdue ? "text-red-500 font-medium" : "text-slate-400")}>
                                 Due {formatDate(opp.due)}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Portco matches */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Portco Matches</h3>
-                      <button onClick={() => setShowMatchForm(v => !v)} className="text-blue-600 hover:text-blue-700">
-                        <Plus size={14} />
-                      </button>
-                    </div>
-
-                    {showMatchForm && (
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3 space-y-2">
-                        <select value={matchPortco} onChange={e => { const opt = e.target.options[e.target.selectedIndex]; setMatchPortco(e.target.value); setMatchPortcoId(opt.dataset.id ?? ""); }}
-                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
-                          <option value="">Select portfolio company…</option>
-                          {pipelineCompanies.map(c => <option key={c.id} value={c.name} data-id={c.id}>{c.name}</option>)}
-                        </select>
-                        <select value={matchStatus} onChange={e => setMatchStatus(e.target.value as PortcoStatus)}
-                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400">
-                          {(["Active pilot", "Intro pending", "Exploring", "Not started"] as PortcoStatus[]).map(s => <option key={s}>{s}</option>)}
-                        </select>
-                        <div className="flex items-center gap-2">
-                          <label className="text-[10px] text-slate-500 flex-shrink-0">Action date</label>
-                          <input type="date" value={matchDue} onChange={e => setMatchDue(e.target.value)}
-                            className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={addMatch} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
-                          <button onClick={() => setShowMatchForm(false)} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
-                        </div>
-                      </div>
-                    )}
-
-                    {selectedExt.portco_matches.length === 0 && !showMatchForm && (
-                      <p className="text-xs text-slate-400">No portco matches yet</p>
-                    )}
-                    <div className="space-y-1.5">
-                      {selectedExt.portco_matches.map((m, idx) => {
-                        const isOverdue = m.due && new Date(m.due) < new Date(new Date().toDateString());
-                        return (
-                          <div key={idx} className="py-1.5 border-b border-slate-100">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-medium text-slate-700 min-w-0 truncate">{m.portco}</span>
-                              <div className="flex items-center gap-1.5 flex-shrink-0">
-                                <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", PORTCO_STATUS_COLORS[m.status])}>{m.status}</span>
-                                <button onClick={() => deleteMatch(idx)} className="text-slate-300 hover:text-red-400"><X size={12} /></button>
-                              </div>
-                            </div>
-                            {m.due && (
-                              <p className={cn("text-[10px] mt-0.5", isOverdue ? "text-red-500 font-medium" : "text-slate-400")}>
-                                Due {formatDate(m.due)}{isOverdue ? " — Overdue" : ""}
                               </p>
                             )}
                           </div>

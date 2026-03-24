@@ -20,6 +20,11 @@ const PARTNER_STATUS_COLORS: Record<string, string> = {
   "Intro pending": "bg-amber-100 text-amber-700",
   "Exploring":     "bg-blue-100 text-blue-700",
   "Not started":   "bg-slate-100 text-slate-500",
+  "Introduction":  "bg-amber-100 text-amber-700",
+  "Pilot":         "bg-emerald-100 text-emerald-700",
+  "Diligence":     "bg-violet-100 text-violet-700",
+  "Customer":      "bg-blue-100 text-blue-700",
+  "Value-add":     "bg-slate-100 text-slate-600",
 };
 
 // ── Status display helpers ────────────────────────────────────────────────────
@@ -398,7 +403,9 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [newPartnerDate, setNewPartnerDate]         = useState(() => new Date().toISOString().slice(0, 10));
   const [partnerCompanies, setPartnerCompanies]     = useState<{ id: string; name: string; types: string[] }[]>([]);
   const [partnerSearch, setPartnerSearch]           = useState("");
+  const [selectedPartnerId, setSelectedPartnerId]   = useState<string | null>(null);
   const [showPartnerDropdown, setShowPartnerDropdown] = useState(false);
+  const [confirmDeletePartner, setConfirmDeletePartner] = useState<{ type: "portco" | "manual"; id: string } | null>(null);
 
   // Auto-save
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -577,9 +584,10 @@ export function PipelineClient({ initialCompanies }: Props) {
       map[selected.id] = updated;
       localStorage.setItem("pipeline_manual_partnerships", JSON.stringify(map));
     } catch {}
-    // If the partner is a strategic company, also write an opportunity to their strategic_ext_map
+    // If the partner is a known strategic company, also write an opportunity to their strategic_ext_map
     try {
-      const match = partnerCompanies.find(c => c.name.toLowerCase() === newPartnerName.trim().toLowerCase());
+      const matchId = selectedPartnerId ?? partnerCompanies.find(c => c.name.toLowerCase() === newPartnerName.trim().toLowerCase())?.id;
+      const match = matchId ? partnerCompanies.find(c => c.id === matchId) : null;
       if (match && (match.types ?? []).includes("strategic partner")) {
         const LS_STRATEGIC = "strategic_ext_map";
         const raw = localStorage.getItem(LS_STRATEGIC);
@@ -591,7 +599,7 @@ export function PipelineClient({ initialCompanies }: Props) {
         localStorage.setItem(LS_STRATEGIC, JSON.stringify(map));
       }
     } catch {}
-    setNewPartnerName(""); setPartnerSearch(""); setNewPartnerNote(""); setNewPartnerDate(new Date().toISOString().slice(0, 10));
+    setNewPartnerName(""); setPartnerSearch(""); setSelectedPartnerId(null); setNewPartnerNote(""); setNewPartnerDate(new Date().toISOString().slice(0, 10));
     setShowAddPartnership(false); setShowPartnerDropdown(false);
   }
 
@@ -1413,22 +1421,22 @@ export function PipelineClient({ initialCompanies }: Props) {
                     {/* Searchable partner name */}
                     <div className="relative">
                       <input value={partnerSearch}
-                        onChange={e => { setPartnerSearch(e.target.value); setNewPartnerName(e.target.value); setShowPartnerDropdown(true); }}
+                        onChange={e => { setPartnerSearch(e.target.value); setNewPartnerName(e.target.value); setSelectedPartnerId(null); setShowPartnerDropdown(true); }}
                         onFocus={() => setShowPartnerDropdown(true)}
                         onBlur={() => setTimeout(() => setShowPartnerDropdown(false), 150)}
-                        placeholder="Search strategics / LPs / funds…"
+                        placeholder="Partner / Company / Fund name"
                         className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                      {showPartnerDropdown && partnerSearch.length > 0 && (
+                      {showPartnerDropdown && (
                         <div className="absolute z-20 top-full left-0 right-0 bg-white border border-slate-200 rounded shadow-lg max-h-40 overflow-y-auto mt-0.5">
-                          {partnerCompanies.filter(c => c.name.toLowerCase().includes(partnerSearch.toLowerCase())).slice(0, 10).map(c => (
-                            <button key={c.id} onMouseDown={() => { setNewPartnerName(c.name); setPartnerSearch(c.name); setShowPartnerDropdown(false); }}
+                          {partnerCompanies.filter(c => !partnerSearch || c.name.toLowerCase().includes(partnerSearch.toLowerCase())).slice(0, 10).map(c => (
+                            <button key={c.id} onMouseDown={() => { setNewPartnerName(c.name); setPartnerSearch(c.name); setSelectedPartnerId(c.id); setShowPartnerDropdown(false); }}
                               className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 flex items-center justify-between gap-2">
                               <span className="font-medium text-slate-700">{c.name}</span>
                               <span className="text-[10px] text-slate-400">{(c.types ?? []).includes("strategic partner") ? "Strategic" : (c.types ?? []).includes("limited partner") ? "LP" : "Investor"}</span>
                             </button>
                           ))}
-                          {partnerCompanies.filter(c => c.name.toLowerCase().includes(partnerSearch.toLowerCase())).length === 0 && (
-                            <p className="px-3 py-2 text-xs text-slate-400 italic">No match — will be added manually</p>
+                          {partnerSearch && partnerCompanies.filter(c => c.name.toLowerCase().includes(partnerSearch.toLowerCase())).length === 0 && (
+                            <p className="px-3 py-2 text-xs text-slate-400 italic">No match — will be added as-is</p>
                           )}
                         </div>
                       )}
@@ -1441,7 +1449,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     <div className="flex gap-2">
                       <button onClick={addManualPartnership}
                         className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">Add</button>
-                      <button onClick={() => { setShowAddPartnership(false); setPartnerSearch(""); setNewPartnerName(""); }}
+                      <button onClick={() => { setShowAddPartnership(false); setPartnerSearch(""); setNewPartnerName(""); setSelectedPartnerId(null); }}
                         className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
                     </div>
                   </div>
@@ -1453,19 +1461,39 @@ export function PipelineClient({ initialCompanies }: Props) {
 
                 <div className="divide-y divide-slate-100">
                   {portcoPartnerships.map(p => (
-                    <div key={p.strategicId} className="flex items-center gap-2 h-[30px]">
-                      <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.strategicName}</span>
-                      <span className="text-xs text-slate-400 flex-shrink-0">{p.due ? formatDate(p.due) : ""}</span>
-                      <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>
-                      <button onClick={() => deletePortcoPartnership(p.strategicId)} className="text-slate-300 hover:text-red-400 flex-shrink-0"><X size={12} /></button>
+                    <div key={p.strategicId} className="h-[30px] flex items-center gap-2">
+                      {confirmDeletePartner?.type === "portco" && confirmDeletePartner.id === p.strategicId ? (
+                        <>
+                          <span className="text-xs text-slate-500 flex-1 italic">Delete &ldquo;{p.strategicName}&rdquo;?</span>
+                          <button onMouseDown={() => { deletePortcoPartnership(p.strategicId); setConfirmDeletePartner(null); }} className="text-xs text-red-600 hover:underline font-medium flex-shrink-0">Yes</button>
+                          <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-xs text-slate-400 hover:underline flex-shrink-0">No</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.strategicName}</span>
+                          <span className="text-xs text-slate-400 flex-shrink-0">{p.due ? formatDate(p.due) : ""}</span>
+                          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>
+                          <button onClick={() => setConfirmDeletePartner({ type: "portco", id: p.strategicId })} className="text-slate-400 hover:text-red-500 flex-shrink-0"><X size={12} /></button>
+                        </>
+                      )}
                     </div>
                   ))}
                   {manualPartnerships.map(p => (
-                    <div key={p.id} className="flex items-center gap-2 h-[30px]">
-                      <span className="text-xs font-medium text-slate-700 min-w-0 truncate">{p.name}</span>
-                      {p.note && <span className="text-xs text-slate-400 truncate flex-1">{p.note}</span>}
-                      {p.date && <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(p.date)}</span>}
-                      <button onClick={() => deleteManualPartnership(p.id)} className="text-slate-300 hover:text-red-400 flex-shrink-0"><X size={12} /></button>
+                    <div key={p.id} className="h-[30px] flex items-center gap-2">
+                      {confirmDeletePartner?.type === "manual" && confirmDeletePartner.id === p.id ? (
+                        <>
+                          <span className="text-xs text-slate-500 flex-1 italic">Delete &ldquo;{p.name}&rdquo;?</span>
+                          <button onMouseDown={() => { deleteManualPartnership(p.id); setConfirmDeletePartner(null); }} className="text-xs text-red-600 hover:underline font-medium flex-shrink-0">Yes</button>
+                          <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-xs text-slate-400 hover:underline flex-shrink-0">No</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.name}</span>
+                          {p.note && <span className="text-xs text-slate-400 truncate max-w-[120px]">{p.note}</span>}
+                          {p.date && <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(p.date)}</span>}
+                          <button onClick={() => setConfirmDeletePartner({ type: "manual", id: p.id })} className="text-slate-400 hover:text-red-500 flex-shrink-0"><X size={12} /></button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1527,12 +1555,12 @@ export function PipelineClient({ initialCompanies }: Props) {
                         <p className="text-[11px] text-slate-400 truncate">{c.title ?? c.type ?? "—"}</p>
                       </div>
                       {/* Last Contact */}
-                      <div className="flex-1 min-w-0">
+                      <div className="w-28 flex-shrink-0">
                         <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Last Contact</p>
                         <p className="text-xs text-slate-600">{c.last_contact_date ? formatDate(c.last_contact_date) : "—"}</p>
                       </div>
                       {/* Location */}
-                      <div className="flex-1 min-w-0">
+                      <div className="w-24 flex-shrink-0">
                         <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Location</p>
                         <p className="text-xs text-slate-600 truncate">
                           {[c.location_city, c.location_country].filter(Boolean).join(", ") || "—"}
