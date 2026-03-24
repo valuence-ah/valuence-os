@@ -231,6 +231,8 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
   // Panel tab
   const [panelTab, setPanelTab] = useState<"overview" | "opportunities" | "intelligence">("overview");
+  // Remove company confirm
+  const [confirmRemoveCompanyId, setConfirmRemoveCompanyId] = useState<string | null>(null);
 
   // localStorage ext map
   const [extMap, setExtMap] = useState<Record<string, StrategicExt>>({});
@@ -677,6 +679,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
           <table className="w-full text-sm border-collapse" style={{ tableLayout: "fixed" }}>
             <colgroup>
               {Object.keys(DEFAULT_COL_WIDTHS).map(col => <col key={col} style={{ width: colWidths[col] }} />)}
+              <col style={{ width: 40 }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>
@@ -688,6 +691,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     </div>
                   </th>
                 ))}
+                <th className="border-b border-slate-200 w-10" />
               </tr>
             </thead>
             <tbody>
@@ -701,7 +705,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                 const utilityVal = computedUtility(ext);
                 return (
                   <tr key={co.id} onClick={() => selectCompany(co.id)}
-                    className={cn("border-b border-slate-100 cursor-pointer transition-colors hover:bg-blue-50",
+                    className={cn("group border-b border-slate-100 cursor-pointer transition-colors hover:bg-blue-50",
                       isSelected ? "bg-blue-50 border-l-2 border-l-blue-500" : "")}>
                     {/* Company */}
                     <td className="px-3 py-2.5">
@@ -779,12 +783,26 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     <td className="px-3 py-2.5">
                       <span className="text-xs text-slate-600">{ext.owner || "—"}</span>
                     </td>
+                    {/* Remove */}
+                    <td className="px-2 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                      {confirmRemoveCompanyId === co.id ? (
+                        <span className="flex items-center gap-1 justify-end">
+                          <button onMouseDown={() => { setCompanies(ps => ps.filter(c => c.id !== co.id)); if (selectedId === co.id) setSelectedId(null); setConfirmRemoveCompanyId(null); }} className="text-[10px] text-red-600 font-medium hover:underline">Yes</button>
+                          <button onMouseDown={() => setConfirmRemoveCompanyId(null)} className="text-[10px] text-slate-400 hover:underline">No</button>
+                        </span>
+                      ) : (
+                        <button onClick={() => setConfirmRemoveCompanyId(co.id)}
+                          className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded border border-slate-200 hover:border-red-400 hover:bg-red-50 transition-all">
+                          <X size={10} className="text-slate-400 hover:text-red-500" />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="text-center py-16 text-sm text-slate-400">No strategic partners found</td>
+                  <td colSpan={14} className="text-center py-16 text-sm text-slate-400">No strategic partners found</td>
                 </tr>
               )}
             </tbody>

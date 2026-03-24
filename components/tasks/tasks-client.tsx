@@ -310,7 +310,7 @@ function CompanyPicker({ cos, onChange }: { cos: string[]; onChange: (cos: strin
 
 // ── Table view ────────────────────────────────────────────────────────────────
 
-function TableView({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => void }) {
+function TableView({ tasks, onSelect, onToggleComplete, onDelete }: { tasks: Task[]; onSelect: (t: Task) => void; onToggleComplete: (t: Task) => void; onDelete: (t: Task) => void }) {
   const sorted = [...tasks].sort((a, b) => {
     const order: Record<string, number> = { Overdue: 0, "At risk": 1, Blocked: 2, "Not started": 2, "On track": 3, Completed: 4 };
     const oa = order[a.status] ?? 3;
@@ -344,6 +344,7 @@ function TableView({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => 
             <th className="px-3 py-2 text-left font-medium text-slate-500 whitespace-nowrap">Start</th>
             <th className="px-3 py-2 text-left font-medium text-slate-500 whitespace-nowrap">Target</th>
             <th className="px-3 py-2 text-left font-medium text-slate-500">Days</th>
+            <th className="w-6"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -352,13 +353,20 @@ function TableView({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => 
               key={t.id}
               onClick={() => onSelect(t)}
               className={cn(
-                "hover:bg-slate-50 cursor-pointer transition-colors",
+                "group hover:bg-slate-50 cursor-pointer transition-colors",
                 t.status === "Overdue" && "border-l-2 border-red-400",
                 t.status === "At risk" && "border-l-2 border-amber-400",
               )}
             >
-              <td className="px-3 py-2 text-slate-300">
-                <div className="w-3.5 h-3.5 border border-slate-300 rounded-sm" />
+              <td className="px-3 py-2" onClick={e => { e.stopPropagation(); onToggleComplete(t); }}>
+                <div className={cn(
+                  "w-3.5 h-3.5 border rounded-sm flex items-center justify-center cursor-pointer transition-colors",
+                  t.status === "Completed"
+                    ? "bg-emerald-500 border-emerald-500"
+                    : "border-slate-300 hover:border-blue-400"
+                )}>
+                  {t.status === "Completed" && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                </div>
               </td>
               <td className="px-3 py-2 max-w-[280px]">
                 <span className="font-medium text-slate-800 leading-snug line-clamp-2">{t.title}</span>
@@ -401,6 +409,15 @@ function TableView({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => 
               <td className="px-3 py-2 whitespace-nowrap text-slate-500">{t.due}</td>
               <td className="px-3 py-2 whitespace-nowrap">
                 <DaysChip daysLeft={t.daysLeft} />
+              </td>
+              <td className="px-3 py-2 w-6" onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => onDelete(t)}
+                  className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                  title="Delete task"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </td>
             </tr>
           ))}
@@ -575,10 +592,11 @@ interface SidePanelProps {
   task: Task;
   onClose: () => void;
   onUpdate: (updated: Task) => void;
+  onDelete: (t: Task) => void;
   initiatives: { key: string; label: string }[];
 }
 
-function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
+function SidePanel({ task, onClose, onUpdate, onDelete, initiatives }: SidePanelProps) {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editFields, setEditFields] = useState({
     cat: task.cat,
@@ -670,6 +688,12 @@ function SidePanel({ task, onClose, onUpdate, initiatives }: SidePanelProps) {
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 flex-1 justify-center"
         >
           <Plus className="w-3.5 h-3.5" /> Add Update
+        </button>
+        <button
+          onClick={() => onDelete(task)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-red-200 text-red-500 rounded-lg hover:bg-red-50 justify-center"
+        >
+          <X className="w-3.5 h-3.5" /> Delete
         </button>
       </div>
 
@@ -1165,6 +1189,7 @@ export function TasksClient() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [search, setSearch] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [confirmDeleteTaskId, setConfirmDeleteTaskId] = useState<number | null>(null);
 
   // ── localStorage bridge ──────────────────────────────────────────────────────
 
@@ -1227,6 +1252,23 @@ export function TasksClient() {
 
   function handleAddTask(t: Task) {
     setTasks(prev => [...prev, t]);
+  }
+
+  function handleToggleComplete(t: Task) {
+    const updated = { ...t, status: t.status === "Completed" ? "On track" as const : "Completed" as const };
+    setTasks(prev => prev.map(x => x.id === t.id ? updated : x));
+    if (selectedTask?.id === t.id) setSelectedTask(updated);
+  }
+
+  function handleDeleteTask(t: Task) {
+    setConfirmDeleteTaskId(t.id);
+  }
+
+  function confirmDeleteTask() {
+    if (confirmDeleteTaskId === null) return;
+    setTasks(prev => prev.filter(t => t.id !== confirmDeleteTaskId));
+    if (selectedTask?.id === confirmDeleteTaskId) setSelectedTask(null);
+    setConfirmDeleteTaskId(null);
   }
 
   // ── Filtering ────────────────────────────────────────────────────────────────
@@ -1519,7 +1561,7 @@ export function TasksClient() {
       {/* Content area */}
       <div className={cn("flex flex-1 overflow-hidden transition-all duration-300", selectedTask ? "mr-[480px]" : "")}>
         {view === "table" && (
-          <TableView tasks={filteredTasks} onSelect={setSelectedTask} />
+          <TableView tasks={filteredTasks} onSelect={setSelectedTask} onToggleComplete={handleToggleComplete} onDelete={handleDeleteTask} />
         )}
         {view === "kanban" && (
           <KanbanView tasks={filteredTasks} allTasks={allSearchedTasks} onSelect={setSelectedTask} />
@@ -1534,8 +1576,23 @@ export function TasksClient() {
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
           onUpdate={handleUpdateTask}
+          onDelete={handleDeleteTask}
           initiatives={initiatives}
         />
+      )}
+
+      {/* Confirm delete task overlay */}
+      {confirmDeleteTaskId !== null && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-80">
+            <p className="text-sm font-semibold text-slate-800 mb-1">Delete task?</p>
+            <p className="text-xs text-slate-500 mb-4">This action cannot be undone.</p>
+            <div className="flex gap-2">
+              <button onClick={confirmDeleteTask} className="flex-1 py-1.5 bg-red-500 text-white text-xs font-medium rounded-lg hover:bg-red-600 transition-colors">Delete</button>
+              <button onClick={() => setConfirmDeleteTaskId(null)} className="flex-1 py-1.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-200 transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Add Task Modal */}

@@ -356,6 +356,7 @@ export function LpViewClient({ initialCompanies }: Props) {
 
   // Core
   const [companies, setCompanies]         = useState<Company[]>(initialCompanies);
+  const [confirmRemoveCompanyId, setConfirmRemoveCompanyId] = useState<string | null>(null);
   const [selectedId, setSelectedId]       = useState<string | null>(null);
   const [search, setSearch]               = useState("");
   const [activeFilter, setActiveFilter]   = useState<FilterId>("all");
@@ -1170,7 +1171,19 @@ export function LpViewClient({ initialCompanies }: Props) {
                       <td className="px-3 py-2.5 text-xs text-slate-500">{ow ?? <span className="text-slate-300">—</span>}</td>
                       <td className="px-3 py-2.5 text-xs text-slate-500">{co.location_city ?? <span className="text-slate-300">—</span>}</td>
                       <td className="px-3 py-2.5 text-xs text-slate-500">{co.location_country ?? <span className="text-slate-300">—</span>}</td>
-                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}><button className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded hover:bg-slate-200 text-slate-400"><MoreHorizontal size={13} /></button></td>
+                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                        {confirmRemoveCompanyId === co.id ? (
+                          <span className="flex items-center gap-1">
+                            <button onMouseDown={() => { setCompanies(ps => ps.filter(c => c.id !== co.id)); if (selectedId === co.id) setSelectedId(null); setConfirmRemoveCompanyId(null); }} className="text-[10px] text-red-600 font-medium hover:underline whitespace-nowrap">Yes</button>
+                            <button onMouseDown={() => setConfirmRemoveCompanyId(null)} className="text-[10px] text-slate-400 hover:underline">No</button>
+                          </span>
+                        ) : (
+                          <button onClick={() => setConfirmRemoveCompanyId(co.id)}
+                            className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded border border-slate-200 hover:border-red-400 hover:bg-red-50 transition-all">
+                            <X size={10} className="text-slate-400" />
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
