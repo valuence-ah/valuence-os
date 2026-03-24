@@ -532,9 +532,16 @@ export function LpViewClient({ initialCompanies }: Props) {
 
   // Save — pure optimistic, no full-row re-fetch (prevents race condition overwriting other fields)
   async function saveField(id: string, patch: Partial<Company>) {
-    setCompanies(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
+    // Snapshot previous state for rollback
+    const prev = companies.find(c => c.id === id);
+    setCompanies(ps => ps.map(c => c.id === id ? { ...c, ...patch } : c));
     const { error } = await supabase.from("companies").update(patch).eq("id", id);
-    if (error) console.error("saveField error:", error);
+    if (error) {
+      console.error("saveField error:", error);
+      // Roll back optimistic update
+      if (prev) setCompanies(ps => ps.map(c => c.id === id ? prev : c));
+      return;
+    }
     if ("lp_stage" in patch) setEditStage(patch.lp_stage ?? "");
     if ("commitment_goal" in patch) setEditGoal(patch.commitment_goal != null ? String(patch.commitment_goal) : "");
     if ("lp_type" in patch) setEditLpType(patch.lp_type ?? "");

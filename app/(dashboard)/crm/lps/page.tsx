@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/header";
 import { LpViewClient } from "@/components/crm/lp-view-client";
 import type { Company } from "@/lib/types";
 
+export const dynamic  = "force-dynamic"; // always re-fetch — prevents stale initialCompanies on back-nav
 export const metadata = { title: "Limited Partners" };
 
 export default async function LpsPage() {
