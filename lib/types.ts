@@ -50,6 +50,7 @@ export interface Company {
   source: string | null;
   first_contact_date: string | null;
   last_contact_date: string | null;
+  last_meeting_date: string | null;
   lp_stage: string | null;
   commitment_goal: number | null;
   is_strategic_partner: boolean | null;

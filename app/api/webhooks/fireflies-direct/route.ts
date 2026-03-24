@@ -180,11 +180,22 @@ export async function POST(req: NextRequest) {
   }
 
   if (companyId) {
+    const meetingDateStr = t.date
+      ? new Date(t.date).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0];
     await supabase
       .from("companies")
-      .update({ last_contact_date: new Date().toISOString().split("T")[0] })
+      .update({
+        last_contact_date: meetingDateStr,
+        last_meeting_date: meetingDateStr,
+      })
       .eq("id", companyId);
   }
 
-  return NextResponse.json({ success: true, interaction_id: interaction.id });
+  return NextResponse.json({
+    success: true,
+    interaction_id: interaction.id,
+    company_id: companyId,
+    contacts_matched: contacts?.length ?? 0,
+  });
 }
