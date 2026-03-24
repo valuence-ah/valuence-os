@@ -8,7 +8,7 @@ import { cn, formatDate, getInitials, timeAgo } from "@/lib/utils";
 import {
   Search, Plus, X, Check, Loader2, Mail, Video, Phone, FileText,
   Building2, Target, TrendingUp, AlertCircle, Users, Shield,
-  Handshake, MoreHorizontal, ChevronRight, ExternalLink, RefreshCw,
+  Handshake, MoreHorizontal, ChevronRight, ExternalLink, RefreshCw, MapPin,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ interface StrategicExt {
   owner: string;
   scores: { strategic_focus: number; relationship: number; portco: number; responsiveness: number };
   portco_matches: { portco: string; status: PortcoStatus }[];
-  opportunities: { id: string; title: string; type: string; urgency: OppUrgency; description: string }[];
+  opportunities: { id: string; title: string; type: string; urgency: OppUrgency; description: string; due: string }[];
   intel: { id: string; headline: string; source: string; url?: string; date: string; is_signal: boolean; summary?: string }[];
   tasks: { id: string; text: string; done: boolean; due: string }[];
 }
@@ -86,7 +86,7 @@ const PORTCO_STATUS_COLORS: Record<PortcoStatus, string> = {
 const DEFAULT_COL_WIDTHS: Record<string, number> = {
   Company: 200, Sector: 120, "Rel. Health": 110, Utility: 90,
   Roles: 160, "Co-invest": 90, Diligence: 100, "Pilot/Customer": 110,
-  "Last Contact": 110, Signal: 90, Owner: 80,
+  "Last Contact": 110, City: 90, Country: 90, Signal: 90, Owner: 80,
 };
 
 // ── Helper functions ──────────────────────────────────────────────────────────
@@ -238,6 +238,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [oppType, setOppType]               = useState<OppType>("Co-invest");
   const [oppUrgency, setOppUrgency]         = useState<OppUrgency>("medium");
   const [oppDesc, setOppDesc]               = useState("");
+  const [oppDue, setOppDue]                 = useState("");
 
   // Portco match form
   const [showMatchForm, setShowMatchForm]   = useState(false);
@@ -264,6 +265,9 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
   // Sector auto-generate
   const [loadingSector, setLoadingSector]   = useState(false);
+
+  // Pipeline companies for portco match dropdown
+  const [pipelineCompanies, setPipelineCompanies] = useState<{ id: string; name: string }[]>([]);
 
   // Resizable columns
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_COL_WIDTHS);
@@ -304,6 +308,15 @@ export function StrategicViewClient({ initialCompanies }: Props) {
       const raw = localStorage.getItem(LS_KEY);
       if (raw) setExtMap(JSON.parse(raw));
     } catch {}
+  }, []);
+
+  // Load pipeline companies for portco match dropdown
+  useEffect(() => {
+    supabase.from("companies").select("id, name").contains("types", ["startup"])
+      .order("name", { ascending: true }).then(({ data }) => {
+        if (data) setPipelineCompanies(data as { id: string; name: string }[]);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load last touch map
@@ -512,9 +525,13 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
   function addOpportunity() {
     if (!selected || !oppTitle.trim()) return;
-    const newOpp = { id: genId(), title: oppTitle.trim(), type: oppType, urgency: oppUrgency, description: oppDesc.trim() };
-    saveExt(selected.id, { opportunities: [...selectedExt.opportunities, newOpp] });
-    setOppTitle(""); setOppType("Co-invest"); setOppUrgency("medium"); setOppDesc("");
+    const newOpp = { id: genId(), title: oppTitle.trim(), type: oppType, urgency: oppUrgency, description: oppDesc.trim(), due: oppDue };
+    const newTask = { id: genId(), text: oppTitle.trim(), done: false, due: oppDue };
+    saveExt(selected.id, {
+      opportunities: [...selectedExt.opportunities, newOpp],
+      tasks: [...selectedExt.tasks, newTask],
+    });
+    setOppTitle(""); setOppType("Co-invest"); setOppUrgency("medium"); setOppDesc(""); setOppDue("");
     setShowOppForm(false);
   }
 
@@ -687,6 +704,14 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     <td className="px-3 py-2.5">
                       <span className="text-xs text-slate-500">{lastTouch ? timeAgo(lastTouch) : "—"}</span>
                     </td>
+                    {/* City */}
+                    <td className="px-3 py-2.5">
+                      <span className="text-xs text-slate-500">{co.location_city ?? "—"}</span>
+                    </td>
+                    {/* Country */}
+                    <td className="px-3 py-2.5">
+                      <span className="text-xs text-slate-500">{co.location_country ?? "—"}</span>
+                    </td>
                     {/* Signal */}
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1.5">
@@ -703,7 +728,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="text-center py-16 text-sm text-slate-400">No strategic partners found</td>
+                  <td colSpan={13} className="text-center py-16 text-sm text-slate-400">No strategic partners found</td>
                 </tr>
               )}
             </tbody>
@@ -714,13 +739,30 @@ export function StrategicViewClient({ initialCompanies }: Props) {
         <div className={cn("fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-30 flex flex-col transition-transform duration-300", selectedId ? "translate-x-0" : "translate-x-full")} style={{ width: 480 }}>
         {selected && (<>
             {/* Panel header */}
-            <div className="flex items-start gap-2.5 px-4 py-3 border-b border-slate-200 flex-shrink-0">
-              <CompanyAvatar name={selected.name} size="md" />
-              <div className="flex-1 min-w-0">
-                <h2 className="text-sm font-bold text-slate-800 truncate">{selected.name}</h2>
-                <p className="text-[11px] text-slate-400 truncate">{selected.sectors?.[0] ?? selected.sub_type ?? "Strategic Partner"}</p>
+            <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <CompanyAvatar name={selected.name} size="lg" />
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-base font-bold text-slate-900 truncate">{selected.name}</h2>
+                  {selected.sectors?.[0] && (
+                    <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700 mt-0.5">{selected.sectors[0]}</span>
+                  )}
+                  <div className="flex items-center gap-3 mt-1 flex-wrap">
+                    {(selected.location_city || selected.location_country) && (
+                      <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                        <MapPin size={9} />{[selected.location_city, selected.location_country].filter(Boolean).join(", ")}
+                      </span>
+                    )}
+                    {selected.website && (
+                      <a href={selected.website} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-[11px] text-blue-500 hover:underline">
+                        <ExternalLink size={9} />Website
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
-              <button onClick={() => setSelectedId(null)} className="text-slate-400 hover:text-slate-600 flex-shrink-0 mt-0.5">
+              <button onClick={() => setSelectedId(null)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 flex-shrink-0">
                 <X size={14} />
               </button>
             </div>
@@ -744,7 +786,6 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                 const h   = selectedExt.health ?? computeHealth(selected.last_contact_date ?? null);
                 const sig = selectedExt.signal ?? healthToSignal(h);
                 const utilityVal = computedUtility(selectedExt);
-                const wordCount = (selected.description ?? "").trim().split(/\s+/).filter(Boolean).length;
                 return (
                   <div className="space-y-4">
                     {/* Signal alert */}
@@ -863,25 +904,10 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                             </button>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <textarea
-                              rows={2}
-                              value={selected.description ?? ""}
-                              onChange={e => {
-                                const val = e.target.value;
-                                setCompanies(ps => ps.map(c => c.id === selected.id ? { ...c, description: val } : c));
-                              }}
-                              onBlur={async e => {
-                                await saveCompanyField(selected.id, { description: e.target.value.trim() || null });
-                              }}
-                              placeholder="Company description…"
-                              className={cn(
-                                "w-full text-[11px] text-slate-700 border rounded px-1.5 py-1 focus:outline-none focus:border-blue-400 resize-none bg-transparent",
-                                wordCount > 60 ? "border-red-400" : "border-slate-200"
-                              )}
-                            />
-                            <p className={cn("text-[10px] mt-0.5", wordCount > 60 ? "text-red-500" : "text-slate-400")}>
-                              {wordCount}/60 words
-                            </p>
+                            {selected.description
+                              ? <p className="text-[11px] text-slate-700 leading-relaxed">{selected.description}</p>
+                              : <p className="text-[11px] text-slate-400 italic">No description yet — click ✨ to generate</p>
+                            }
                           </div>
                         </div>
 
@@ -1070,6 +1096,11 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         </div>
                         <textarea value={oppDesc} onChange={e => setOppDesc(e.target.value)} placeholder="Description (optional)"
                           rows={2} className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 resize-none" />
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] text-slate-500 flex-shrink-0">Action date</label>
+                          <input type="date" value={oppDue} onChange={e => setOppDue(e.target.value)}
+                            className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                        </div>
                         <div className="flex gap-2">
                           <button onClick={addOpportunity} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
                           <button onClick={() => setShowOppForm(false)} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
@@ -1092,6 +1123,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                           </div>
                           <p className="text-xs font-semibold text-slate-800">{opp.title}</p>
                           {opp.description && <p className="text-[11px] text-slate-500 mt-0.5">{opp.description}</p>}
+                          {opp.due && <p className="text-[10px] text-slate-400 mt-0.5">Due {formatDate(opp.due)}</p>}
                         </div>
                       ))}
                     </div>
@@ -1108,8 +1140,11 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
                     {showMatchForm && (
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3 space-y-2">
-                        <input value={matchPortco} onChange={e => setMatchPortco(e.target.value)} placeholder="Portco name"
-                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                        <select value={matchPortco} onChange={e => setMatchPortco(e.target.value)}
+                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
+                          <option value="">Select portfolio company…</option>
+                          {pipelineCompanies.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                        </select>
                         <select value={matchStatus} onChange={e => setMatchStatus(e.target.value as PortcoStatus)}
                           className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400">
                           {(["Active pilot", "Intro pending", "Exploring", "Not started"] as PortcoStatus[]).map(s => <option key={s}>{s}</option>)}
@@ -1268,18 +1303,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
             </div>
 
             {/* Panel footer */}
-            <div className="flex-shrink-0 border-t border-slate-200 px-4 py-3 space-y-2">
-              {/* Next action */}
-              <div className="space-y-1">
-                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Next Action</p>
-                <input value={selectedExt.next_action} onChange={e => saveExt(selected.id, { next_action: e.target.value })}
-                  placeholder="Describe next action…"
-                  className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                <input value={selectedExt.next_action_due} onChange={e => saveExt(selected.id, { next_action_due: e.target.value })}
-                  type="date" className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-              </div>
-
-              {/* View profile */}
+            <div className="flex-shrink-0 border-t border-slate-200 px-4 py-3">
               <a href={`/crm/companies/${selected.id}`}
                 className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors">
                 View Profile <ExternalLink size={11} />
