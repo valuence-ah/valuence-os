@@ -2,8 +2,9 @@
 // ─── Funds & Co-investors CRM — metrics · table · detail panel ────────────────
 
 import { useState, useMemo, useEffect } from "react";
-import type { Company } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
+import type { Company, Contact } from "@/lib/types";
+import { cn, formatDate, timeAgo } from "@/lib/utils";
 import {
   Search, X, Building2, TrendingUp, Users, AlertCircle,
   CheckCircle2, Zap, ChevronRight, ExternalLink, MapPin, Plus, Check,
@@ -543,6 +544,8 @@ interface Props {
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) {
+  const supabase = createClient();
+
   const [search, setSearch]             = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
   const [selectedId, setSelectedId]     = useState<string | null>(null);
@@ -552,6 +555,9 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
 
   // Panel tab
   const [fundTab, setFundTab] = useState<"overview" | "opportunities">("overview");
+
+  // Live contacts from Supabase — keyed by fund id
+  const [fundContacts, setFundContacts] = useState<Record<string, Contact[]>>({});
 
   // Add Fund modal
   const [showAddFund, setShowAddFund]   = useState(false);
@@ -621,7 +627,7 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
     return list;
   }, [search, activeFilter]);
 
-  // When selectedId changes, animate panel and reset tab
+  // When selectedId changes, animate panel, reset tab, and fetch live contacts
   useEffect(() => {
     if (selectedId) {
       setVisible(false);
@@ -634,10 +640,69 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
       setShowAddOverlap(false);
       setShowAddRelationship(false);
       setShowFundOppForm(false);
+
+      // Skip if already fetched
+      if (fundContacts[selectedId]) return;
+
+      // Fetch contacts: 1) by fund company name, 2) by hardcoded key contact names
+      const fund = FUND_INTELLIGENCE.find(f => f.id === selectedId);
+      if (!fund) return;
+
+      // Extract plain names from "Name (Role)" strings
+      const keyNames = fund.keyContacts.map(s => s.replace(/\s*\([^)]*\)$/, "").trim());
+
+      (async () => {
+        try {
+          // First: find the company in Supabase by fund name
+          const { data: coData } = await supabase
+            .from("companies")
+            .select("id")
+            .ilike("name", fund.co)
+            .limit(1)
+            .single();
+
+          let contacts: Contact[] = [];
+
+          if (coData?.id) {
+            // Pull contacts linked to this company
+            const { data: byCompany } = await supabase
+              .from("contacts")
+              .select("*")
+              .eq("company_id", coData.id)
+              .limit(20);
+            contacts = (byCompany as Contact[]) ?? [];
+          }
+
+          // Also match by key contact names (first + last name)
+          if (keyNames.length > 0) {
+            const { data: byName } = await supabase
+              .from("contacts")
+              .select("*")
+              .or(keyNames.map(n => {
+                const parts = n.split(" ");
+                const first = parts[0] ?? "";
+                const last = parts.slice(1).join(" ");
+                return `and(first_name.ilike.${first},last_name.ilike.${last})`;
+              }).join(","))
+              .limit(20);
+
+            // Merge, deduplicate by id
+            const existing = new Set(contacts.map(c => c.id));
+            for (const c of (byName as Contact[]) ?? []) {
+              if (!existing.has(c.id)) contacts.push(c);
+            }
+          }
+
+          setFundContacts(prev => ({ ...prev, [selectedId]: contacts }));
+        } catch {
+          // Silently fail — fall back to hardcoded display
+          setFundContacts(prev => ({ ...prev, [selectedId]: [] }));
+        }
+      })();
     } else {
       setVisible(false);
     }
-  }, [selectedId]);
+  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const baseSelected = selectedId
     ? FUND_INTELLIGENCE.find(f => f.id === selectedId) ?? null
@@ -1356,39 +1421,124 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
                       </div>
                     )}
 
-                    {/* 6. Key Contacts — 200px, scrollable, clickable */}
-                    <div className="px-4 py-3">
-                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Key Contacts</p>
-                      <div className="overflow-y-auto flex flex-col gap-1.5" style={{ maxHeight: 200 }}>
-                        {selected.keyContacts.map((contact, i) => (
-                          <button
-                            key={i}
-                            onClick={() => setSelectedContact(selectedContact === contact ? null : contact)}
-                            className="flex items-center gap-2 rounded-lg border border-slate-100 px-2.5 py-2 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 transition-colors text-left w-full"
-                          >
-                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center flex-shrink-0">
-                              <span className="text-white font-bold text-[8px]">{contact[0]}</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs text-slate-700 truncate">{contact}</p>
-                            </div>
-                            <ChevronRight size={12} className="text-slate-300 flex-shrink-0" />
-                          </button>
-                        ))}
-                      </div>
-                      {/* Contact detail expansion */}
-                      {selectedContact && (
-                        <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="text-xs font-semibold text-blue-800">{selectedContact.replace(/\s*\(.*\)$/, "")}</p>
-                            <button onClick={() => setSelectedContact(null)} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                    {/* 6. Key Contacts — live from Supabase, 200px, scrollable, clickable */}
+                    {(() => {
+                      const liveContacts = selectedId ? (fundContacts[selectedId] ?? null) : null;
+                      // Build display list: prefer live Supabase contacts, fall back to hardcoded
+                      const hardcodedNames = selected.keyContacts.map(s => ({
+                        displayStr: s,
+                        name: s.replace(/\s*\([^)]*\)$/, "").trim(),
+                        role: s.match(/\(([^)]+)\)/)?.[1] ?? null,
+                      }));
+
+                      return (
+                        <div className="px-4 py-3">
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Key Contacts</p>
+                          <div className="overflow-y-auto flex flex-col gap-1.5" style={{ maxHeight: 200 }}>
+                            {liveContacts === null ? (
+                              // Still loading
+                              <p className="text-[10px] text-slate-400 italic">Loading contacts…</p>
+                            ) : liveContacts.length > 0 ? (
+                              // Live Supabase contacts
+                              (liveContacts as Contact[]).map((c: Contact) => (
+                                <button
+                                  key={c.id}
+                                  onClick={() => setSelectedContact(selectedContact === c.id ? null : c.id)}
+                                  className={cn(
+                                    "flex items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors text-left w-full",
+                                    selectedContact === c.id
+                                      ? "border-blue-300 bg-blue-50"
+                                      : "border-slate-100 bg-slate-50 hover:bg-blue-50 hover:border-blue-200"
+                                  )}
+                                >
+                                  <div className={cn("w-7 h-7 rounded-full bg-gradient-to-br flex items-center justify-center flex-shrink-0", hashColor(`${c.first_name} ${c.last_name}`))}>
+                                    <span className="text-white font-bold text-[9px]">{c.first_name[0]}{c.last_name[0]}</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                                    {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
+                                  </div>
+                                  <ChevronRight size={12} className="text-slate-300 flex-shrink-0" />
+                                </button>
+                              ))
+                            ) : (
+                              // No live contacts — fall back to hardcoded display
+                              hardcodedNames.map((hc, i) => (
+                                <button
+                                  key={i}
+                                  onClick={() => setSelectedContact(selectedContact === hc.displayStr ? null : hc.displayStr)}
+                                  className={cn(
+                                    "flex items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors text-left w-full",
+                                    selectedContact === hc.displayStr
+                                      ? "border-blue-300 bg-blue-50"
+                                      : "border-slate-100 bg-slate-50 hover:bg-blue-50 hover:border-blue-200"
+                                  )}
+                                >
+                                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-white font-bold text-[9px]">{hc.name[0]}</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-slate-700 truncate">{hc.name}</p>
+                                    {hc.role && <p className="text-[10px] text-slate-400 truncate">{hc.role}</p>}
+                                  </div>
+                                  <ChevronRight size={12} className="text-slate-300 flex-shrink-0" />
+                                </button>
+                              ))
+                            )}
                           </div>
-                          {selectedContact.match(/\(([^)]+)\)/) && (
-                            <p className="text-[10px] text-blue-600">{selectedContact.match(/\(([^)]+)\)/)?.[1]}</p>
-                          )}
+
+                          {/* Contact detail card — rich for live contacts */}
+                          {selectedContact && (() => {
+                            const live = (liveContacts as Contact[] | null)?.find((c: Contact) => c.id === selectedContact);
+                            if (live) {
+                              return (
+                                <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs font-semibold text-blue-800">{live.first_name} {live.last_name}</p>
+                                    <button onClick={() => setSelectedContact(null)} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                                  </div>
+                                  {live.title && <p className="text-[10px] text-blue-600 font-medium">{live.title}</p>}
+                                  {live.email && (
+                                    <a href={`mailto:${live.email}`} className="flex items-center gap-1 text-[10px] text-blue-700 hover:underline truncate">
+                                      <ExternalLink size={9} className="flex-shrink-0" />{live.email}
+                                    </a>
+                                  )}
+                                  {live.phone && <p className="text-[10px] text-blue-600">{live.phone}</p>}
+                                  {live.last_contact_date && (
+                                    <p className="text-[10px] text-blue-500">Last contact: {formatDate(live.last_contact_date)}</p>
+                                  )}
+                                  {live.location_city && (
+                                    <p className="text-[10px] text-blue-400">{live.location_city}{live.location_country ? `, ${live.location_country}` : ""}</p>
+                                  )}
+                                  {live.linkedin_url && (
+                                    <a href={live.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-blue-700 hover:underline">
+                                      <ExternalLink size={9} className="flex-shrink-0" />LinkedIn
+                                    </a>
+                                  )}
+                                </div>
+                              );
+                            }
+                            // Fallback for hardcoded contact string
+                            const hcStr = typeof selectedContact === "string" ? selectedContact : null;
+                            if (hcStr) {
+                              const name = hcStr.replace(/\s*\([^)]*\)$/, "").trim();
+                              const role = hcStr.match(/\(([^)]+)\)/)?.[1];
+                              return (
+                                <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="text-xs font-semibold text-blue-800">{name}</p>
+                                    <button onClick={() => setSelectedContact(null)} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                                  </div>
+                                  {role && <p className="text-[10px] text-blue-600">{role}</p>}
+                                  <p className="text-[10px] text-blue-400 mt-1 italic">Not yet in contacts database</p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
-                      )}
-                    </div>
+                      );
+                    })()}
 
                     {/* 7. Relationship Timeline — with + Add button */}
                     <div className="px-4 py-3">
