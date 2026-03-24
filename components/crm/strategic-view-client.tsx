@@ -28,7 +28,7 @@ interface StrategicExt {
   next_action: string;
   next_action_due: string;
   owner: string;
-  scores: { mandate: number; relationship: number; portco: number; responsiveness: number };
+  scores: { strategic_focus: number; relationship: number; portco: number; responsiveness: number };
   portco_matches: { portco: string; status: PortcoStatus }[];
   opportunities: { id: string; title: string; type: string; urgency: OppUrgency; description: string }[];
   intel: { id: string; headline: string; source: string; url?: string; date: string; is_signal: boolean; summary?: string }[];
@@ -44,7 +44,7 @@ const DEFAULT_EXT: StrategicExt = {
   next_action: "",
   next_action_due: "",
   owner: "",
-  scores: { mandate: 50, relationship: 50, portco: 50, responsiveness: 50 },
+  scores: { strategic_focus: 50, relationship: 50, portco: 50, responsiveness: 50 },
   portco_matches: [],
   opportunities: [],
   intel: [],
@@ -416,7 +416,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
   // Computed utility = average of 4 scores
   function computedUtility(ext: StrategicExt): number {
-    return Math.round((ext.scores.mandate + ext.scores.relationship + ext.scores.portco + ext.scores.responsiveness) / 4);
+    return Math.round((ext.scores.strategic_focus + ext.scores.relationship + ext.scores.portco + ext.scores.responsiveness) / 4);
   }
 
   // Save partner
@@ -923,7 +923,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     <div>
                       <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Relationship Scores</h3>
                       <div className="space-y-2.5">
-                        <ScoreBar label="Mandate Alignment"    value={selectedExt.scores.mandate}      onChange={v => setScore("mandate", v)} />
+                        <ScoreBar label="Strategic Focus Alignment" value={selectedExt.scores.strategic_focus} onChange={v => setScore("strategic_focus", v)} />
                         <ScoreBar label="Relationship Strength" value={selectedExt.scores.relationship} onChange={v => setScore("relationship", v)} />
                         <ScoreBar label="Portco Synergy"       value={selectedExt.scores.portco}       onChange={v => setScore("portco", v)} />
                         <ScoreBar label="Responsiveness"       value={selectedExt.scores.responsiveness} onChange={v => setScore("responsiveness", v)} />
