@@ -287,7 +287,7 @@ function MapView({ companies, onSelect, selectedId }: { companies: Company[]; on
           const items = byRegion[reg];
           const total = items.reduce((s, c) => s + (c.commitment_goal ?? 0), 0);
           return (
-            <div key={reg} className={cn("rounded-xl border p-3", REGION_COLOR[reg])}>
+            <div key={reg} className={cn("rounded-xl border p-3 h-24", REGION_COLOR[reg])}>
               <p className={cn("text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full inline-block mb-2", REGION_HEADER[reg])}>{reg}</p>
               <p className="text-2xl font-bold text-slate-800">{items.length}</p>
               <p className="text-xs text-slate-500">LP{items.length !== 1 ? "s" : ""}</p>
