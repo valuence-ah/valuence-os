@@ -47,7 +47,7 @@ function fmtDate(iso: string | null | undefined): string {
 type ToastKind = "saving" | "saved" | "error";
 type ToastState = { message: string; type: ToastKind } | null;
 
-// ─── Combo editor factory ─────────────────────────────────────────────────────
+// ─── Combo editor factory (single-value) ─────────────────────────────────────
 
 function makeComboEditor<TRow>(options: string[]) {
   return function ComboEditor({ row, column, onRowChange, onClose }: RenderEditCellProps<TRow>) {
@@ -68,6 +68,80 @@ function makeComboEditor<TRow>(options: string[]) {
           {options.map(o => <option key={o} value={o} />)}
         </datalist>
       </>
+    );
+  };
+}
+
+// ─── Multi-select editor factory (array values) ───────────────────────────────
+
+function makeMultiSelectEditor<TRow>(options: string[]) {
+  return function MultiSelectEditor({ row, column, onRowChange, onClose }: RenderEditCellProps<TRow>) {
+    const raw = (row as Record<string, unknown>)[column.key as string];
+    const initial: string[] = Array.isArray(raw) ? (raw as string[]) : (raw ? [String(raw)] : []);
+    const [selected, setSelected] = useState<string[]>(initial);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+    useEffect(() => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setDropPos({ top: rect.bottom + 2, left: rect.left, width: Math.max(rect.width, 200) });
+      }
+      containerRef.current?.focus();
+    }, []);
+
+    function toggle(opt: string) {
+      setSelected(prev => prev.includes(opt) ? prev.filter(x => x !== opt) : [...prev, opt]);
+    }
+
+    function commit() {
+      onRowChange({ ...row, [column.key]: selected });
+      onClose(true);
+    }
+
+    return (
+      <div
+        ref={containerRef}
+        tabIndex={0}
+        style={{ width: "100%", height: "100%", padding: "0 6px", display: "flex", alignItems: "center", background: "#fff", outline: "none", cursor: "pointer" }}
+        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) commit(); }}
+        onKeyDown={(e) => { if (e.key === "Escape") onClose(false); if (e.key === "Enter") commit(); }}
+      >
+        <span style={{ fontSize: 11, color: "#374151", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {selected.length > 0 ? selected.join(", ") : "Select…"}
+        </span>
+        {dropPos && (
+          <div style={{ position: "fixed", top: dropPos.top, left: dropPos.left, minWidth: dropPos.width, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.15)", zIndex: 99999, overflow: "hidden" }}>
+            {options.map(opt => {
+              const checked = selected.includes(opt);
+              return (
+                <div
+                  key={opt}
+                  onMouseDown={(e) => { e.preventDefault(); toggle(opt); }}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", fontSize: 12, background: checked ? "#eff6ff" : "transparent", color: checked ? "#1e40af" : "#374151", userSelect: "none" }}
+                >
+                  <div style={{ width: 14, height: 14, border: `1.5px solid ${checked ? "#3b82f6" : "#d1d5db"}`, borderRadius: 3, background: checked ? "#3b82f6" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.1s" }}>
+                    {checked && (
+                      <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                        <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                  {opt}
+                </div>
+              );
+            })}
+            <div style={{ borderTop: "1px solid #f1f5f9", padding: "5px 12px" }}>
+              <div
+                onMouseDown={(e) => { e.preventDefault(); commit(); }}
+                style={{ fontSize: 11, color: "#3b82f6", cursor: "pointer", fontWeight: 600, textAlign: "center", padding: "2px 0" }}
+              >
+                ✓ Apply
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     );
   };
 }
@@ -179,12 +253,36 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         renderEditCell: renderTextEditor,
       },
       {
-        key: "type",
+        key: "types",
         name: "Type",
-        width: 150,
+        width: 180,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<CompanyRow>(["Startup","Limited Partner","Investor","Strategic Partner","Other"]),
+        renderCell: ({ row }: { row: CompanyRow }) => {
+          const vals = Array.isArray(row.types) ? row.types : (row.types ? [String(row.types)] : []);
+          if (vals.length === 0) return null;
+          const colorMap: Record<string, { bg: string; color: string }> = {
+            "startup":          { bg: "#eff6ff", color: "#1d4ed8" },
+            "limited partner":  { bg: "#f0fdf4", color: "#15803d" },
+            "investor":         { bg: "#faf5ff", color: "#7e22ce" },
+            "strategic partner":{ bg: "#fff7ed", color: "#c2410c" },
+            "ecosystem_partner":{ bg: "#ecfdf5", color: "#065f46" },
+            "other":            { bg: "#f8fafc", color: "#64748b" },
+          };
+          return (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, padding: "2px 0", alignItems: "center" }}>
+              {vals.map(v => {
+                const c = colorMap[v.toLowerCase()] ?? { bg: "#f1f5f9", color: "#475569" };
+                return (
+                  <span key={v} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500, whiteSpace: "nowrap" }}>
+                    {v}
+                  </span>
+                );
+              })}
+            </div>
+          );
+        },
+        renderEditCell: makeMultiSelectEditor<CompanyRow>(["startup","limited partner","investor","strategic partner","ecosystem_partner","other"]),
       },
       {
         key: "lp_stage",
@@ -1043,7 +1141,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
 
               {isCompanies ? (
                 <>
-                  <FilterField label="Type" filterKey="type" isCompanyTab={true} options={["startup","limited partner","investor","strategic partner","ecosystem_partner","other"]} />
+                  <FilterField label="Type" filterKey="types" isCompanyTab={true} options={["startup","limited partner","investor","strategic partner","ecosystem_partner","other"]} />
                   <FilterField label="Deal Status" filterKey="deal_status" isCompanyTab={true} options={["sourced","monitoring","active_deal","portfolio","passed","exited"]} />
                   <FilterField label="Stage / LP Stage" filterKey="stage" isCompanyTab={true} options={["pre-seed","seed","series_a","series_b","Lead","Initial Meeting","Discussion in Process","Due Diligence","Committed","Passed"]} />
                   <FilterField label="Sector" filterKey="sectors" isCompanyTab={true} options={["cleantech","techbio","advanced materials","energy storage","carbon capture","climate tech","synthetic biology","industrial biotech","agtech","water tech","circular economy","deep tech","hardware","other"]} />
