@@ -364,6 +364,19 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [interactions, setInteractions]   = useState<Interaction[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
+  // Always re-fetch companies from Supabase on mount — bypasses Next.js Router Cache
+  // which can replay stale initialCompanies after client-side navigation.
+  useEffect(() => {
+    supabase
+      .from("companies")
+      .select("*")
+      .contains("types", ["limited partner"])
+      .order("name", { ascending: true })
+      .limit(10000)
+      .then(({ data }) => { if (data) setCompanies(data as Company[]); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Panel edit state
   const [editStage, setEditStage]     = useState("");
   const [editGoal, setEditGoal]       = useState("");
