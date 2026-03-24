@@ -35,13 +35,23 @@ const TIER_OPTIONS = ["Tier 1", "Tier 2", "Tier 3"] as const;
 const TIER_TO_PRIORITY: Record<string, "High" | "Medium" | "Low"> = { "Tier 1": "High", "Tier 2": "Medium", "Tier 3": "Low" };
 const PRIORITY_TO_TIER: Record<string, string> = { High: "Tier 1", Medium: "Tier 2", Low: "Tier 3" };
 
-// ── DDQ Status — derived from stage ───────────────────────────────────────────
-function getDdqStatus(stage: string | null) {
-  if (!stage || stage === "Lead" || stage === "Initial Meeting") return { label: "Not Started", color: "bg-slate-100 text-slate-500" };
-  if (stage === "Discussion in Process") return { label: "Requested",   color: "bg-amber-100 text-amber-700" };
-  if (stage === "Due Diligence")         return { label: "In Progress",  color: "bg-blue-100 text-blue-700" };
-  if (stage === "Committed")             return { label: "Complete",     color: "bg-emerald-100 text-emerald-700" };
-  return { label: "N/A", color: "bg-slate-100 text-slate-400" };
+// ── DDQ Status — manually editable (stored in localStorage per company) ───────
+const DDQ_STATUS_OPTIONS = ["Not Started", "Requested", "In Progress", "Complete", "N/A"] as const;
+const DDQ_STATUS_COLOR: Record<string, string> = {
+  "Not Started": "bg-slate-100 text-slate-500",
+  "Requested":   "bg-amber-100 text-amber-700",
+  "In Progress": "bg-blue-100 text-blue-700",
+  "Complete":    "bg-emerald-100 text-emerald-700",
+  "N/A":         "bg-slate-100 text-slate-400",
+};
+function getDdqColor(label: string) { return DDQ_STATUS_COLOR[label] ?? "bg-slate-100 text-slate-500"; }
+// Derive default from stage when no manual value set
+function defaultDdqStatus(stage: string | null): string {
+  if (!stage || stage === "Lead" || stage === "Initial Meeting") return "Not Started";
+  if (stage === "Discussion in Process") return "Requested";
+  if (stage === "Due Diligence")         return "In Progress";
+  if (stage === "Committed")             return "Complete";
+  return "N/A";
 }
 
 // ── Probability ────────────────────────────────────────────────────────────────
@@ -62,7 +72,7 @@ const DEFAULT_COL_WIDTHS: Record<string, number> = {
   Company: 180, "LP Type": 110, Tier: 75, Stage: 150,
   "Commit Goal": 110, Expected: 100, "Prob %": 100,
   "Last Touchpoint": 130, "Next Follow-up": 120,
-  "DDQ Status": 110, "Strategic Value": 130, City: 90,
+  "DDQ Status": 110, "Strategic Value": 130, City: 90, Country: 100,
 };
 
 // ── SUB-COMPONENTS ─────────────────────────────────────────────────────────────
@@ -112,32 +122,32 @@ function StagePicker({ value, onChange }: { value: string; onChange: (s: string)
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg bg-white hover:border-blue-300 transition-colors text-left"
+        className="w-full flex items-center gap-2 px-2 py-1.5 border border-slate-200 rounded-md bg-white hover:border-blue-300 transition-colors text-left"
       >
         {value ? (
           <>
             <span className={cn("w-2 h-2 rounded-full flex-shrink-0", STAGE_DOT[value])} />
-            <span className={cn("text-sm flex-1", STAGE_TEXT[value])}>{value}</span>
+            <span className={cn("text-xs flex-1", STAGE_TEXT[value])}>{value}</span>
           </>
         ) : (
-          <span className="text-sm text-slate-400 flex-1">Not set</span>
+          <span className="text-xs text-slate-400 flex-1">Not set</span>
         )}
         <ChevronDown size={13} className="text-slate-400 flex-shrink-0" />
       </button>
       {open && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 py-1 overflow-hidden">
           <button onClick={() => { onChange(""); setOpen(false); }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 text-left">
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 text-left">
             <span className="w-2 h-2 rounded-full bg-slate-200 flex-shrink-0" />
-            <span className="text-sm text-slate-400">Not set</span>
-            {!value && <Check size={11} className="ml-auto text-blue-600" />}
+            <span className="text-xs text-slate-400">Not set</span>
+            {!value && <Check size={10} className="ml-auto text-blue-600" />}
           </button>
           {LP_STAGE_OPTIONS.map(s => (
             <button key={s} onClick={() => { onChange(s); setOpen(false); }}
-              className={cn("w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 text-left", value === s ? STAGE_BG[s] : "")}>
+              className={cn("w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 text-left", value === s ? STAGE_BG[s] : "")}>
               <span className={cn("w-2 h-2 rounded-full flex-shrink-0", STAGE_DOT[s])} />
-              <span className={cn("text-sm", STAGE_TEXT[s])}>{s}</span>
-              {value === s && <Check size={11} className="ml-auto text-blue-600" />}
+              <span className={cn("text-xs", STAGE_TEXT[s])}>{s}</span>
+              {value === s && <Check size={10} className="ml-auto text-blue-600" />}
             </button>
           ))}
         </div>
@@ -485,6 +495,23 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [editStage, setEditStage]     = useState("");
   const [editGoal, setEditGoal]       = useState("");
   const [editLpType, setEditLpType]   = useState("");
+  const [editCity, setEditCity]       = useState("");
+  const [editCountry, setEditCountry] = useState("");
+
+  // DDQ status — manually set per company, stored in localStorage
+  const [ddqStatusMap, setDdqStatusMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const stored = localStorage.getItem("lp_ddq_status_map");
+    if (stored) { try { setDdqStatusMap(JSON.parse(stored)); } catch {} }
+  }, []);
+  function saveDdqStatus(companyId: string, status: string) {
+    setDdqStatusMap(prev => {
+      const next = { ...prev, [companyId]: status };
+      localStorage.setItem("lp_ddq_status_map", JSON.stringify(next));
+      return next;
+    });
+  }
+  function getDdq(co: Company) { return ddqStatusMap[co.id] ?? defaultDdqStatus(co.lp_stage); }
 
   // Fund target (localStorage)
   const [fundTarget, setFundTarget]           = useState(0);
@@ -589,11 +616,11 @@ export function LpViewClient({ initialCompanies }: Props) {
     const committedAmt = committed.reduce((s, c) => s + (c.commitment_goal ?? 0), 0);
     const softAmt      = softCircled.reduce((s, c) => s + (c.commitment_goal ?? 0), 0);
     const pipelineAmt  = pipeline.reduce((s, c) => s + (c.commitment_goal ?? 0), 0);
-    const withGoal     = companies.filter(c => c.commitment_goal != null);
-    const avgCheck     = withGoal.length ? withGoal.reduce((s, c) => s + (c.commitment_goal ?? 0), 0) / withGoal.length : 0;
+    // Expected = sum of commitment_goal * probability for all LPs
+    const totalExpected = companies.reduce((s, c) => s + (c.commitment_goal ?? 0) * calcProb(c.lp_stage), 0);
     const convRate     = companies.length ? Math.round((committed.length / companies.length) * 100) : 0;
     return {
-      committedAmt, softAmt, pipelineAmt, avgCheck, convRate, activeCount: active.length,
+      committedAmt, softAmt, pipelineAmt, totalExpected, convRate, activeCount: active.length,
       committedPct: fundTarget > 0 ? (committedAmt / fundTarget) * 100 : 0,
       softPct:      fundTarget > 0 ? (softAmt / fundTarget) * 100 : 0,
       pipelinePct:  fundTarget > 0 ? (pipelineAmt / fundTarget) * 100 : 0,
@@ -632,6 +659,8 @@ export function LpViewClient({ initialCompanies }: Props) {
     setEditStage(co.lp_stage ?? "");
     setEditGoal(co.commitment_goal != null ? String(co.commitment_goal) : "");
     setEditLpType(co.lp_type ?? "");
+    setEditCity(co.location_city ?? "");
+    setEditCountry(co.location_country ?? "");
     setContactsManaging(false);
     setShowAddContactForm(false);
     setAddingActivity(false);
@@ -640,14 +669,17 @@ export function LpViewClient({ initialCompanies }: Props) {
 
   const selected = companies.find(c => c.id === selectedId) ?? null;
 
-  // Save
+  // Save — optimistic update so table reflects changes immediately
   async function saveField(id: string, patch: Partial<Company>) {
+    setCompanies(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
     const { data, error } = await supabase.from("companies").update(patch).eq("id", id).select().single();
     if (!error && data) {
       setCompanies(prev => prev.map(c => c.id === data.id ? (data as Company) : c));
       if ("lp_stage" in patch) setEditStage((data as Company).lp_stage ?? "");
       if ("commitment_goal" in patch) setEditGoal((data as Company).commitment_goal != null ? String((data as Company).commitment_goal) : "");
       if ("lp_type" in patch) setEditLpType((data as Company).lp_type ?? "");
+      if ("location_city" in patch) setEditCity((data as Company).location_city ?? "");
+      if ("location_country" in patch) setEditCountry((data as Company).location_country ?? "");
     }
   }
 
@@ -726,7 +758,7 @@ export function LpViewClient({ initialCompanies }: Props) {
       {/* ── Metrics bar ───────────────────────────────────────────────────── */}
       <div className="px-5 py-4 border-b border-slate-200 bg-white">
         <div className="flex gap-3 mb-4">
-          {/* Fund Target — manually set */}
+          {/* 1 — Fund Target — manually set */}
           <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-500">
               <Target size={14} className="text-white" />
@@ -740,25 +772,7 @@ export function LpViewClient({ initialCompanies }: Props) {
               <p className="text-[11px] text-slate-400">{companies.length} LPs</p>
             </div>
           </div>
-          {/* Committed */}
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-emerald-500"><CheckSquare size={14} className="text-white" /></div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Committed</p>
-              <p className="text-lg font-bold text-slate-900 leading-tight">{fmt(metrics.committedAmt || null)}</p>
-              {fundTarget > 0 && <p className="text-[11px] text-slate-400">{pct(metrics.committedPct / 100)} of target</p>}
-            </div>
-          </div>
-          {/* Soft-circled */}
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-500"><TrendingUp size={14} className="text-white" /></div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Soft-circled</p>
-              <p className="text-lg font-bold text-slate-900 leading-tight">{fmt(metrics.softAmt || null)}</p>
-              {fundTarget > 0 && <p className="text-[11px] text-slate-400">{pct(metrics.softPct / 100)} of target</p>}
-            </div>
-          </div>
-          {/* Active Pipeline */}
+          {/* 2 — Active Pipeline */}
           <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-violet-500"><BarChart2 size={14} className="text-white" /></div>
             <div className="min-w-0 flex-1">
@@ -767,15 +781,37 @@ export function LpViewClient({ initialCompanies }: Props) {
               <p className="text-[11px] text-slate-400">{fmt(metrics.pipelineAmt || null)}</p>
             </div>
           </div>
-          {/* Avg Check */}
+          {/* 3 — Expected Commitment (sum of commitment_goal × probability) */}
           <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-indigo-500"><DollarSign size={14} className="text-white" /></div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Avg Check Size</p>
-              <p className="text-lg font-bold text-slate-900 leading-tight">{fmt(metrics.avgCheck || null)}</p>
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Expected Commitment</p>
+              <p className="text-lg font-bold text-slate-900 leading-tight">{fmt(metrics.totalExpected || null)}</p>
+              <p className="text-[11px] text-slate-400">probability-weighted</p>
             </div>
           </div>
-          {/* Conversion */}
+          {/* 4 — Soft-circled (DD Stage) */}
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-500"><TrendingUp size={14} className="text-white" /></div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Soft-circled</p>
+                <span className="text-[10px] text-slate-300 normal-case font-normal">(DD Stage)</span>
+              </div>
+              <p className="text-lg font-bold text-slate-900 leading-tight">{fmt(metrics.softAmt || null)}</p>
+              {fundTarget > 0 && <p className="text-[11px] text-slate-400">{pct(metrics.softPct / 100)} of target</p>}
+            </div>
+          </div>
+          {/* 5 — Committed */}
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-emerald-500"><CheckSquare size={14} className="text-white" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Committed</p>
+              <p className="text-lg font-bold text-slate-900 leading-tight">{fmt(metrics.committedAmt || null)}</p>
+              {fundTarget > 0 && <p className="text-[11px] text-slate-400">{pct(metrics.committedPct / 100)} of target</p>}
+            </div>
+          </div>
+          {/* 6 — Conversion */}
           <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-rose-500"><ArrowUpRight size={14} className="text-white" /></div>
             <div className="min-w-0 flex-1">
@@ -881,7 +917,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                   const isActive = co.id === selectedId;
                   const p = calcProb(co.lp_stage);
                   const expected = co.commitment_goal != null ? co.commitment_goal * p : null;
-                  const ddq = getDdqStatus(co.lp_stage);
+                  const ddqLabel = getDdq(co);
                   const touch = lastTouchMap[co.id];
                   const overdue = touch ? (Date.now() - new Date(touch.date).getTime()) / 86_400_000 > 30 : false;
                   const tags = (co.tags ?? []).slice(0, 2);
@@ -930,7 +966,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                         ) : <span className="text-slate-300 text-xs">Never</span>}
                       </td>
                       <td className="px-3 py-2.5 text-xs text-slate-500">{co.last_contact_date ? formatDate(co.last_contact_date) : <span className="text-slate-300">—</span>}</td>
-                      <td className="px-3 py-2.5"><span className={cn("text-[11px] px-2 py-0.5 rounded-full font-medium", ddq.color)}>{ddq.label}</span></td>
+                      <td className="px-3 py-2.5"><span className={cn("text-[11px] px-2 py-0.5 rounded-full font-medium", getDdqColor(ddqLabel))}>{ddqLabel}</span></td>
                       <td className="px-3 py-2.5">
                         <div className="flex gap-1 flex-wrap">
                           {tags.length > 0 ? tags.map(t => <span key={t} className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">{t}</span>)
@@ -938,6 +974,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-xs text-slate-500">{co.location_city ?? <span className="text-slate-300">—</span>}</td>
+                      <td className="px-3 py-2.5 text-xs text-slate-500">{co.location_country ?? <span className="text-slate-300">—</span>}</td>
                       <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                         <button className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded hover:bg-slate-200 text-slate-400 transition-all"><MoreHorizontal size={13} /></button>
                       </td>
@@ -1051,12 +1088,16 @@ export function LpViewClient({ initialCompanies }: Props) {
                     </div>
                     <span className="text-sm font-bold text-slate-800">{expectedCommitment != null ? fmt(expectedCommitment) : "—"}</span>
                   </div>
-                  {/* DDQ Status — read-only */}
+                  {/* DDQ Status — manually editable */}
                   <div>
                     <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">DDQ Status</p>
-                    <span className={cn("text-[11px] px-2 py-1 rounded-full font-medium inline-block", getDdqStatus(selected.lp_stage).color)}>
-                      {getDdqStatus(selected.lp_stage).label}
-                    </span>
+                    <select
+                      className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+                      value={getDdq(selected)}
+                      onChange={e => saveDdqStatus(selected.id, e.target.value)}
+                    >
+                      {DDQ_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </div>
                   {/* Tier — manually inputted (stored as priority) */}
                   <div>
@@ -1073,6 +1114,35 @@ export function LpViewClient({ initialCompanies }: Props) {
                       <option value="">Not set</option>
                       {TIER_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Location — editable, linked to company record */}
+              <div className="pt-4 border-t border-slate-100">
+                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Location</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">City</p>
+                    <input
+                      type="text"
+                      placeholder="e.g. Seoul"
+                      value={editCity}
+                      onChange={e => setEditCity(e.target.value)}
+                      onBlur={async () => { await saveField(selected.id, { location_city: editCity.trim() || null }); }}
+                      className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Country</p>
+                    <input
+                      type="text"
+                      placeholder="e.g. South Korea"
+                      value={editCountry}
+                      onChange={e => setEditCountry(e.target.value)}
+                      onBlur={async () => { await saveField(selected.id, { location_country: editCountry.trim() || null }); }}
+                      className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+                    />
                   </div>
                 </div>
               </div>
