@@ -1376,49 +1376,67 @@ export function TasksClient() {
       {/* Top bar */}
       <div className="flex-shrink-0 bg-white border-b border-slate-200 px-5 pt-4 pb-3 space-y-3">
         {/* Stat cards — full width */}
-        <div className="flex gap-2">
-          <div className="flex-1 h-24 min-w-[100px] rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50 flex flex-col justify-between">
-            <p className="text-[10px] text-slate-400 uppercase font-medium">Total Tasks</p>
-            <p className="text-2xl font-bold text-slate-700">{totalDisplay}</p>
-            <p className="text-[10px] text-slate-400">non-completed</p>
+        <div className="flex gap-3">
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-500"><AlignLeft size={14} className="text-white" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Total Tasks</p>
+              <p className="text-lg font-bold text-slate-900 leading-tight">{totalDisplay}</p>
+              <p className="text-xs text-slate-400">non-completed</p>
+            </div>
           </div>
-          <div className="flex-1 h-24 min-w-[100px] rounded-xl border border-red-100 px-3 py-2.5 bg-red-50 flex flex-col justify-between">
-            <p className="text-[10px] text-red-400 uppercase font-medium">Overdue</p>
-            <p className="text-2xl font-bold text-red-600">{overdueCnt}</p>
-            <p className="text-[10px] text-red-400">need attention</p>
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-red-500"><AlertCircle size={14} className="text-white" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Overdue</p>
+              <p className="text-lg font-bold text-slate-900 leading-tight">{overdueCnt}</p>
+              <p className="text-xs text-slate-400">need attention</p>
+            </div>
           </div>
-          <div className="flex-1 h-24 min-w-[100px] rounded-xl border border-amber-100 px-3 py-2.5 bg-amber-50 flex flex-col justify-between">
-            <p className="text-[10px] text-amber-500 uppercase font-medium">At Risk</p>
-            <p className="text-2xl font-bold text-amber-600">{atRiskCnt}</p>
-            <p className="text-[10px] text-amber-400">watch closely</p>
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-500"><Flag size={14} className="text-white" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">At Risk</p>
+              <p className="text-lg font-bold text-slate-900 leading-tight">{atRiskCnt}</p>
+              <p className="text-xs text-slate-400">watch closely</p>
+            </div>
           </div>
-          <div className="flex-1 h-24 min-w-[100px] rounded-xl border border-green-100 px-3 py-2.5 bg-green-50 flex flex-col justify-between">
-            <p className="text-[10px] text-green-500 uppercase font-medium">On Track</p>
-            <p className="text-2xl font-bold text-green-600">{onTrackCnt}</p>
-            <p className="text-[10px] text-green-400">progressing</p>
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-green-500"><CheckCircle2 size={14} className="text-white" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">On Track</p>
+              <p className="text-lg font-bold text-slate-900 leading-tight">{onTrackCnt}</p>
+              <p className="text-xs text-slate-400">progressing</p>
+            </div>
           </div>
-          <div className="flex-1 h-24 min-w-[100px] rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50 flex flex-col justify-between">
-            <p className="text-[10px] text-slate-400 uppercase font-medium">Not Started</p>
-            <p className="text-2xl font-bold text-slate-500">{notStartedCnt}</p>
-            <p className="text-[10px] text-slate-400">pending</p>
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-400"><Circle size={14} className="text-white" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Not Started</p>
+              <p className="text-lg font-bold text-slate-900 leading-tight">{notStartedCnt}</p>
+              <p className="text-xs text-slate-400">pending</p>
+            </div>
           </div>
-          <div className="flex-1 h-24 min-w-[150px] rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50 flex flex-col justify-between">
-            <p className="text-[10px] text-slate-400 uppercase font-medium">Workload</p>
-            <div className="space-y-1">
-              {(["Andrew", "Gene", "Lance"] as const).map(owner => {
-                const cnt = ownerCounts[owner];
-                const pct = (cnt / maxOwnerCount) * 100;
-                const barColor = owner === "Andrew" ? "bg-blue-400" : owner === "Gene" ? "bg-violet-400" : "bg-teal-400";
-                return (
-                  <div key={owner} className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-slate-500 w-9 flex-shrink-0">{owner[0]}</span>
-                    <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className={cn("h-full rounded-full", barColor)} style={{ width: `${pct}%` }} />
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-500"><Users size={14} className="text-white" /></div>
+            <div className="min-w-0 flex-1 flex flex-col justify-between h-full">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Workload</p>
+              <div className="space-y-1">
+                {(["Andrew", "Gene", "Lance"] as const).map(owner => {
+                  const cnt = ownerCounts[owner];
+                  const pct = (cnt / maxOwnerCount) * 100;
+                  const barColor = owner === "Andrew" ? "bg-blue-400" : owner === "Gene" ? "bg-violet-400" : "bg-teal-400";
+                  return (
+                    <div key={owner} className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-500 w-9 flex-shrink-0">{owner[0]}</span>
+                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={cn("h-full rounded-full", barColor)} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-[10px] text-slate-500 w-4 flex-shrink-0 text-right">{cnt}</span>
                     </div>
-                    <span className="text-[10px] text-slate-500 w-4 flex-shrink-0 text-right">{cnt}</span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>

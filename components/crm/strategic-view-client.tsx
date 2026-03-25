@@ -3,12 +3,12 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Company, Contact, Interaction } from "@/lib/types";
+import type { Company, Contact, Interaction, ContactType } from "@/lib/types";
 import { cn, formatDate, getInitials, timeAgo } from "@/lib/utils";
 import {
   Search, Plus, X, Check, Loader2, Mail, Video, Phone, FileText,
-  Building2, Target, TrendingUp, AlertCircle, Users, Shield,
-  Handshake, MoreHorizontal, ChevronRight, ExternalLink, RefreshCw, MapPin,
+  Building2, Target, TrendingUp, AlertCircle, Users, User, Shield,
+  Handshake, MoreHorizontal, ChevronRight, ExternalLink, RefreshCw, MapPin, Link2,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -284,12 +284,39 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   // Sector auto-generate
   const [loadingSector, setLoadingSector]   = useState(false);
 
+  // Activity form
+  const [addingActivity, setAddingActivity] = useState(false);
+  const [activityDate, setActivityDate]     = useState(() => new Date().toISOString().slice(0, 10));
+  const [activityType, setActivityType]     = useState<"call" | "meeting" | "email">("call");
+  const [activityNote, setActivityNote]     = useState("");
+  const [savingActivity, setSavingActivity] = useState(false);
+  const [activityContactIds, setActivityContactIds] = useState<string[]>([]);
+
+  // Link existing contact
+  const [showLinkContactForm, setShowLinkContactForm] = useState(false);
+  const [linkContactSearch, setLinkContactSearch]     = useState("");
+  const [linkContactSuggestions, setLinkContactSuggestions] = useState<Contact[]>([]);
+  const [linkingContact, setLinkingContact]           = useState(false);
+
+  // Contacts manage mode
+  const [contactsManaging, setContactsManaging] = useState(false);
+  const [showAddContactForm, setShowAddContactForm] = useState(false);
+  const [newContactFirst, setNewContactFirst] = useState("");
+  const [newContactLast, setNewContactLast]   = useState("");
+  const [newContactEmail, setNewContactEmail] = useState("");
+  const [newContactTitle, setNewContactTitle] = useState("");
+  const [addingContact, setAddingContact]     = useState(false);
+  const [contactOrder, setContactOrder]       = useState<string[]>([]);
+  const strContactDragIdx                     = useRef<number | null>(null);
+
   // Pipeline companies for portco match dropdown
   const [pipelineCompanies, setPipelineCompanies] = useState<{ id: string; name: string }[]>([]);
 
   // Resizable columns
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_COL_WIDTHS);
   const resizingCol = useRef<{ col: string; startX: number; startW: number } | null>(null);
+  const activityFormRef = useRef<HTMLDivElement>(null);
+  const linkSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function onResizeStart(col: string, e: React.MouseEvent) {
     e.preventDefault();
@@ -352,6 +379,20 @@ export function StrategicViewClient({ initialCompanies }: Props) {
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Close Add Activity form on outside click
+  useEffect(() => {
+    if (!addingActivity) return;
+    function handleOutside(e: MouseEvent) {
+      if (activityFormRef.current && !activityFormRef.current.contains(e.target as Node)) {
+        setAddingActivity(false);
+        setActivityNote("");
+        setActivityContactIds([]);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [addingActivity]);
 
   function getExt(id: string): StrategicExt {
     return extMap[id] ?? { ...DEFAULT_EXT, scores: { ...DEFAULT_EXT.scores } };
@@ -522,6 +563,80 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     setLoadingIntel(false);
   }
 
+  // ── Add Activity ──────────────────────────────────────────────────────────
+  async function handleAddActivity() {
+    if (!selected) return;
+    setSavingActivity(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: newInt } = await supabase.from("interactions").insert({
+      company_id: selected.id, type: activityType, date: activityDate,
+      subject: { call: "Call", meeting: "Meeting", email: "Email" }[activityType],
+      body: activityNote.trim() || null, created_by: user?.id ?? null,
+      contact_ids: activityContactIds.length > 0 ? activityContactIds : null,
+    }).select().single();
+    setSavingActivity(false);
+    if (newInt) setInteractions(prev => [newInt as Interaction, ...prev]);
+    // Update last_contact_date for tagged contacts
+    if (activityContactIds.length > 0) {
+      await supabase.from("contacts").update({ last_contact_date: new Date(activityDate).toISOString() }).in("id", activityContactIds);
+      setContacts(prev => prev.map(c => activityContactIds.includes(c.id) ? { ...c, last_contact_date: new Date(activityDate).toISOString() } : c));
+    }
+    setAddingActivity(false); setActivityNote(""); setActivityDate(new Date().toISOString().slice(0, 10)); setActivityType("call"); setActivityContactIds([]);
+  }
+
+  // ── Link existing contact ─────────────────────────────────────────────────
+  function searchLinkContacts(query: string) {
+    if (linkSearchTimer.current) clearTimeout(linkSearchTimer.current);
+    setLinkContactSearch(query);
+    if (!query.trim() || query.length < 2) { setLinkContactSuggestions([]); return; }
+    linkSearchTimer.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from("contacts")
+        .select("id, first_name, last_name, email, title, company_id")
+        .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(8);
+      setLinkContactSuggestions((data as Contact[]) ?? []);
+    }, 250);
+  }
+
+  async function linkContactToCompany(contactId: string) {
+    if (!selected) return;
+    setLinkingContact(true);
+    const { data, error } = await supabase
+      .from("contacts")
+      .update({ company_id: selected.id })
+      .eq("id", contactId)
+      .select()
+      .single();
+    if (error) { alert(error.message); }
+    else if (data) {
+      setContacts(prev => [...prev, data as Contact]);
+      setShowLinkContactForm(false);
+      setLinkContactSearch("");
+      setLinkContactSuggestions([]);
+    }
+    setLinkingContact(false);
+  }
+
+  async function handleAddContact() {
+    if (!selected || !newContactFirst.trim()) return;
+    setAddingContact(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: newC, error } = await supabase.from("contacts").insert({
+      first_name: newContactFirst.trim(), last_name: newContactLast.trim() || null,
+      email: newContactEmail.trim() || null, title: newContactTitle.trim() || null,
+      company_id: selected.id, type: "Other" as ContactType, status: "active" as const,
+      is_primary_contact: contacts.length === 0, created_by: user?.id ?? null,
+    }).select().single();
+    setAddingContact(false);
+    if (error) { alert(error.message); return; }
+    if (newC) {
+      setContacts(prev => [...prev, newC as Contact]);
+      setShowAddContactForm(false);
+      setNewContactFirst(""); setNewContactLast(""); setNewContactEmail(""); setNewContactTitle("");
+    }
+  }
+
   // ── Panel helpers ──────────────────────────────────────────────────────────
 
   function toggleRole(role: StrategicRole) {
@@ -631,21 +746,55 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-50">
 
       {/* ── Metrics bar ──────────────────────────────────────────────────────── */}
-      <div className="flex gap-3 px-5 py-3 bg-white border-b border-slate-200 flex-shrink-0">
-        {[
-          { label: "Total Strategics",    value: metrics.total,     icon: <Building2 size={14} className="text-slate-500" /> },
-          { label: "Active Relationships", value: metrics.active,   icon: <Users size={14} className="text-emerald-500" /> },
-          { label: "Co-invest Signals",   value: metrics.coinvest,  icon: <TrendingUp size={14} className="text-amber-500" /> },
-          { label: "Open Pilot Opps",     value: metrics.pilot,     icon: <Target size={14} className="text-blue-500" /> },
-          { label: "Diligence Experts",   value: metrics.diligence, icon: <Shield size={14} className="text-violet-500" /> },
-          { label: "Cooling Off",         value: metrics.cooling,   icon: <AlertCircle size={14} className="text-red-400" /> },
-        ].map(m => (
-          <div key={m.label} className="flex-1 bg-slate-50 rounded-xl border border-slate-200 px-3 py-2.5 h-24 flex flex-col justify-between">
-            <div className="flex items-center gap-1.5">{m.icon}<span className="text-xs text-slate-500 font-medium">{m.label}</span></div>
-            <p className="text-2xl font-bold text-slate-800">{m.value}</p>
-            <div />
+      <div className="flex gap-3 px-5 py-4 bg-white border-b border-slate-200 flex-shrink-0">
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-500"><Building2 size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Total Strategics</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{metrics.total}</p>
+            <p className="text-xs text-slate-400">in network</p>
           </div>
-        ))}
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-emerald-500"><Users size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Active Relationships</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{metrics.active}</p>
+            <p className="text-xs text-slate-400">contacted &lt;90d</p>
+          </div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-500"><TrendingUp size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Co-invest Signals</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{metrics.coinvest}</p>
+            <p className="text-xs text-slate-400">co-invest flagged</p>
+          </div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-500"><Target size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Open Pilot Opps</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{metrics.pilot}</p>
+            <p className="text-xs text-slate-400">pilot / customer</p>
+          </div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-violet-500"><Shield size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Diligence Experts</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{metrics.diligence}</p>
+            <p className="text-xs text-slate-400">expert advisors</p>
+          </div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-red-400"><AlertCircle size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Cooling Off</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{metrics.cooling}</p>
+            <p className="text-xs text-slate-400">no contact &gt;180d</p>
+          </div>
+        </div>
       </div>
 
       {/* ── Toolbar ──────────────────────────────────────────────────────────── */}
@@ -1048,14 +1197,90 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     <div className="pt-2 border-t border-slate-100">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Contacts</h3>
-                        <a href={`/crm/companies/${selected.id}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                          Manage <ChevronRight size={11} />
-                        </a>
+                        <button onClick={() => { setContactsManaging(v => !v); setShowAddContactForm(false); setShowLinkContactForm(false); }}
+                          className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                          {contactsManaging ? "Done" : <>Manage <ChevronRight size={11} /></>}
+                        </button>
                       </div>
                       <div className="h-[200px] overflow-y-auto space-y-2 pr-1">
                         {loadingDetail ? (
                           [1, 2].map(i => <div key={i} className="h-14 bg-slate-50 rounded-lg animate-pulse" />)
-                        ) : contacts.length === 0 ? (
+                        ) : contactsManaging ? (<>
+                          {contacts.length === 0 && !showAddContactForm && !showLinkContactForm && <p className="text-xs text-slate-400 italic">No contacts linked yet.</p>}
+                          {(contactOrder.length > 0 ? [...contacts].sort((a, b) => contactOrder.indexOf(a.id) - contactOrder.indexOf(b.id)) : contacts).map((c, idx, arr) => (
+                            <div key={c.id}
+                              draggable
+                              onDragStart={() => { strContactDragIdx.current = idx; }}
+                              onDragOver={e => e.preventDefault()}
+                              onDrop={() => {
+                                if (strContactDragIdx.current === null || strContactDragIdx.current === idx) return;
+                                const order = arr.map(x => x.id);
+                                const [moved] = order.splice(strContactDragIdx.current, 1);
+                                order.splice(idx, 0, moved);
+                                setContactOrder(order);
+                                strContactDragIdx.current = null;
+                              }}
+                              className="flex items-start gap-2 p-2.5 border border-slate-100 rounded-xl cursor-grab">
+                              <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${hashColor(c.first_name + (c.last_name ?? ""))} flex items-center justify-center flex-shrink-0`}>
+                                <span className="text-white text-[9px] font-bold">{getInitials(`${c.first_name} ${c.last_name ?? ""}`)}</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                                {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
+                              </div>
+                              <button onClick={async () => { if (!confirm(`Remove ${c.first_name}?`)) return; await supabase.from("contacts").delete().eq("id", c.id); setContacts(prev => prev.filter(x => x.id !== c.id)); }}
+                                className="w-5 h-5 flex items-center justify-center rounded border border-slate-200 text-slate-300 hover:border-red-200 hover:text-red-400 flex-shrink-0"><X size={10} /></button>
+                            </div>
+                          ))}
+                          {showAddContactForm ? (
+                            <div className="border border-blue-200 rounded-xl bg-blue-50 p-2.5 space-y-2">
+                              <p className="text-xs font-semibold text-slate-700">New Contact</p>
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <input className="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="First name *" value={newContactFirst} onChange={e => setNewContactFirst(e.target.value)} />
+                                <input className="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Last name" value={newContactLast} onChange={e => setNewContactLast(e.target.value)} />
+                              </div>
+                              <input className="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" type="email" placeholder="Email" value={newContactEmail} onChange={e => setNewContactEmail(e.target.value)} />
+                              <input className="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Title" value={newContactTitle} onChange={e => setNewContactTitle(e.target.value)} />
+                              <div className="flex gap-1.5">
+                                <button onClick={() => { setShowAddContactForm(false); setNewContactFirst(""); setNewContactLast(""); setNewContactEmail(""); setNewContactTitle(""); }} className="flex-1 py-1 border border-slate-200 rounded text-xs text-slate-600 hover:bg-white">Cancel</button>
+                                <button disabled={addingContact || !newContactFirst.trim()} onClick={handleAddContact}
+                                  className="flex-1 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium rounded flex items-center justify-center gap-1">
+                                  {addingContact ? <><Loader2 size={10} className="animate-spin" />Adding…</> : <><Check size={10} />Add</>}
+                                </button>
+                              </div>
+                            </div>
+                          ) : showLinkContactForm ? (
+                            <div className="border border-indigo-200 rounded-xl bg-indigo-50 p-2.5 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-semibold text-slate-700">Link Existing</p>
+                                <button onClick={() => { setShowLinkContactForm(false); setLinkContactSearch(""); setLinkContactSuggestions([]); }}><X size={11} className="text-slate-400" /></button>
+                              </div>
+                              <input className="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                placeholder="Search by name or email…" value={linkContactSearch}
+                                onChange={e => searchLinkContacts(e.target.value)} autoFocus />
+                              {linkContactSuggestions.length > 0 && (
+                                <div className="max-h-[120px] overflow-y-auto border border-slate-200 rounded bg-white divide-y divide-slate-100">
+                                  {linkContactSuggestions.map(c => (
+                                    <button key={c.id} disabled={linkingContact} onClick={() => linkContactToCompany(c.id)}
+                                      className="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-indigo-50 disabled:opacity-50">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                                        {c.email && <p className="text-[10px] text-slate-400 truncate">{c.email}</p>}
+                                      </div>
+                                      {c.company_id && c.company_id !== selected?.id && <span className="text-[10px] text-amber-600 bg-amber-50 px-1 rounded flex-shrink-0">Linked</span>}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {linkContactSearch.length >= 2 && linkContactSuggestions.length === 0 && <p className="text-[10px] text-slate-400 italic">No contacts found</p>}
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <button onClick={() => setShowAddContactForm(true)} className="w-full flex items-center justify-center gap-1 py-1.5 border-2 border-dashed border-slate-200 rounded-xl text-xs text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors"><Plus size={11} /> Add New Contact</button>
+                              <button onClick={() => setShowLinkContactForm(true)} className="w-full flex items-center justify-center gap-1 py-1.5 border-2 border-dashed border-indigo-200 rounded-xl text-xs text-indigo-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors"><Link2 size={11} /> Link Existing Contact</button>
+                            </div>
+                          )}
+                        </>) : contacts.length === 0 ? (
                           <p className="text-xs text-slate-400 italic">No contacts on file</p>
                         ) : contacts.map(c => (
                           <div key={c.id} className="flex items-start gap-2.5 p-2.5 bg-slate-50 rounded-lg">
@@ -1081,15 +1306,57 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Activity Timeline</h3>
                         <button
-                          onClick={async () => {
-                            if (!selected) return;
-                            // Re-load interactions for "+ Add Activity" (open a modal or form in panel if needed)
-                          }}
+                          onClick={() => setAddingActivity(v => !v)}
                           className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 flex items-center gap-1"
                         >
                           <Plus size={11} /> Add Activity
                         </button>
                       </div>
+
+                      {/* Add Activity form */}
+                      {addingActivity && (
+                        <div ref={activityFormRef} className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block">Date</label>
+                              <input type="date" className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" value={activityDate} onChange={e => setActivityDate(e.target.value)} />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block">Type</label>
+                              <select className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" value={activityType} onChange={e => setActivityType(e.target.value as "call" | "meeting" | "email")}>
+                                <option value="call">Call</option>
+                                <option value="meeting">Meeting</option>
+                                <option value="email">Email</option>
+                              </select>
+                            </div>
+                          </div>
+                          <textarea className="w-full text-xs border border-slate-200 rounded-lg p-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" rows={2} placeholder="Notes (optional)…" value={activityNote} onChange={e => setActivityNote(e.target.value)} />
+                          {/* Tag Contacts */}
+                          <div>
+                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Tag Contacts</p>
+                            {contacts.length === 0 ? (
+                              <p className="text-[10px] text-slate-300 italic">No contacts linked yet</p>
+                            ) : (
+                              <div className="max-h-[80px] overflow-y-auto border border-slate-200 rounded bg-white p-1.5 space-y-1">
+                                {contacts.map(c => (
+                                  <label key={c.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-1 py-0.5 rounded">
+                                    <input type="checkbox" checked={activityContactIds.includes(c.id)}
+                                      onChange={e => setActivityContactIds(prev => e.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id))}
+                                      className="w-3 h-3 accent-blue-600" />
+                                    <span className="text-xs text-slate-700">{c.first_name} {c.last_name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <button onClick={() => { setAddingActivity(false); setActivityNote(""); setActivityContactIds([]); }} className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-white">Cancel</button>
+                            <button onClick={handleAddActivity} disabled={savingActivity} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 flex items-center gap-1">
+                              {savingActivity ? <><Loader2 size={10} className="animate-spin" />Saving…</> : <><Check size={10} />Save</>}
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="h-[300px] overflow-y-auto space-y-3 pr-1">
                         {/* 3 metric tiles */}
@@ -1136,8 +1403,24 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                                     <div className="flex items-start gap-1.5">
                                       <InteractionIcon type={int.type} />
                                       <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-medium text-slate-700 leading-tight truncate">{int.subject ?? int.type.charAt(0).toUpperCase() + int.type.slice(1)}</p>
+                                        <div className="flex items-start justify-between gap-1">
+                                          <p className="text-xs font-medium text-slate-700 leading-tight truncate">{int.subject ?? int.type.charAt(0).toUpperCase() + int.type.slice(1)}</p>
+                                          <button
+                                            onClick={async () => { if (!confirm("Delete this interaction?")) return; await supabase.from("interactions").delete().eq("id", int.id); setInteractions(prev => prev.filter(i => i.id !== int.id)); }}
+                                            className="text-slate-300 hover:text-red-400 flex-shrink-0 ml-1"
+                                            title="Delete"
+                                          ><X size={10} /></button>
+                                        </div>
                                         {int.body && <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{int.body}</p>}
+                                        {(int as { contact_ids?: string[] }).contact_ids && (int as { contact_ids?: string[] }).contact_ids!.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mt-1">
+                                            {(int as { contact_ids?: string[] }).contact_ids!.map((cid: string) => {
+                                              const tc = contacts.find(c => c.id === cid);
+                                              if (!tc) return null;
+                                              return <span key={cid} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium"><User size={8} />{tc.first_name} {tc.last_name}</span>;
+                                            })}
+                                          </div>
+                                        )}
                                         <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(int.date)}</p>
                                       </div>
                                     </div>

@@ -5,12 +5,12 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Company, Contact, Interaction, IcMemo, DealStatus, CompanyType } from "@/lib/types";
+import type { Company, Contact, Interaction, IcMemo, DealStatus, CompanyType, ContactType } from "@/lib/types";
 import { cn, formatDate, formatCurrency, getInitials, truncate } from "@/lib/utils";
 import {
   Search, Plus, ExternalLink, ChevronRight, Pencil, Check, X,
   User, FileText, Link2, MapPin, Calendar, Mail, Phone,
-  Building2, Sparkles, Paperclip, Tag, Upload, Loader2, ImageIcon,
+  Building2, Sparkles, Paperclip, Tag, Upload, Loader2, ImageIcon, Bot,
 } from "lucide-react";
 import { PdfCover } from "@/components/ui/pdf-cover";
 
@@ -330,6 +330,40 @@ interface Props {
   initialCompanies: Company[];
 }
 
+// Inline sector chip editor used for double-click quick-edit
+function SectorQuickEdit({ current, onSave, onCancel }: {
+  current: string[];
+  onSave: (vals: string[]) => void;
+  onCancel: () => void;
+}) {
+  const [selected, setSelected] = useState<string[]>(current.map(s => s.toLowerCase()));
+  function toggle(s: string) {
+    const lower = s.toLowerCase();
+    setSelected(prev => prev.includes(lower) ? prev.filter(x => x !== lower) : [...prev, lower]);
+  }
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5 mt-0.5">
+        {SECTOR_OPTIONS.map(s => {
+          const active = selected.includes(s.toLowerCase());
+          return (
+            <button key={s} type="button" onClick={() => toggle(s)}
+              className={cn("px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+                active ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
+              )}>
+              {s}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex gap-1.5">
+        <button type="button" onClick={() => onSave(selected)} className="text-[11px] px-2.5 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-500 font-medium">Save</button>
+        <button type="button" onClick={onCancel} className="text-[11px] px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 export function PipelineClient({ initialCompanies }: Props) {
   const supabase = createClient();
 
@@ -354,6 +388,12 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [eventType, setEventType]           = useState<"call" | "meeting" | "email">("call");
   const [noteText, setNoteText]             = useState("");
   const [savingNote, setSavingNote]         = useState(false);
+  const [noteContactIds, setNoteContactIds] = useState<string[]>([]);
+  const [noteContactsOpen, setNoteContactsOpen] = useState(false);
+
+  // Interaction edit/delete
+  const [editingInteractionId, setEditingInteractionId] = useState<string | null>(null);
+  const [editInteractionBody, setEditInteractionBody] = useState("");
 
   // Contact slide-out panel
   const [contactPanel, setContactPanel]         = useState<Contact | null>(null);
@@ -365,8 +405,9 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [confirmRemove, setConfirmRemove]       = useState(false);
   const [contactInteractions, setContactInteractions] = useState<{type:string; date:string}[]>([]);
 
-  // Edit mode
+  // Edit mode + per-field quick edit
   const [editing, setEditing]   = useState(false);
+  const [editField, setEditField] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Company>>({});
   const [saving, setSaving]     = useState(false);
 
@@ -396,10 +437,9 @@ export function PipelineClient({ initialCompanies }: Props) {
 
   // Strategic Partnerships (populated from portco_strategic_map localStorage)
   const [portcoPartnerships, setPortcoPartnerships] = useState<{ strategicId: string; strategicName: string; portcoId: string; status: string; due: string }[]>([]);
-  const [manualPartnerships, setManualPartnerships] = useState<{ id: string; name: string; note: string; date: string }[]>([]);
+  const [manualPartnerships, setManualPartnerships] = useState<{ id: string; name: string; note: string; date: string; status?: string }[]>([]);
   const [showAddPartnership, setShowAddPartnership] = useState(false);
   const [newPartnerName, setNewPartnerName]         = useState("");
-  const [partnerTitle, setPartnerTitle]             = useState("");
   const [newPartnerType, setNewPartnerType]         = useState("Introduction");
   const [newPartnerNote, setNewPartnerNote]         = useState("");
   const [newPartnerDate, setNewPartnerDate]         = useState(() => new Date().toISOString().slice(0, 10));
@@ -411,6 +451,9 @@ export function PipelineClient({ initialCompanies }: Props) {
 
   // Auto-save
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rightPanelRef = useRef<HTMLDivElement>(null);
+  const addEventFormRef = useRef<HTMLDivElement>(null);
+  const linkSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoSaving, setAutoSaving]     = useState(false);
 
   // Add contact in manage panel
@@ -424,6 +467,29 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [contactSuggestions, setContactSuggestions]   = useState<Contact[]>([]);
   const [showContactSugg, setShowContactSugg]         = useState(false);
   const contactSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Data Room state
+  const [driveInput, setDriveInput]           = useState("");
+  const [driveLinking, setDriveLinking]       = useState(false);
+  const [driveAnalyzing, setDriveAnalyzing]   = useState(false);
+  const [driveAnalysis, setDriveAnalysis]     = useState<string | null>(null);
+  const [driveSyncing, setDriveSyncing]       = useState(false);
+  type DriveSyncResult = { synced: number; skipped: number; total: number; not_ingestible?: number; files: { name: string; status: string; chars?: number }[]; error?: string; share_with?: string; setup_required?: boolean };
+  const [driveSyncResult, setDriveSyncResult] = useState<DriveSyncResult | null>(null);
+  const [driveAnalysisOpen, setDriveAnalysisOpen] = useState(false);
+
+  // Link existing contact in manage panel
+  const [showLinkContactForm, setShowLinkContactForm] = useState(false);
+  const [linkContactSearch, setLinkContactSearch] = useState("");
+  const [linkContactSuggestions, setLinkContactSuggestions] = useState<Contact[]>([]);
+  const [linkingContact, setLinkingContact] = useState(false);
+
+  // Expanded partnership entry
+  const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
+
+  // Contact drag-to-reorder in manage panel
+  const contactDragIdx = useRef<number | null>(null);
+  const [contactOrder, setContactOrder] = useState<string[]>([]);
 
   // Close any picker when clicking outside
   useEffect(() => {
@@ -546,6 +612,12 @@ export function PipelineClient({ initialCompanies }: Props) {
   useEffect(() => {
     if (selectedId) {
       setEmailEvents([]);
+      setDriveAnalysis(null);
+      setDriveAnalysisOpen(false);
+      setDriveInput("");
+      setEditField(null);
+      setNoteContactIds([]);
+      setNoteContactsOpen(false);
       loadDetail(selectedId);
       loadEmails(selectedId);
     }
@@ -575,9 +647,28 @@ export function PipelineClient({ initialCompanies }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
+  // Scroll right panel to top when selected company changes
+  useEffect(() => {
+    if (rightPanelRef.current) rightPanelRef.current.scrollTop = 0;
+  }, [selectedId]);
+
+  // Close Add Event form on outside click
+  useEffect(() => {
+    if (!addingNote) return;
+    function handleOutside(e: MouseEvent) {
+      if (addEventFormRef.current && !addEventFormRef.current.contains(e.target as Node)) {
+        setAddingNote(false);
+        setNoteText("");
+        setNoteContactIds([]);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [addingNote]);
+
   function addManualPartnership() {
     if (!selected || !newPartnerName.trim()) return;
-    const newEntry = { id: Math.random().toString(36).slice(2, 10), name: newPartnerName.trim(), note: newPartnerNote.trim(), date: newPartnerDate };
+    const newEntry = { id: Math.random().toString(36).slice(2, 10), name: newPartnerName.trim(), note: newPartnerNote.trim(), date: newPartnerDate, status: newPartnerType };
     const updated = [...manualPartnerships, newEntry];
     setManualPartnerships(updated);
     try {
@@ -601,34 +692,6 @@ export function PipelineClient({ initialCompanies }: Props) {
         localStorage.setItem(LS_STRATEGIC, JSON.stringify(map));
       }
     } catch {}
-    // Bridge: also create a task for this partnership
-    if (partnerTitle.trim()) {
-      try {
-        const raw = localStorage.getItem("strategic_tasks_map") ?? "{}";
-        const map = JSON.parse(raw) as Record<string, unknown>;
-        const taskId = Date.now();
-        map[String(taskId)] = {
-          id: taskId,
-          title: partnerTitle.trim(),
-          cat: "Ecosystem",
-          init: "ecosystem",
-          prio: "Medium",
-          status: "Not started",
-          prog: 0,
-          owner: "Andrew",
-          cos: selected ? [selected.name] : [],
-          start: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-          due: newPartnerDate ? new Date(newPartnerDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "",
-          daysLeft: 0,
-          notes: newPartnerNote.trim(),
-          risks: [],
-          deps: [],
-          comments: [],
-        };
-        localStorage.setItem("strategic_tasks_map", JSON.stringify(map));
-      } catch {}
-    }
-    setPartnerTitle("");
     setNewPartnerName(""); setPartnerSearch(""); setSelectedPartnerId(null); setNewPartnerType("Introduction"); setNewPartnerNote(""); setNewPartnerDate(new Date().toISOString().slice(0, 10));
     setShowAddPartnership(false); setShowPartnerDropdown(false);
   }
@@ -733,6 +796,53 @@ export function PipelineClient({ initialCompanies }: Props) {
     if (next.length > 0) setEF("type", next[0] as CompanyType);
   }
 
+  // ── Quick-save a single field on double-click blur ────────────────────────
+  async function quickSave(key: keyof Company, val: unknown) {
+    if (!selected) return;
+    setEditField(null);
+    const { data } = await supabase
+      .from("companies")
+      .update({ [key]: val })
+      .eq("id", selected.id)
+      .select()
+      .single();
+    if (data) setCompanies(prev => prev.map(c => c.id === data.id ? data : c));
+  }
+
+  // ── Link existing contact to company ─────────────────────────────────────
+  function searchLinkContacts(query: string) {
+    if (linkSearchTimer.current) clearTimeout(linkSearchTimer.current);
+    setLinkContactSearch(query);
+    if (!query.trim() || query.length < 2) { setLinkContactSuggestions([]); return; }
+    linkSearchTimer.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from("contacts")
+        .select("id, first_name, last_name, email, title, company_id")
+        .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(8);
+      setLinkContactSuggestions((data as Contact[]) ?? []);
+    }, 250);
+  }
+
+  async function linkContactToCompany(contactId: string) {
+    if (!selected) return;
+    setLinkingContact(true);
+    const { data, error } = await supabase
+      .from("contacts")
+      .update({ company_id: selected.id })
+      .eq("id", contactId)
+      .select()
+      .single();
+    if (error) { alert(error.message); }
+    else if (data) {
+      setContacts(prev => [...prev, data as Contact]);
+      setShowLinkContactForm(false);
+      setLinkContactSearch("");
+      setLinkContactSuggestions([]);
+    }
+    setLinkingContact(false);
+  }
+
   // ── Add event inline ──────────────────────────────────────────────────────
   async function handleAddNote() {
     if (!selected) return;
@@ -740,17 +850,25 @@ export function PipelineClient({ initialCompanies }: Props) {
     const { data: { user } } = await supabase.auth.getUser();
     const typeLabel = eventType.charAt(0).toUpperCase() + eventType.slice(1);
     await supabase.from("interactions").insert({
-      company_id: selected.id,
-      type:       eventType,
-      subject:    typeLabel,
-      body:       noteText.trim() || null,
-      date:       new Date(eventDate).toISOString(),
-      sentiment:  "neutral",
-      created_by: user?.id,
+      company_id:  selected.id,
+      type:        eventType,
+      subject:     typeLabel,
+      body:        noteText.trim() || null,
+      date:        new Date(eventDate).toISOString(),
+      sentiment:   "neutral",
+      created_by:  user?.id,
+      contact_ids: noteContactIds.length > 0 ? noteContactIds : null,
     });
+    // Update last_contact_date for tagged contacts
+    if (noteContactIds.length > 0) {
+      await supabase.from("contacts").update({ last_contact_date: new Date(eventDate).toISOString() }).in("id", noteContactIds);
+      setContacts(prev => prev.map(c => noteContactIds.includes(c.id) ? { ...c, last_contact_date: new Date(eventDate).toISOString() } : c));
+    }
     setNoteText("");
     setEventDate(new Date().toISOString().slice(0, 10));
     setEventType("call");
+    setNoteContactIds([]);
+    setNoteContactsOpen(false);
     setAddingNote(false);
     setSavingNote(false);
     await loadDetail(selected.id);
@@ -1053,7 +1171,7 @@ export function PipelineClient({ initialCompanies }: Props) {
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto bg-white">
+        <div ref={rightPanelRef} className="flex-1 overflow-y-auto bg-white">
 
           {/* ── Company Header ── */}
           <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between">
@@ -1284,12 +1402,22 @@ export function PipelineClient({ initialCompanies }: Props) {
                 <Field label="Domain / Website">
                   {editing ? (
                     <input className="input text-xs" value={editForm.website ?? ""} onChange={e => setEF("website", e.target.value)} placeholder="https://…" />
+                  ) : editField === "website" ? (
+                    <input
+                      autoFocus
+                      className="w-full text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
+                      defaultValue={selected.website ?? ""}
+                      onBlur={e => quickSave("website", e.target.value.trim() || null)}
+                      onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                    />
                   ) : (
-                    selected.website
-                      ? <a href={selected.website} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 truncate">
-                          <Link2 size={12} className="flex-shrink-0" />{selected.website.replace(/^https?:\/\//, "")}
-                        </a>
-                      : <span className="text-xs text-slate-300">—</span>
+                    <div onDoubleClick={() => setEditField("website")} title="Double-click to edit" className="cursor-text">
+                      {selected.website
+                        ? <a href={selected.website} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 truncate">
+                            <Link2 size={12} className="flex-shrink-0" />{selected.website.replace(/^https?:\/\//, "")}
+                          </a>
+                        : <span className="text-xs text-slate-300 italic">double-click to add</span>}
+                    </div>
                   )}
                 </Field>
 
@@ -1313,23 +1441,39 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </Field>
 
                 <Field label="Sector">
-                  <div className="flex flex-wrap gap-1.5 mt-0.5">
-                    {SECTOR_OPTIONS.map(s => {
-                      const lower = s.toLowerCase();
-                      const active = (editing ? (editForm.sectors as string[] ?? []) : (selected.sectors ?? [])).includes(lower);
-                      return editing ? (
-                        <button key={s} type="button" onClick={() => toggleSector(s)}
-                          className={cn("px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
-                            active ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
-                          )}>
-                          {s}
-                        </button>
-                      ) : active ? (
-                        <span key={s} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{s}</span>
-                      ) : null;
-                    })}
-                    {!editing && !(selected.sectors ?? []).length && <span className="text-xs text-slate-300">—</span>}
-                  </div>
+                  {editField === "sectors" ? (
+                    <SectorQuickEdit
+                      current={selected.sectors ?? []}
+                      onSave={async (vals) => { await quickSave("sectors", vals); }}
+                      onCancel={() => setEditField(null)}
+                    />
+                  ) : (
+                    <div
+                      className="flex flex-wrap gap-1.5 mt-0.5 cursor-text min-h-[28px] items-center"
+                      onDoubleClick={() => !editing && setEditField("sectors")}
+                      title={editing ? undefined : "Double-click to edit"}
+                    >
+                      {SECTOR_OPTIONS.map(s => {
+                        const lower = s.toLowerCase();
+                        const active = (editing ? (editForm.sectors as string[] ?? []) : (selected.sectors ?? [])).includes(lower);
+                        return editing ? (
+                          <button key={s} type="button" onClick={() => toggleSector(s)}
+                            className={cn("px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+                              active ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
+                            )}>
+                            {s}
+                          </button>
+                        ) : active ? (
+                          <span key={s} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{s}</span>
+                        ) : null;
+                      })}
+                      {!editing && !(selected.sectors ?? []).length && (
+                        <span className="text-xs text-slate-400 border border-dashed border-slate-300 rounded-full px-2.5 py-1 hover:border-indigo-400 hover:text-indigo-500 transition-colors">
+                          + double-click to set
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </Field>
 
                 <Field label="Sub-sector">
@@ -1338,8 +1482,21 @@ export function PipelineClient({ initialCompanies }: Props) {
                       <option value="">Select sub-sector</option>
                       {SUB_SECTOR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
+                  ) : editField === "sub_type" ? (
+                    <select
+                      autoFocus
+                      className="w-full text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
+                      defaultValue={selected.sub_type ?? ""}
+                      onBlur={e => quickSave("sub_type", e.target.value || null)}
+                      onChange={e => quickSave("sub_type", e.target.value || null)}
+                    >
+                      <option value="">— None —</option>
+                      {SUB_SECTOR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   ) : (
-                    <span className="text-xs text-slate-700">{selected.sub_type ?? "—"}</span>
+                    <span className="text-xs text-slate-700 cursor-text" onDoubleClick={() => setEditField("sub_type")} title="Double-click to edit">
+                      {selected.sub_type ?? <span className="text-slate-300 italic">double-click to set</span>}
+                    </span>
                   )}
                 </Field>
 
@@ -1350,10 +1507,23 @@ export function PipelineClient({ initialCompanies }: Props) {
                       <option value="">Not set</option>
                       {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                     </select>
+                  ) : editField === "deal_status" ? (
+                    <select
+                      autoFocus
+                      className="w-full text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
+                      defaultValue={selected.deal_status ?? ""}
+                      onBlur={e => quickSave("deal_status", (e.target.value as DealStatus) || null)}
+                      onChange={e => quickSave("deal_status", (e.target.value as DealStatus) || null)}
+                    >
+                      <option value="">Not set</option>
+                      {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
                   ) : (
-                    selected.deal_status
-                      ? <span className={cn("inline-block text-xs px-2 py-1 rounded-md font-medium", STATUS_COLORS[selected.deal_status])}>{STATUS_LABELS[selected.deal_status]}</span>
-                      : <span className="text-xs text-slate-300">—</span>
+                    <div onDoubleClick={() => setEditField("deal_status")} title="Double-click to edit" className="cursor-pointer">
+                      {selected.deal_status
+                        ? <span className={cn("inline-block text-xs px-2 py-1 rounded-md font-medium", STATUS_COLORS[selected.deal_status])}>{STATUS_LABELS[selected.deal_status]}</span>
+                        : <span className="text-xs text-slate-300 italic">double-click to set</span>}
+                    </div>
                   )}
                 </Field>
 
@@ -1363,8 +1533,21 @@ export function PipelineClient({ initialCompanies }: Props) {
                       <option value="">Not set</option>
                       {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
                     </select>
+                  ) : editField === "stage" ? (
+                    <select
+                      autoFocus
+                      className="w-full text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
+                      defaultValue={selected.stage ?? ""}
+                      onBlur={e => quickSave("stage", e.target.value || null)}
+                      onChange={e => quickSave("stage", e.target.value || null)}
+                    >
+                      <option value="">Not set</option>
+                      {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+                    </select>
                   ) : (
-                    <span className="text-xs text-slate-700 capitalize">{selected.stage?.replace("_", " ") ?? "—"}</span>
+                    <span className="text-xs text-slate-700 capitalize cursor-text" onDoubleClick={() => setEditField("stage")} title="Double-click to edit">
+                      {selected.stage?.replace("_", " ") ?? <span className="text-slate-300 italic">double-click to set</span>}
+                    </span>
                   )}
                 </Field>
 
@@ -1374,10 +1557,28 @@ export function PipelineClient({ initialCompanies }: Props) {
                       <input className="input text-xs flex-1" value={editForm.location_city ?? ""} onChange={e => setEF("location_city", e.target.value || null)} placeholder="City" />
                       <input className="input text-xs flex-1" value={editForm.location_country ?? ""} onChange={e => setEF("location_country", e.target.value || null)} placeholder="Country" />
                     </div>
+                  ) : editField === "location" ? (
+                    <div className="flex gap-1">
+                      <input
+                        autoFocus
+                        className="w-1/2 text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
+                        defaultValue={selected.location_city ?? ""}
+                        placeholder="City"
+                        onBlur={e => quickSave("location_city", e.target.value.trim() || null)}
+                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                      />
+                      <input
+                        className="w-1/2 text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
+                        defaultValue={selected.location_country ?? ""}
+                        placeholder="Country"
+                        onBlur={e => quickSave("location_country", e.target.value.trim() || null)}
+                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                      />
+                    </div>
                   ) : (
-                    <span className="text-xs text-slate-700 flex items-center gap-1">
-                      <MapPin size={12} className="text-slate-400" />
-                      {[selected.location_city, selected.location_country].filter(Boolean).join(", ") || "—"}
+                    <span className="text-xs text-slate-700 flex items-center gap-1 cursor-text" onDoubleClick={() => setEditField("location")} title="Double-click to edit">
+                      <MapPin size={12} className="text-slate-400 flex-shrink-0" />
+                      {[selected.location_city, selected.location_country].filter(Boolean).join(", ") || <span className="text-slate-300 italic">double-click to set</span>}
                     </span>
                   )}
                 </Field>
@@ -1439,7 +1640,7 @@ export function PipelineClient({ initialCompanies }: Props) {
               {/* Strategic Partnerships */}
               <section>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Opportunities / tasks</h2>
+                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Strategic Partnerships</h2>
                   <button onClick={() => setShowAddPartnership(v => !v)}
                     className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                     <Plus size={11} /> Add
@@ -1448,13 +1649,6 @@ export function PipelineClient({ initialCompanies }: Props) {
 
                 {showAddPartnership && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
-                    {/* Opportunity / task title */}
-                    <input
-                      value={partnerTitle ?? ""}
-                      onChange={e => setPartnerTitle(e.target.value)}
-                      placeholder="Opportunity / task title"
-                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
-                    />
                     {/* Company + Type row */}
                     <div className="flex gap-2">
                       <div className="relative flex-1">
@@ -1492,7 +1686,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     <div className="flex gap-2">
                       <button onClick={addManualPartnership}
                         className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">Add</button>
-                      <button onClick={() => { setShowAddPartnership(false); setPartnerSearch(""); setNewPartnerName(""); setSelectedPartnerId(null); setNewPartnerType("Introduction"); setPartnerTitle(""); }}
+                      <button onClick={() => { setShowAddPartnership(false); setPartnerSearch(""); setNewPartnerName(""); setSelectedPartnerId(null); setNewPartnerType("Introduction"); }}
                         className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
                     </div>
                   </div>
@@ -1504,65 +1698,61 @@ export function PipelineClient({ initialCompanies }: Props) {
 
                 <div className="divide-y divide-slate-100">
                   {portcoPartnerships.map(p => (
-                    <div key={p.strategicId} className="h-[30px] flex items-center gap-2">
+                    <div key={p.strategicId}>
                       {confirmDeletePartner?.type === "portco" && confirmDeletePartner.id === p.strategicId ? (
-                        <>
+                        <div className="flex items-center gap-2 py-1.5">
                           <span className="text-xs text-slate-500 flex-1 italic">Delete &ldquo;{p.strategicName}&rdquo;?</span>
                           <button onMouseDown={() => { deletePortcoPartnership(p.strategicId); setConfirmDeletePartner(null); }} className="text-xs text-red-600 hover:underline font-medium flex-shrink-0">Yes</button>
                           <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-xs text-slate-400 hover:underline flex-shrink-0">No</button>
-                        </>
+                        </div>
                       ) : (
-                        <>
+                        <button
+                          onClick={() => setExpandedPartner(expandedPartner === p.strategicId ? null : p.strategicId)}
+                          className="w-full flex items-center gap-2 py-1.5 px-1 text-left hover:bg-slate-50 rounded transition-colors"
+                        >
                           <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.strategicName}</span>
-                          <span className="text-xs text-slate-400 flex-shrink-0">{p.due ? formatDate(p.due) : ""}</span>
+                          {p.due && <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(p.due)}</span>}
                           <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>
-                          <button onClick={() => setConfirmDeletePartner({ type: "portco", id: p.strategicId })} className="text-slate-400 hover:text-red-500 flex-shrink-0"><X size={12} /></button>
-                        </>
+                          <ChevronRight size={11} className={cn("text-slate-300 flex-shrink-0 transition-transform", expandedPartner === p.strategicId && "rotate-90")} />
+                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "portco", id: p.strategicId }); }} className="text-slate-300 hover:text-red-400 flex-shrink-0 cursor-pointer"><X size={11} /></span>
+                        </button>
+                      )}
+                      {expandedPartner === p.strategicId && (
+                        <div className="px-2 pb-2 text-xs text-slate-500">
+                          <p><span className="font-medium text-slate-600">Status:</span> {p.status}</p>
+                          {p.due && <p><span className="font-medium text-slate-600">Due:</span> {formatDate(p.due)}</p>}
+                        </div>
                       )}
                     </div>
                   ))}
                   {manualPartnerships.map(p => (
-                    <div key={p.id} className="h-[30px] flex items-center gap-2">
+                    <div key={p.id}>
                       {confirmDeletePartner?.type === "manual" && confirmDeletePartner.id === p.id ? (
-                        <>
+                        <div className="flex items-center gap-2 py-1.5">
                           <span className="text-xs text-slate-500 flex-1 italic">Delete &ldquo;{p.name}&rdquo;?</span>
                           <button onMouseDown={() => { deleteManualPartnership(p.id); setConfirmDeletePartner(null); }} className="text-xs text-red-600 hover:underline font-medium flex-shrink-0">Yes</button>
                           <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-xs text-slate-400 hover:underline flex-shrink-0">No</button>
-                        </>
+                        </div>
                       ) : (
-                        <>
+                        <button
+                          onClick={() => setExpandedPartner(expandedPartner === p.id ? null : p.id)}
+                          className="w-full flex items-center gap-2 py-1.5 px-1 text-left hover:bg-slate-50 rounded transition-colors"
+                        >
                           <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.name}</span>
-                          {p.note && <span className="text-xs text-slate-400 truncate max-w-[120px]">{p.note}</span>}
                           {p.date && <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(p.date)}</span>}
-                          <button onClick={() => setConfirmDeletePartner({ type: "manual", id: p.id })} className="text-slate-400 hover:text-red-500 flex-shrink-0"><X size={12} /></button>
-                        </>
+                          {p.status && <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>}
+                          <ChevronRight size={11} className={cn("text-slate-300 flex-shrink-0 transition-transform", expandedPartner === p.id && "rotate-90")} />
+                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "manual", id: p.id }); }} className="text-slate-300 hover:text-red-400 flex-shrink-0 cursor-pointer"><X size={11} /></span>
+                        </button>
+                      )}
+                      {expandedPartner === p.id && (
+                        <div className="px-2 pb-2 text-xs text-slate-500 space-y-0.5">
+                          {p.note && <p>{p.note}</p>}
+                          {p.date && <p><span className="font-medium text-slate-600">Date:</span> {formatDate(p.date)}</p>}
+                        </div>
                       )}
                     </div>
                   ))}
-                  {/* Tasks linked from /tasks page */}
-                  {(() => {
-                    try {
-                      const raw = localStorage.getItem("crm_tasks");
-                      if (!raw || !selected) return null;
-                      const allTasks = JSON.parse(raw) as Array<{id: number; title: string; status: string; due: string; cos: string[]; notes?: string}>;
-                      const linked = allTasks.filter(t => t.cos?.some((c: string) => c.toLowerCase() === selected.name.toLowerCase()));
-                      if (linked.length === 0) return null;
-                      return linked.map(t => (
-                        <div key={t.id} className="py-2 border-t border-slate-100">
-                          <div className="flex items-start gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-xs font-medium text-slate-700 truncate max-w-[160px]">{t.title}</span>
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 flex-shrink-0">{t.status}</span>
-                              </div>
-                              {t.notes && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{t.notes}</p>}
-                              {t.due && <p className="text-[10px] text-slate-400 mt-0.5">{t.due}</p>}
-                            </div>
-                          </div>
-                        </div>
-                      ));
-                    } catch { return null; }
-                  })()}
                 </div>
               </section>
             </div>
@@ -1633,8 +1823,8 @@ export function PipelineClient({ initialCompanies }: Props) {
                           {[c.location_city, c.location_country].filter(Boolean).join(", ") || "—"}
                         </p>
                       </div>
-                      {/* Actions */}
-                      <div className="flex gap-1.5 text-slate-400 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                      {/* Actions — pushed to far right */}
+                      <div className="flex gap-1.5 text-slate-400 flex-shrink-0 ml-auto" onClick={e => e.stopPropagation()}>
                         {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-600"><Mail size={13} /></a>}
                         {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600"><ExternalLink size={13} /></a>}
                       </div>
@@ -1646,7 +1836,7 @@ export function PipelineClient({ initialCompanies }: Props) {
               <div>
               {/* Add event form */}
               {addingNote && (
-                <div className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
+                <div ref={addEventFormRef} className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block">Date</label>
@@ -1677,8 +1867,32 @@ export function PipelineClient({ initialCompanies }: Props) {
                     value={noteText}
                     onChange={e => setNoteText(e.target.value)}
                   />
+                  {/* Tag contacts — always visible */}
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Tag Contacts</p>
+                    {contacts.length === 0 ? (
+                      <p className="text-[11px] text-slate-300 italic">No contacts linked to this company yet</p>
+                    ) : (
+                      <div className="max-h-[120px] overflow-y-auto border border-slate-200 rounded-lg bg-white p-2 space-y-1">
+                        {contacts.map(c => (
+                          <label key={c.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-1 py-0.5 rounded">
+                            <input
+                              type="checkbox"
+                              checked={noteContactIds.includes(c.id)}
+                              onChange={e => setNoteContactIds(prev =>
+                                e.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id)
+                              )}
+                              className="w-3 h-3 accent-blue-600"
+                            />
+                            <span className="text-xs text-slate-700">{c.first_name} {c.last_name}</span>
+                            {c.title && <span className="text-[10px] text-slate-400 truncate">· {c.title}</span>}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex gap-2 justify-end">
-                    <button onClick={() => { setAddingNote(false); setNoteText(""); }} className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-100">Cancel</button>
+                    <button onClick={() => { setAddingNote(false); setNoteText(""); setNoteContactIds([]); setNoteContactsOpen(false); }} className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-100">Cancel</button>
                     <button onClick={handleAddNote} disabled={savingNote} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 flex items-center gap-1">
                       {savingNote ? <><Loader2 size={10} className="animate-spin" /> Saving…</> : <><Check size={10} /> Save</>}
                     </button>
@@ -1692,7 +1906,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </div>
               ) : (() => {
                 // Merge interactions + document uploads into a single timeline
-                type TEvent = { id: string; kind: string; title: string; body?: string | null; date: string; url?: string | null; meta?: string | null };
+                type TEvent = { id: string; kind: string; title: string; body?: string | null; date: string; url?: string | null; meta?: string | null; contact_ids?: string[] | null };
                 const events: TEvent[] = [
                   ...interactions.map(i => ({
                     id: i.id,
@@ -1702,6 +1916,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     date: i.date,
                     url: i.transcript_url ?? null,
                     meta: i.sentiment ?? null,
+                    contact_ids: (i as { contact_ids?: string[] }).contact_ids ?? null,
                   })),
                   ...documents.map(d => ({
                     id: d.id,
@@ -1776,6 +1991,19 @@ export function PipelineClient({ initialCompanies }: Props) {
                                   <span className="text-xs font-medium text-slate-700 truncate">{ev.title}</span>
                                 </div>
                                 {ev.body && <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-3">{ev.body}</p>}
+                                {ev.contact_ids && ev.contact_ids.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {ev.contact_ids.map((cid: string) => {
+                                      const tc = contacts.find(c => c.id === cid);
+                                      if (!tc) return null;
+                                      return (
+                                        <span key={cid} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium">
+                                          <User size={8} />{tc.first_name} {tc.last_name}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 {ev.url && (
@@ -1785,6 +2013,21 @@ export function PipelineClient({ initialCompanies }: Props) {
                                   </a>
                                 )}
                                 <span className="text-xs text-slate-400 whitespace-nowrap">{formatDate(ev.date)}</span>
+                                {/* Only allow delete for interactions (not documents/emails) */}
+                                {(ev.kind === "meeting" || ev.kind === "call" || ev.kind === "email" || ev.kind === "note") && (
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (!confirm("Delete this interaction?")) return;
+                                      await supabase.from("interactions").delete().eq("id", ev.id);
+                                      setInteractions(prev => prev.filter(i => i.id !== ev.id));
+                                    }}
+                                    className="text-slate-300 hover:text-red-500 transition-colors"
+                                    title="Delete interaction"
+                                  >
+                                    <X size={11} />
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1798,13 +2041,13 @@ export function PipelineClient({ initialCompanies }: Props) {
               </div>{/* end timeline content */}
             </div>{/* end contacts/timeline grid */}
 
-            {/* ── Documents — Decks & Transcripts ── */}
+            {/* ── Documents — Decks, Transcripts & Data Room ── */}
             <section>
               <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Documents</h2>
 
-              <div className="grid grid-cols-2 gap-6">
-              {/* ── Pitch Decks (multi) ── */}
-              <div>
+              <div className="flex gap-4 items-start">
+              {/* ── Pitch Decks (40%) ── */}
+              <div style={{flex: '0 0 40%', minWidth: 0}}>
                 <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                   <FileText size={12} /> Pitch Decks
                   {documents.filter(d => d.type === "deck").length > 0 && (
@@ -1869,8 +2112,8 @@ export function PipelineClient({ initialCompanies }: Props) {
                 })()}
               </div>
 
-              {/* ── Transcripts ── */}
-              <div>
+              {/* ── Transcripts (40%) ── */}
+              <div style={{flex: '0 0 40%', minWidth: 0}}>
                 <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                   <Paperclip size={12} /> Meeting Transcripts
                   {documents.filter(d => d.type === "transcript").length > 0 && (
@@ -1932,7 +2175,152 @@ export function PipelineClient({ initialCompanies }: Props) {
                   );
                 })()}
               </div>
-              </div>{/* end grid cols-2 */}
+
+              {/* ── Data Room (20%) ── */}
+              <div style={{flex: '0 0 20%', minWidth: 0}}>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+                    <Link2 size={12} /> Data Room
+                  </p>
+                  {selected.drive_folder_url && (
+                    <button
+                      onClick={() => { setDriveInput(selected.drive_folder_url ?? ""); }}
+                      className="text-[10px] text-slate-400 hover:text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-50"
+                    >
+                      Change
+                    </button>
+                  )}
+                </div>
+
+              <div className="h-24 overflow-y-auto">
+              {!selected.drive_folder_url || (driveInput !== "" && driveInput !== selected.drive_folder_url) ? (
+                /* ── Link state ── */
+                <div className="border-2 border-dashed border-slate-200 rounded-xl p-3 space-y-2">
+                  <input
+                    type="url"
+                    value={driveInput}
+                    onChange={e => setDriveInput(e.target.value)}
+                    placeholder="Paste Drive URL…"
+                    className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-300 bg-white"
+                  />
+                  <button
+                    disabled={!driveInput || driveLinking}
+                    onClick={async () => {
+                      if (!driveInput) return;
+                      setDriveLinking(true);
+                      try {
+                        const res = await fetch(`/api/companies/${selected.id}/drive`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ folderUrl: driveInput }),
+                        });
+                        if (res.ok) {
+                          setCompanies(prev => prev.map(c =>
+                            c.id === selected.id ? { ...c, drive_folder_url: driveInput } : c
+                          ));
+                          setDriveInput("");
+                        }
+                      } finally {
+                        setDriveLinking(false);
+                      }
+                    }}
+                    className="w-full text-xs px-2.5 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                  >
+                    {driveLinking ? <Loader2 size={11} className="animate-spin" /> : <Link2 size={11} />}
+                    Link Folder
+                  </button>
+                </div>
+              ) : (
+                /* ── Linked state ── */
+                <div className="space-y-2">
+                  <a
+                    href={selected.drive_folder_url ?? "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-blue-600 hover:underline truncate"
+                  >
+                    <ExternalLink size={10} className="flex-shrink-0" />
+                    <span className="truncate">Open Drive Folder</span>
+                  </a>
+
+                  {/* Sync to AI button */}
+                  <button
+                    disabled={driveSyncing}
+                    onClick={async () => {
+                      setDriveSyncing(true);
+                      setDriveSyncResult(null);
+                      try {
+                        const res = await fetch("/api/drive/sync", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ company_id: selected.id, folder_url: selected.drive_folder_url }),
+                        });
+                        const json = await res.json() as DriveSyncResult;
+                        setDriveSyncResult(json);
+                      } finally { setDriveSyncing(false); }
+                    }}
+                    className="w-full text-xs px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                  >
+                    {driveSyncing ? <Loader2 size={11} className="animate-spin" /> : <Bot size={11} />}
+                    {driveSyncing ? "Syncing files…" : "Sync to AI"}
+                  </button>
+
+                  {/* Sync result */}
+                  {driveSyncResult && (
+                    <div className={`rounded-lg px-2.5 py-2 text-[10px] leading-relaxed ${driveSyncResult.error ? "bg-red-50 border border-red-200 text-red-700" : "bg-emerald-50 border border-emerald-200 text-emerald-800"}`}>
+                      {driveSyncResult.setup_required ? (
+                        <span>⚠️ Google Drive not configured. Add <code className="bg-red-100 px-1 rounded">GOOGLE_SERVICE_ACCOUNT_EMAIL</code> and <code className="bg-red-100 px-1 rounded">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</code> to environment variables.</span>
+                      ) : driveSyncResult.error?.includes("shared") || driveSyncResult.error?.includes("Cannot access") ? (
+                        <span>⚠️ Share this Drive folder with: <br /><code className="font-mono bg-emerald-100 px-1 rounded break-all">{driveSyncResult.share_with}</code></span>
+                      ) : driveSyncResult.error ? (
+                        <span>Error: {driveSyncResult.error}</span>
+                      ) : (
+                        <span>✓ {driveSyncResult.synced} file{driveSyncResult.synced !== 1 ? "s" : ""} synced to AI{driveSyncResult.skipped > 0 ? `, ${driveSyncResult.skipped} already up-to-date` : ""}{(driveSyncResult.not_ingestible ?? 0) > 0 ? ` (${driveSyncResult.not_ingestible} skipped — unsupported format)` : ""}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* AI Analyze button */}
+                  <button
+                    disabled={driveAnalyzing}
+                    onClick={async () => {
+                      setDriveAnalyzing(true);
+                      setDriveAnalysis(null);
+                      setDriveAnalysisOpen(false);
+                      try {
+                        const res = await fetch(`/api/companies/${selected.id}/drive-analyze`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ folderUrl: selected.drive_folder_url }),
+                        });
+                        const json = await res.json() as { analysis?: string; error?: string };
+                        if (json.analysis) { setDriveAnalysis(json.analysis); setDriveAnalysisOpen(true); }
+                      } finally { setDriveAnalyzing(false); }
+                    }}
+                    className="w-full text-xs px-2.5 py-1.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                  >
+                    {driveAnalyzing ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                    {driveAnalyzing ? "Analyzing…" : "Analyze with AI"}
+                  </button>
+                  {driveAnalysis && (
+                    <div className="border border-violet-200 bg-violet-50 rounded-xl overflow-hidden">
+                      <button onClick={() => setDriveAnalysisOpen(o => !o)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-left">
+                        <span className="text-[10px] font-semibold text-violet-700 flex items-center gap-1">
+                          <Sparkles size={10} /> AI Analysis
+                        </span>
+                        <ChevronRight size={11} className={cn("text-violet-400 transition-transform", driveAnalysisOpen && "rotate-90")} />
+                      </button>
+                      {driveAnalysisOpen && (
+                        <div className="px-3 pb-3 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{driveAnalysis}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              </div>
+              </div>{/* end data room column */}
+              </div>{/* end 3-col flex */}
             </section>
 
             {/* ── IC Memo ── */}
@@ -2297,8 +2685,27 @@ export function PipelineClient({ initialCompanies }: Props) {
                     {contacts.length === 0 && !showAddContactForm && (
                       <p className="text-sm text-slate-400 italic">No contacts linked yet.</p>
                     )}
-                    {contacts.map(c => (
-                      <div key={c.id} className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl hover:border-blue-200 hover:bg-blue-50 transition-colors">
+                    {(() => {
+                      const orderedContacts = contactOrder.length > 0
+                        ? [...contacts].sort((a, b) => contactOrder.indexOf(a.id) - contactOrder.indexOf(b.id))
+                        : contacts;
+                      return orderedContacts.map((c, idx) => (
+                      <div
+                        key={c.id}
+                        className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl hover:border-blue-200 hover:bg-blue-50 transition-colors"
+                        draggable
+                        onDragStart={() => { contactDragIdx.current = idx; }}
+                        onDragOver={(e) => { e.preventDefault(); }}
+                        onDrop={() => {
+                          if (contactDragIdx.current === null || contactDragIdx.current === idx) return;
+                          const order = orderedContacts.map(c => c.id);
+                          const [moved] = order.splice(contactDragIdx.current, 1);
+                          order.splice(idx, 0, moved);
+                          setContactOrder(order);
+                          contactDragIdx.current = null;
+                        }}
+                        style={{ cursor: "grab" }}
+                      >
                         <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
                           <User size={13} className="text-violet-600" />
                         </div>
@@ -2326,7 +2733,8 @@ export function PipelineClient({ initialCompanies }: Props) {
                           ><X size={12} /></button>
                         </div>
                       </div>
-                    ))}
+                    ));
+                    })()}
 
                     {/* ── Add Contact Form ── */}
                     {showAddContactForm ? (
@@ -2370,18 +2778,19 @@ export function PipelineClient({ initialCompanies }: Props) {
                               if (!selected || !newContactForm.first_name.trim()) return;
                               setAddingContact(true);
                               const { data: { user } } = await supabase.auth.getUser();
-                              const { data: newC } = await supabase.from("contacts").insert({
+                              const { data: newC, error: newCErr } = await supabase.from("contacts").insert({
                                 first_name: newContactForm.first_name.trim(),
                                 last_name:  newContactForm.last_name.trim() || null,
                                 email:      newContactForm.email.trim() || null,
                                 title:      newContactForm.title.trim() || null,
                                 company_id: selected.id,
-                                type:       "other",
+                                type:       "Other" as ContactType,
                                 status:     "active",
                                 is_primary_contact: contacts.length === 0,
                                 created_by: user?.id ?? null,
                               }).select().single();
                               setAddingContact(false);
+                              if (newCErr) { alert(`Failed to add contact: ${newCErr.message}`); return; }
                               if (newC) {
                                 setContacts(prev => [...prev, newC as Contact]);
                                 setShowAddContactForm(false);
@@ -2395,12 +2804,67 @@ export function PipelineClient({ initialCompanies }: Props) {
                         </div>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => setShowAddContactForm(true)}
-                        className="w-full flex items-center justify-center gap-1.5 py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-xs text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors"
-                      >
-                        <Plus size={13} /> Add Contact
-                      </button>
+                      <div className="space-y-2">
+                        <button
+                          onClick={() => setShowAddContactForm(true)}
+                          className="w-full flex items-center justify-center gap-1.5 py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-xs text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors"
+                        >
+                          <Plus size={13} /> Add New Contact
+                        </button>
+                        {/* ── Link existing contact ── */}
+                        {showLinkContactForm ? (
+                          <div className="border border-indigo-200 rounded-xl bg-indigo-50 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-semibold text-slate-700">Link Existing Contact</p>
+                              <button onClick={() => { setShowLinkContactForm(false); setLinkContactSearch(""); setLinkContactSuggestions([]); }}>
+                                <X size={12} className="text-slate-400 hover:text-slate-600" />
+                              </button>
+                            </div>
+                            <input
+                              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                              placeholder="Search by name or email…"
+                              value={linkContactSearch}
+                              onChange={e => searchLinkContacts(e.target.value)}
+                              autoFocus
+                            />
+                            {linkContactSuggestions.length > 0 && (
+                              <div className="max-h-[160px] overflow-y-auto border border-slate-200 rounded-lg bg-white divide-y divide-slate-100">
+                                {linkContactSuggestions.map(c => (
+                                  <button
+                                    key={c.id}
+                                    disabled={linkingContact}
+                                    onClick={() => linkContactToCompany(c.id)}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-indigo-50 transition-colors disabled:opacity-50"
+                                  >
+                                    <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                                      <User size={11} className="text-indigo-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                                      {c.email && <p className="text-[10px] text-slate-400 truncate">{c.email}</p>}
+                                      {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
+                                    </div>
+                                    {c.company_id && c.company_id !== selected?.id && (
+                                      <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded flex-shrink-0">Linked</span>
+                                    )}
+                                    {linkingContact && <Loader2 size={11} className="animate-spin text-indigo-600 flex-shrink-0" />}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {linkContactSearch.length >= 2 && linkContactSuggestions.length === 0 && (
+                              <p className="text-xs text-slate-400 italic text-center">No contacts found</p>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setShowLinkContactForm(true)}
+                            className="w-full flex items-center justify-center gap-1.5 py-2.5 border-2 border-dashed border-indigo-200 rounded-xl text-xs text-indigo-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                          >
+                            <Link2 size={13} /> Link Existing Contact
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}

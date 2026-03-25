@@ -1,7 +1,7 @@
 "use client";
 // ─── Funds & Co-investors CRM — metrics · table · detail panel ────────────────
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
 import { cn, formatDate, timeAgo } from "@/lib/utils";
@@ -578,6 +578,8 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
 
   // Key contacts
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
+  const [fundContactOrder, setFundContactOrder] = useState<Record<string, string[]>>({});
+  const fundContactDragIdx = useRef<number | null>(null);
 
   // Relationship timeline
   const [showAddRelationship, setShowAddRelationship] = useState(false);
@@ -822,64 +824,63 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-50">
 
       {/* ── Stat cards ──────────────────────────────────────────────────────── */}
-      <div className="flex gap-3 px-5 py-3 bg-white border-b border-slate-200 flex-shrink-0 overflow-x-auto">
-
-        <div className="h-24 min-w-[130px] flex-shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50">
-          <div className="flex items-center gap-1.5 mb-1">
-            <Building2 size={14} className="text-slate-500" />
-            <span className="text-xs text-slate-500 font-medium">Total Funds</span>
+      <div className="flex gap-3 px-5 py-4 bg-white border-b border-slate-200 flex-shrink-0">
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-500"><Building2 size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Total Funds</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{stats.total}</p>
+            <p className="text-xs text-slate-400">in network</p>
           </div>
-          <p className="text-xl font-bold text-slate-800">{stats.total}</p>
         </div>
-
-        <div className="h-24 min-w-[130px] flex-shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50">
-          <div className="flex items-center gap-1.5 mb-1">
-            <Users size={14} className="text-blue-500" />
-            <span className="text-xs text-slate-500 font-medium">Active Co-investors</span>
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-500"><Users size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Active Co-investors</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{stats.activeCoInvest}</p>
+            <p className="text-xs text-slate-400">co-investing now</p>
           </div>
-          <p className="text-xl font-bold text-blue-600">{stats.activeCoInvest}</p>
         </div>
-
-        <div className="h-24 min-w-[130px] flex-shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50">
-          <div className="flex items-center gap-1.5 mb-1">
-            <TrendingUp size={14} className="text-emerald-500" />
-            <span className="text-xs text-slate-500 font-medium">Thesis Aligned</span>
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-emerald-500"><TrendingUp size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Thesis Aligned</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{stats.thesisAligned}</p>
+            <p className="text-xs text-slate-400">≥70% alignment</p>
           </div>
-          <p className="text-xl font-bold text-emerald-600">{stats.thesisAligned}</p>
         </div>
-
-        <div className="h-24 min-w-[130px] flex-shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50">
-          <div className="flex items-center gap-1.5 mb-1">
-            <CheckCircle2 size={14} className="text-violet-500" />
-            <span className="text-xs text-slate-500 font-medium">Co-invest Ready</span>
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-violet-500"><CheckCircle2 size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Co-invest Ready</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{stats.coInvestReady}</p>
+            <p className="text-xs text-slate-400">ready to co-invest</p>
           </div>
-          <p className="text-xl font-bold text-violet-600">{stats.coInvestReady}</p>
         </div>
-
-        <div className="h-24 min-w-[130px] flex-shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50">
-          <div className="flex items-center gap-1.5 mb-1">
-            <Zap size={14} className="text-amber-500" />
-            <span className="text-xs text-slate-500 font-medium">Warm Relationships</span>
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-500"><Zap size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Warm Relationships</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{stats.warmRel}</p>
+            <p className="text-xs text-slate-400">engaged recently</p>
           </div>
-          <p className="text-xl font-bold text-amber-600">{stats.warmRel}</p>
         </div>
-
-        <div className="h-24 min-w-[130px] flex-shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50">
-          <div className="flex items-center gap-1.5 mb-1">
-            <ChevronRight size={14} className="text-teal-500" />
-            <span className="text-xs text-slate-500 font-medium">Sourcing Active</span>
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-teal-500"><ChevronRight size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Sourcing Active</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{stats.sourcingActive}</p>
+            <p className="text-xs text-slate-400">active deal flow</p>
           </div>
-          <p className="text-xl font-bold text-teal-600">{stats.sourcingActive}</p>
         </div>
-
-        <div className="h-24 min-w-[130px] flex-shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50">
-          <div className="flex items-center gap-1.5 mb-1">
-            <AlertCircle size={14} className="text-red-400" />
-            <span className="text-xs text-slate-500 font-medium">Overdue Follow-ups</span>
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-red-400"><AlertCircle size={14} className="text-white" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Overdue Follow-ups</p>
+            <p className="text-lg font-bold text-slate-900 leading-tight">{stats.overdue}</p>
+            <p className="text-xs text-slate-400">need attention</p>
           </div>
-          <p className="text-xl font-bold text-red-500">{stats.overdue}</p>
         </div>
-
       </div>
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
@@ -1439,28 +1440,45 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
                               // Still loading
                               <p className="text-[10px] text-slate-400 italic">Loading contacts…</p>
                             ) : liveContacts.length > 0 ? (
-                              // Live Supabase contacts
-                              (liveContacts as Contact[]).map((c: Contact) => (
-                                <button
-                                  key={c.id}
-                                  onClick={() => setSelectedContact(selectedContact === c.id ? null : c.id)}
-                                  className={cn(
-                                    "flex items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors text-left w-full",
-                                    selectedContact === c.id
-                                      ? "border-blue-300 bg-blue-50"
-                                      : "border-slate-100 bg-slate-50 hover:bg-blue-50 hover:border-blue-200"
-                                  )}
-                                >
-                                  <div className={cn("w-7 h-7 rounded-full bg-gradient-to-br flex items-center justify-center flex-shrink-0", hashColor(`${c.first_name} ${c.last_name}`))}>
-                                    <span className="text-white font-bold text-[9px]">{c.first_name[0]}{c.last_name[0]}</span>
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
-                                    {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
-                                  </div>
-                                  <ChevronRight size={12} className="text-slate-300 flex-shrink-0" />
-                                </button>
-                              ))
+                              // Live Supabase contacts — with drag-to-reorder
+                              (() => {
+                                const order = selectedId ? (fundContactOrder[selectedId] ?? []) : [];
+                                const ordered = order.length > 0
+                                  ? [...(liveContacts as Contact[])].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+                                  : (liveContacts as Contact[]);
+                                return ordered.map((c: Contact, idx: number) => (
+                                  <button
+                                    key={c.id}
+                                    draggable
+                                    onDragStart={(e) => { fundContactDragIdx.current = idx; e.dataTransfer.effectAllowed = "move"; }}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={() => {
+                                      if (fundContactDragIdx.current === null || fundContactDragIdx.current === idx) return;
+                                      const ids = ordered.map((x: Contact) => x.id);
+                                      const [moved] = ids.splice(fundContactDragIdx.current, 1);
+                                      ids.splice(idx, 0, moved);
+                                      setFundContactOrder(prev => ({ ...prev, [selectedId!]: ids }));
+                                      fundContactDragIdx.current = null;
+                                    }}
+                                    onClick={() => setSelectedContact(selectedContact === c.id ? null : c.id)}
+                                    className={cn(
+                                      "flex items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors text-left w-full cursor-grab",
+                                      selectedContact === c.id
+                                        ? "border-blue-300 bg-blue-50"
+                                        : "border-slate-100 bg-slate-50 hover:bg-blue-50 hover:border-blue-200"
+                                    )}
+                                  >
+                                    <div className={cn("w-7 h-7 rounded-full bg-gradient-to-br flex items-center justify-center flex-shrink-0", hashColor(`${c.first_name} ${c.last_name}`))}>
+                                      <span className="text-white font-bold text-[9px]">{c.first_name[0]}{c.last_name[0]}</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                                      {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
+                                    </div>
+                                    <ChevronRight size={12} className="text-slate-300 flex-shrink-0" />
+                                  </button>
+                                ));
+                              })()
                             ) : (
                               // No live contacts — fall back to hardcoded display
                               hardcodedNames.map((hc, i) => (

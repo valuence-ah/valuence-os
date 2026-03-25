@@ -19,12 +19,14 @@ import { cn } from "@/lib/utils";
 
 // ── Starter prompts ────────────────────────────────────────────────────────────
 const STARTER_PROMPTS = [
-  "Summarise the pipeline by stage",
-  "Which startups need follow-up?",
-  "Show me all biotech companies",
-  "Which deals are most advanced?",
-  "Draft an intro email for a new startup",
-  "Flag overdue follow-ups",
+  "Summarise the full pipeline by stage",
+  "Which companies need follow-up this week?",
+  "Give me a full profile on bitBiome",
+  "Show LP fundraising status and gaps",
+  "Who are our strategic partners and what's the co-invest potential?",
+  "Flag overdue follow-ups across pipeline + LPs",
+  "Draft an LP update email for our top 3 LPs",
+  "What documents have been uploaded for our active deals?",
 ];
 
 /** Extract plain text from a UIMessage's parts array (v3 SDK) */
@@ -199,7 +201,7 @@ export function PipelineChatWidget() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-white text-sm font-semibold leading-tight">Valuence AI Assistant</p>
-              <p className="text-blue-200 text-xs">Pipeline intelligence</p>
+              <p className="text-blue-200 text-xs">Pipeline · LPs · Strategics · Documents</p>
             </div>
             <div className="flex items-center gap-1">
               {messages.length > 0 && (
@@ -233,7 +235,7 @@ export function PipelineChatWidget() {
                   <Bot size={24} className="text-white" />
                 </div>
                 <p className="text-slate-800 font-semibold text-sm">Ask me anything about</p>
-                <p className="text-slate-500 text-xs mt-0.5 mb-5">your deal pipeline, companies, or next steps</p>
+                <p className="text-slate-500 text-xs mt-0.5 mb-5">pipeline, LPs, strategic partners, documents, or market intel</p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   {STARTER_PROMPTS.map(p => (
                     <button
@@ -275,7 +277,7 @@ export function PipelineChatWidget() {
                 value={text}
                 onChange={handleTextChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about the pipeline…"
+                placeholder="Ask about pipeline, LPs, strategics, or companies…"
                 disabled={isLoading}
                 className="flex-1 resize-none bg-transparent text-sm text-slate-800 placeholder-slate-400 outline-none leading-relaxed disabled:opacity-60"
                 style={{ minHeight: "24px", maxHeight: "120px" }}

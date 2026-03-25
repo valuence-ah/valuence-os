@@ -60,6 +60,7 @@ export interface Company {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  drive_folder_url: string | null;
 }
 
 export interface Contact {

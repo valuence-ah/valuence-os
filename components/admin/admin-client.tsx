@@ -113,24 +113,15 @@ function TypeCell({
     setOpen(true);
   }
 
-  function toggle(opt: string, e: React.MouseEvent) {
+  async function toggle(opt: string, e: React.MouseEvent) {
     e.stopPropagation();
-    setSelected(prev => prev.includes(opt) ? prev.filter(x => x !== opt) : [...prev, opt]);
-  }
-
-  async function apply(e: React.MouseEvent) {
-    e.stopPropagation();
-    setOpen(false);
+    const next = selected.includes(opt) ? selected.filter(x => x !== opt) : [...selected, opt];
+    setSelected(next);
     if (!row.id) return;
     setSaving(true);
-    await supabase.from("companies").update({ types: selected }).eq("id", row.id);
+    await supabase.from("companies").update({ types: next }).eq("id", row.id);
     setSaving(false);
-    onSaved(row.id, selected);
-  }
-
-  function cancel(e: React.MouseEvent) {
-    e.stopPropagation();
-    setOpen(false);
+    onSaved(row.id, next);
   }
 
   // Close when clicking outside
@@ -190,14 +181,688 @@ function TypeCell({
               );
             })}
           </div>
-          <div style={{ borderTop: "1px solid #f1f5f9", padding: "8px 14px", display: "flex", gap: 8 }}>
-            <div onClick={apply} style={{ flex: 1, padding: "6px 0", fontSize: 12, fontWeight: 600, color: "#fff", background: "#3b82f6", borderRadius: 6, cursor: "pointer", textAlign: "center" }}>
-              ✓ Apply
-            </div>
-            <div onClick={cancel} style={{ flex: 1, padding: "6px 0", fontSize: 12, color: "#64748b", background: "#f1f5f9", borderRadius: 6, cursor: "pointer", textAlign: "center" }}>
-              Cancel
+          <div style={{ borderTop: "1px solid #f1f5f9", padding: "6px 14px", display: "flex", justifyContent: "flex-end" }}>
+            <div onClick={e => { e.stopPropagation(); setOpen(false); }} style={{ padding: "4px 12px", fontSize: 11, color: "#64748b", background: "#f1f5f9", borderRadius: 6, cursor: "pointer" }}>
+              Done
             </div>
           </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+// ─── ContactTypeCell: portal single-select for contact type ───────────────────
+
+const CONTACT_TYPE_OPTIONS = ["Advisor / KOL","Ecosystem","Employee","Founder / Mgmt","Government/Academic","Investor","Lawyer","Limited Partner","Other","Strategic"];
+const CONTACT_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
+  "Advisor / KOL":       { bg: "#fef3c7", color: "#92400e" },
+  "Ecosystem":           { bg: "#ecfdf5", color: "#065f46" },
+  "Employee":            { bg: "#eff6ff", color: "#1d4ed8" },
+  "Founder / Mgmt":      { bg: "#faf5ff", color: "#7e22ce" },
+  "Government/Academic": { bg: "#f0f9ff", color: "#0369a1" },
+  "Investor":            { bg: "#fff7ed", color: "#c2410c" },
+  "Lawyer":              { bg: "#fdf4ff", color: "#86198f" },
+  "Limited Partner":     { bg: "#f0fdf4", color: "#15803d" },
+  "Other":               { bg: "#f8fafc", color: "#64748b" },
+  "Strategic":           { bg: "#fff1f2", color: "#be123c" },
+};
+
+function ContactTypeCell({ row, onSaved }: { row: ContactRow; onSaved: (id: string, type: string) => void }) {
+  const supabase = createClient();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const cellRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const current = (row.type as string) ?? "";
+
+  function openDropdown(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (cellRef.current) {
+      const rect = cellRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
+    }
+    setOpen(true);
+  }
+
+  async function pick(opt: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setOpen(false);
+    if (!row.id) return;
+    setSaving(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from("contacts") as any).update({ type: opt }).eq("id", row.id);
+    setSaving(false);
+    onSaved(row.id, opt);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) { if (!cellRef.current?.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const c = CONTACT_TYPE_COLORS[current] ?? { bg: "#f8fafc", color: "#64748b" };
+  return (
+    <div ref={cellRef} onClick={openDropdown}
+      style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer" }}
+      title="Click to edit">
+      {current ? (
+        <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500 }}>
+          {saving ? "Saving…" : current}
+        </span>
+      ) : (
+        <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#cbd5e1" }}>{saving ? "Saving…" : "Click to set"}</span>
+      )}
+      {open && pos && createPortal(
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 99999, overflow: "hidden", fontFamily: "inherit" }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div style={{ padding: "6px 0", maxHeight: 300, overflowY: "auto" }}>
+            {CONTACT_TYPE_OPTIONS.map(opt => {
+              const tc = CONTACT_TYPE_COLORS[opt] ?? { bg: "#f8fafc", color: "#64748b" };
+              return (
+                <div key={opt} onClick={e => pick(opt, e)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", cursor: "pointer", userSelect: "none", background: opt === current ? "#f0f9ff" : "transparent" }}>
+                  <div style={{ width: 14, height: 14, flexShrink: 0, borderRadius: "50%", border: `2px solid ${opt === current ? "#3b82f6" : "#d1d5db"}`, background: opt === current ? "#3b82f6" : "#fff" }} />
+                  <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: tc.bg, color: tc.color, fontWeight: 500 }}>{opt}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+// ─── CompanyPickerCell: searchable company FK picker for contacts ──────────────
+
+function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
+  row: ContactRow;
+  companiesRef: React.RefObject<CompanyRow[]>;
+  setCompanies: React.Dispatch<React.SetStateAction<CompanyRow[]>>;
+  onSaved: (id: string, companyId: string | null, companyName: string | null) => void;
+}) {
+  const supabase = createClient();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [matching, setMatching] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const cellRef = useRef<HTMLDivElement>(null);
+  const portalRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const displayName = row.company_name ?? "";
+
+  const filtered = useMemo(() => {
+    const all = companiesRef.current ?? [];
+    if (!search.trim()) return all.slice(0, 50);
+    const q = search.toLowerCase();
+    return all.filter(c => c.name?.toLowerCase().includes(q)).slice(0, 40);
+  // companiesRef is a stable ref object; search changes trigger recompute
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  function openDropdown(e: React.MouseEvent) {
+    e.stopPropagation();
+    setSearch("");
+    setAiSuggestion(null);
+    if (cellRef.current) {
+      const rect = cellRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 260) });
+    }
+    setOpen(true);
+    setTimeout(() => inputRef.current?.focus(), 30);
+  }
+
+  async function pick(company: CompanyRow | null, e: React.MouseEvent) {
+    e.stopPropagation();
+    setOpen(false);
+    setSaveError(null);
+    if (!row.id) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("contacts")
+      .update({ company_id: company?.id ?? null })
+      .eq("id", row.id);
+    setSaving(false);
+    if (error) {
+      setSaveError(error.message);
+      console.error("[CompanyPickerCell] save failed:", error);
+      return;
+    }
+    onSaved(row.id, company?.id ?? null, company?.name ?? null);
+  }
+
+  async function handleMatchFromEmail(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!row.email) return;
+    setMatching(true);
+    setAiSuggestion(null);
+    try {
+      const res = await fetch("/api/contacts/match-company", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: row.email }),
+      });
+      const data = await res.json();
+      if (data.match) {
+        const company = companiesRef.current.find(c => c.id === data.match.id);
+        if (company) {
+          await pick(company, e);
+          return;
+        }
+      } else if (data.suggestion) {
+        setAiSuggestion(data.suggestion);
+      }
+    } catch {
+      // silently fail
+    }
+    setMatching(false);
+  }
+
+  async function handleCreateAndLink(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!aiSuggestion) return;
+    setSaving(true);
+    const { data: newCompany, error } = await supabase
+      .from("companies")
+      .insert({ name: aiSuggestion, type: "other" })
+      .select()
+      .single();
+    if (!error && newCompany) {
+      setCompanies(prev => [newCompany as CompanyRow, ...prev]);
+      await pick(newCompany as CompanyRow, e);
+    }
+    setSaving(false);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as Node;
+      // Don't close if clicking inside the trigger cell OR inside the portal dropdown
+      if (cellRef.current?.contains(target)) return;
+      if (portalRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={cellRef} onClick={openDropdown}
+      style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer" }}
+      title="Click to link company">
+      <span style={{ fontSize: 11, color: saveError ? "#ef4444" : displayName ? "#1e293b" : (saving ? "#3b82f6" : "#cbd5e1"), fontWeight: displayName ? 500 : 400 }}>
+        {saving ? "Saving…" : saveError ? `⚠ ${saveError}` : (displayName || "—")}
+      </span>
+      {open && pos && createPortal(
+        <div
+          ref={portalRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 99999, overflow: "hidden", fontFamily: "inherit" }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div style={{ padding: "8px 8px 4px" }}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search companies…"
+              style={{ width: "100%", padding: "5px 8px", fontSize: 12, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }}
+            />
+          </div>
+          <div style={{ maxHeight: 240, overflowY: "auto" }}>
+            <div onMouseDown={e => pick(null, e)}
+              style={{ padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>
+              — No company
+            </div>
+            {filtered.map(c => (
+              <div key={c.id} onMouseDown={e => pick(c, e)}
+                style={{ padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#1e293b", background: c.id === row.company_id ? "#f0f9ff" : "transparent" }}>
+                {c.name}
+              </div>
+            ))}
+          </div>
+          {row.email && (
+            <div style={{ borderTop: "1px solid #f1f5f9", padding: "8px 10px" }}>
+              {matching ? (
+                <div style={{ fontSize: 12, color: "#3b82f6", padding: "4px 0" }}>Matching…</div>
+              ) : (
+                <div
+                  onClick={handleMatchFromEmail}
+                  style={{ fontSize: 12, color: "#7c3aed", cursor: "pointer", padding: "4px 0", fontWeight: 500 }}
+                >
+                  ✨ Match from email
+                </div>
+              )}
+              {aiSuggestion && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>✨ AI suggests: <strong>{aiSuggestion}</strong></div>
+                  <div
+                    onClick={handleCreateAndLink}
+                    style={{ fontSize: 12, color: "#fff", background: "#3b82f6", borderRadius: 5, padding: "4px 10px", cursor: "pointer", display: "inline-block", fontWeight: 500 }}
+                  >
+                    + Create &amp; Link
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+// ─── LinkedContactsCell: interactive contacts panel for company rows ──────────
+
+function LinkedContactsCell({ row, contactsRef, setContacts }: {
+  row: CompanyRow;
+  contactsRef: React.RefObject<ContactRow[]>;
+  setContacts: React.Dispatch<React.SetStateAction<ContactRow[]>>;
+}) {
+  const supabase = createClient();
+  const cellRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [panelSearch, setPanelSearch] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // mode: "list" | "create" | "edit" | "link"
+  const [mode, setMode] = useState<"list" | "create" | "edit" | "link">("list");
+
+  // Form state shared between create and edit
+  const [formFirstName, setFormFirstName] = useState("");
+  const [formLastName, setFormLastName] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formTitle, setFormTitle] = useState("");
+  const [formType, setFormType] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formSaving, setFormSaving] = useState(false);
+
+  // Link existing contact state
+  const [linkSearch, setLinkSearch] = useState("");
+  const [linkSaving, setLinkSaving] = useState(false);
+
+  const linked = contactsRef.current.filter(c => c.company_id === row.id);
+
+  // All unlinked contacts for "Link Existing" search
+  const linkResults = useMemo(() => {
+    if (mode !== "link") return [];
+    const q = linkSearch.trim().toLowerCase();
+    const all = contactsRef.current;
+    const unlinked = all.filter(c => c.company_id !== row.id);
+    if (!q) return unlinked.slice(0, 40);
+    return unlinked.filter(c =>
+      c.name?.toLowerCase().includes(q) ||
+      c.first_name?.toLowerCase().includes(q) ||
+      c.last_name?.toLowerCase().includes(q) ||
+      c.email?.toLowerCase().includes(q)
+    ).slice(0, 40);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkSearch, mode]);
+
+  const filteredLinked = useMemo(() => {
+    if (!panelSearch.trim()) return linked;
+    const q = panelSearch.toLowerCase();
+    return linked.filter(c =>
+      c.name?.toLowerCase().includes(q) ||
+      c.email?.toLowerCase().includes(q) ||
+      c.title?.toLowerCase().includes(q)
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelSearch, linked.length]);
+
+  function openPanel(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (cellRef.current) {
+      const rect = cellRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setPanelSearch("");
+    setMode("list");
+    setOpen(true);
+    setTimeout(() => searchInputRef.current?.focus(), 30);
+  }
+
+  function startCreate() {
+    setFormFirstName("");
+    setFormLastName("");
+    setFormEmail("");
+    setFormTitle("");
+    setFormType("");
+    setEditingId(null);
+    setMode("create");
+  }
+
+  function startEdit(c: ContactRow) {
+    setFormFirstName(c.first_name ?? "");
+    setFormLastName(c.last_name ?? "");
+    setFormEmail(c.email ?? "");
+    setFormTitle(c.title ?? "");
+    setFormType((c.type as string) ?? "");
+    setEditingId(c.id);
+    setMode("edit");
+  }
+
+  async function handleCreate() {
+    setFormSaving(true);
+    const { data, error } = await supabase
+      .from("contacts")
+      .insert({
+        first_name: formFirstName,
+        last_name: formLastName,
+        email: formEmail,
+        title: formTitle,
+        type: formType || null,
+        company_id: row.id,
+        status: "active",
+      })
+      .select()
+      .single();
+    setFormSaving(false);
+    if (!error && data) {
+      const newRow: ContactRow = {
+        ...(data as Contact),
+        company_name: row.name,
+        name: [formFirstName, formLastName].filter(Boolean).join(" "),
+      };
+      setContacts(prev => [...prev, newRow]);
+      setMode("list");
+    }
+  }
+
+  async function handleSave() {
+    if (!editingId) return;
+    setFormSaving(true);
+    await supabase
+      .from("contacts")
+      .update({
+        first_name: formFirstName,
+        last_name: formLastName,
+        email: formEmail,
+        title: formTitle,
+        type: formType || null,
+      })
+      .eq("id", editingId);
+    setFormSaving(false);
+    setContacts(prev => prev.map(c =>
+      c.id === editingId
+        ? {
+            ...c,
+            first_name: formFirstName,
+            last_name: formLastName,
+            email: formEmail,
+            title: formTitle,
+            type: (formType || null) as Contact["type"],
+            name: [formFirstName, formLastName].filter(Boolean).join(" "),
+          }
+        : c
+    ));
+    setMode("list");
+  }
+
+  async function handleLink(contact: ContactRow) {
+    setLinkSaving(true);
+    await supabase.from("contacts").update({ company_id: row.id }).eq("id", contact.id);
+    setContacts(prev => prev.map(c =>
+      c.id === contact.id ? { ...c, company_id: row.id, company_name: row.name } : c
+    ));
+    setLinkSaving(false);
+    setLinkSearch("");
+    setMode("list");
+  }
+
+  async function handleUnlink(contactId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    await supabase.from("contacts").update({ company_id: null }).eq("id", contactId);
+    setContacts(prev => prev.map(c =>
+      c.id === contactId ? { ...c, company_id: null, company_name: null } : c
+    ));
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as Node;
+      if (cellRef.current?.contains(target)) return;
+      // Check if click is inside portal
+      const portals = document.querySelectorAll("[data-linked-contacts-portal]");
+      for (const p of portals) {
+        if (p.contains(target)) return;
+      }
+      setOpen(false);
+      setMode("list");
+      setLinkSearch("");
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Cell display: up to 2 pills + overflow count
+  const pills = linked.slice(0, 2);
+  const overflow = linked.length - 2;
+
+  const formFields = (
+    <div style={{ padding: "0 12px 12px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+        <div>
+          <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, marginBottom: 2 }}>FIRST NAME</div>
+          <input value={formFirstName} onChange={e => setFormFirstName(e.target.value)}
+            style={{ width: "100%", fontSize: 12, padding: "4px 7px", border: "1px solid #e2e8f0", borderRadius: 5, outline: "none", boxSizing: "border-box" as const }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, marginBottom: 2 }}>LAST NAME</div>
+          <input value={formLastName} onChange={e => setFormLastName(e.target.value)}
+            style={{ width: "100%", fontSize: 12, padding: "4px 7px", border: "1px solid #e2e8f0", borderRadius: 5, outline: "none", boxSizing: "border-box" as const }} />
+        </div>
+      </div>
+      <div style={{ marginBottom: 6 }}>
+        <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, marginBottom: 2 }}>EMAIL</div>
+        <input value={formEmail} onChange={e => setFormEmail(e.target.value)} type="email"
+          style={{ width: "100%", fontSize: 12, padding: "4px 7px", border: "1px solid #e2e8f0", borderRadius: 5, outline: "none", boxSizing: "border-box" as const }} />
+      </div>
+      <div style={{ marginBottom: 6 }}>
+        <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, marginBottom: 2 }}>TITLE</div>
+        <input value={formTitle} onChange={e => setFormTitle(e.target.value)}
+          style={{ width: "100%", fontSize: 12, padding: "4px 7px", border: "1px solid #e2e8f0", borderRadius: 5, outline: "none", boxSizing: "border-box" as const }} />
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, marginBottom: 2 }}>TYPE</div>
+        <select value={formType} onChange={e => setFormType(e.target.value)}
+          style={{ width: "100%", fontSize: 12, padding: "4px 7px", border: "1px solid #e2e8f0", borderRadius: 5, outline: "none", background: "#fff", boxSizing: "border-box" as const }}>
+          <option value="">— Select type —</option>
+          {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      ref={cellRef}
+      onClick={openPanel}
+      style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer", gap: 3 }}
+    >
+      {linked.length === 0 ? (
+        <span style={{ fontSize: 11, color: "#cbd5e1" }}>+ Add</span>
+      ) : (
+        <>
+          {pills.map(c => (
+            <span key={c.id} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: "#eff6ff", color: "#2563eb", fontWeight: 500, whiteSpace: "nowrap", maxWidth: 70, overflow: "hidden", textOverflow: "ellipsis" }}>
+              {c.name || c.first_name || "Contact"}
+            </span>
+          ))}
+          {overflow > 0 && (
+            <span style={{ fontSize: 10, color: "#64748b" }}>+{overflow}</span>
+          )}
+        </>
+      )}
+
+      {open && pos && createPortal(
+        <div
+          data-linked-contacts-portal=""
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 340, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 99999, fontFamily: "inherit", overflow: "hidden" }}
+          onMouseDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px 8px", borderBottom: "1px solid #f1f5f9" }}>
+            {mode === "list" ? (
+              <>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>
+                  Contacts — {row.name}
+                </span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <div
+                    onClick={e => { e.stopPropagation(); setLinkSearch(""); setMode("link"); }}
+                    style={{ fontSize: 11, fontWeight: 600, color: "#7c3aed", background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 5, padding: "3px 9px", cursor: "pointer" }}
+                  >
+                    Link
+                  </div>
+                  <div
+                    onClick={e => { e.stopPropagation(); startCreate(); }}
+                    style={{ fontSize: 11, fontWeight: 600, color: "#fff", background: "#3b82f6", borderRadius: 5, padding: "3px 9px", cursor: "pointer" }}
+                  >
+                    + New
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>
+                  {mode === "create" ? "New Contact" : mode === "link" ? "Link Existing Contact" : "Edit Contact"}
+                </span>
+                <div
+                  onClick={e => { e.stopPropagation(); setMode("list"); }}
+                  style={{ fontSize: 11, color: "#64748b", cursor: "pointer" }}
+                >
+                  ← Back
+                </div>
+              </>
+            )}
+          </div>
+
+          {mode === "list" && (
+            <>
+              {/* Search */}
+              <div style={{ padding: "8px 12px 4px" }}>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={panelSearch}
+                  onChange={e => setPanelSearch(e.target.value)}
+                  placeholder="Search contacts…"
+                  style={{ width: "100%", fontSize: 12, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }}
+                />
+              </div>
+              {/* Contact list */}
+              <div style={{ maxHeight: 260, overflowY: "auto" }}>
+                {filteredLinked.length === 0 ? (
+                  <div style={{ padding: "12px 14px", fontSize: 12, color: "#94a3b8" }}>
+                    {panelSearch ? "No matching contacts" : "No contacts linked"}
+                  </div>
+                ) : filteredLinked.map(c => {
+                  const tc = CONTACT_TYPE_COLORS[(c.type as string) ?? ""] ?? { bg: "#f8fafc", color: "#64748b" };
+                  return (
+                    <div key={c.id} style={{ padding: "8px 12px", borderBottom: "1px solid #f8fafc", display: "flex", alignItems: "flex-start", gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 5 }}>
+                          {c.name || [c.first_name, c.last_name].filter(Boolean).join(" ") || "—"}
+                          {c.type && (
+                            <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 9999, background: tc.bg, color: tc.color, fontWeight: 500 }}>
+                              {c.type as string}
+                            </span>
+                          )}
+                        </div>
+                        {c.email && <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>{c.email}</div>}
+                        {c.title && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>{c.title}</div>}
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                        <div onClick={e => { e.stopPropagation(); startEdit(c); }}
+                          style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4, background: "#f1f5f9", color: "#475569", cursor: "pointer", fontWeight: 500 }}>
+                          Edit
+                        </div>
+                        <div onClick={e => handleUnlink(c.id, e)}
+                          style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4, background: "#fff1f2", color: "#be123c", cursor: "pointer", fontWeight: 500 }}>
+                          Unlink
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {mode === "link" && (
+            <>
+              <div style={{ padding: "8px 12px 4px" }}>
+                <input
+                  type="text"
+                  autoFocus
+                  value={linkSearch}
+                  onChange={e => setLinkSearch(e.target.value)}
+                  placeholder="Search contacts by name or email…"
+                  style={{ width: "100%", fontSize: 12, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }}
+                />
+              </div>
+              <div style={{ maxHeight: 260, overflowY: "auto" }}>
+                {linkResults.length === 0 ? (
+                  <div style={{ padding: "12px 14px", fontSize: 12, color: "#94a3b8" }}>
+                    {linkSearch ? "No contacts found" : "Type to search all contacts…"}
+                  </div>
+                ) : linkResults.map(c => (
+                  <div key={c.id} style={{ padding: "8px 12px", borderBottom: "1px solid #f8fafc", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {c.name || [c.first_name, c.last_name].filter(Boolean).join(" ") || "—"}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
+                        {c.email}{c.company_name ? ` · ${c.company_name}` : ""}
+                      </div>
+                    </div>
+                    <div
+                      onClick={e => { e.stopPropagation(); handleLink(c); }}
+                      style={{ fontSize: 11, fontWeight: 600, color: "#fff", background: linkSaving ? "#93c5fd" : "#7c3aed", borderRadius: 5, padding: "3px 9px", cursor: "pointer", flexShrink: 0 }}
+                    >
+                      {linkSaving ? "…" : "Link"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {(mode === "create" || mode === "edit") && (
+            <>
+              {formFields}
+              <div style={{ display: "flex", gap: 8, padding: "0 12px 12px" }}>
+                <div
+                  onClick={e => { e.stopPropagation(); mode === "create" ? handleCreate() : handleSave(); }}
+                  style={{ flex: 1, padding: "6px 0", fontSize: 12, fontWeight: 600, color: "#fff", background: formSaving ? "#93c5fd" : "#3b82f6", borderRadius: 6, cursor: "pointer", textAlign: "center" }}
+                >
+                  {formSaving ? "Saving…" : (mode === "create" ? "Create" : "Save")}
+                </div>
+                <div
+                  onClick={e => { e.stopPropagation(); setMode("list"); }}
+                  style={{ flex: 1, padding: "6px 0", fontSize: 12, color: "#64748b", background: "#f1f5f9", borderRadius: 6, cursor: "pointer", textAlign: "center" }}
+                >
+                  Cancel
+                </div>
+              </div>
+            </>
+          )}
         </div>,
         document.body
       )}
@@ -238,9 +903,64 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
     () => new Set()
   );
 
+  // ── Refs for latest state values (used in stable useMemo closures) ───────
+  const contactsRef = useRef<ContactRow[]>(contacts);
+  contactsRef.current = contacts;
+  const companiesRef = useRef<CompanyRow[]>(companies);
+  companiesRef.current = companies;
+
+  // ── Client-side contacts refresh on mount (get latest DB data) ──────────
+  useEffect(() => {
+    supabase
+      .from("contacts")
+      .select("*, company:companies(name)")
+      .order("last_name", { ascending: true })
+      .limit(10000)
+      .then(({ data }) => {
+        if (data) {
+          setContacts(data.map((c: Contact & { company: { name: string } | null }) => ({
+            ...c,
+            company_name: c.company?.name ?? null,
+            name: [c.first_name, c.last_name].filter(Boolean).join(" "),
+          })));
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Sort state ───────────────────────────────────────────────────────────
   const [companySortColumns, setCompanySortColumns] = useState<readonly SortColumn[]>([]);
   const [contactSortColumns, setContactSortColumns] = useState<readonly SortColumn[]>([]);
+
+  // ── Column width persistence ──────────────────────────────────────────────
+  const [companyColWidths, setCompanyColWidths] = useState<Record<string, number>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(localStorage.getItem("admin_company_col_widths") ?? "{}"); } catch { return {}; }
+  });
+  const [contactColWidths, setContactColWidths] = useState<Record<string, number>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(localStorage.getItem("admin_contact_col_widths") ?? "{}"); } catch { return {}; }
+  });
+
+  // ── Column order persistence ──────────────────────────────────────────────
+  const [companyColOrder, setCompanyColOrder] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem("admin_company_col_order") ?? "[]"); } catch { return []; }
+  });
+  const [contactColOrder, setContactColOrder] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem("admin_contact_col_order") ?? "[]"); } catch { return []; }
+  });
+
+  // ── Drag refs for column reorder ──────────────────────────────────────────
+  const dragCompanyColKey = useRef<string | null>(null);
+  const dragCompanyOverKey = useRef<string | null>(null);
+  const dragContactColKey = useRef<string | null>(null);
+  const dragContactOverKey = useRef<string | null>(null);
+
+  // ── Match All state ───────────────────────────────────────────────────────
+  const [matchingAll, setMatchingAll] = useState(false);
+  const [matchProgress, setMatchProgress] = useState<{ done: number; total: number; matched: number }>({ done: 0, total: 0, matched: 0 });
 
   // ── Panel filter state ────────────────────────────────────────────────────
   const [companyFilters, setCompanyFilters] = useState<Record<string, string>>({});
@@ -304,12 +1024,27 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       },
       {
         key: "name",
-        name: "Company Name",
+        name: "Company",
         width: 200,
         frozen: true,
         sortable: true,
         resizable: true,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#1e293b" }}>{row.name}</span>
+          </div>
+        ),
         renderEditCell: renderTextEditor,
+      },
+      {
+        key: "_contacts",
+        name: "Contacts",
+        width: 180,
+        editable: false,
+        sortable: false,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <LinkedContactsCell row={row} contactsRef={contactsRef} setContacts={setContacts} />
+        ),
       },
       {
         key: "types",
@@ -566,7 +1301,8 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         editable: false,
       },
     ],
-    [setCompanies]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [setCompanies, setContacts, setActiveTab, setContactFilters, contactsRef, contacts.length]
   );
 
   // ─── Contact columns ───────────────────────────────────────────────────────
@@ -606,19 +1342,37 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       {
         key: "type",
         name: "Type",
-        width: 130,
+        width: 150,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<ContactRow>(["Advisor / KOL","Ecosystem","Employee","Founder / Mgmt","Government/Academic","Investor","Lawyer","Limited Partner","Other","Strategic"]),
+        editable: false,
+        renderCell: ({ row }: { row: ContactRow }) => (
+          <ContactTypeCell
+            row={row}
+            onSaved={(id, type) => {
+              setContacts(prev => prev.map(c => c.id === id ? { ...c, type: type as Contact["type"] } : c));
+            }}
+          />
+        ),
       },
       {
         key: "company_name",
         name: "Company",
-        width: 160,
+        width: 180,
         editable: false,
         sortable: true,
         resizable: true,
-        renderCell: ({ row }: { row: ContactRow }) => row.company_name ?? "",
+        renderCell: ({ row }: { row: ContactRow }) => (
+          <CompanyPickerCell
+            row={row}
+            companiesRef={companiesRef}
+            setCompanies={setCompanies}
+            onSaved={(id, companyId, companyName) => {
+              setContacts(prev => prev.map(c => c.id === id ? { ...c, company_id: companyId, company_name: companyName } : c));
+              setCompanies(prev => [...prev]);
+            }}
+          />
+        ),
       },
       {
         key: "phone",
@@ -704,7 +1458,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         editable: false,
       },
     ],
-    []
+    [setContacts, setCompanies, companiesRef]
   );
 
   // ─── Visible columns (apply column picker) ────────────────────────────────
@@ -733,6 +1487,157 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         return !hiddenContactKeys.has(key);
       }),
     [allContactColumns, hiddenContactKeys]
+  );
+
+  // ─── Column widths applied ────────────────────────────────────────────────
+
+  const companyColumnsWithWidths = useMemo(
+    () => companyColumns.map(col => {
+      const saved = companyColWidths[col.key as string];
+      return saved ? { ...col, width: saved } : col;
+    }),
+    [companyColumns, companyColWidths]
+  );
+
+  const contactColumnsWithWidths = useMemo(
+    () => contactColumns.map(col => {
+      const saved = contactColWidths[col.key as string];
+      return saved ? { ...col, width: saved } : col;
+    }),
+    [contactColumns, contactColWidths]
+  );
+
+  // ─── Column ordering applied ──────────────────────────────────────────────
+
+  const orderedCompanyColumns = useMemo(() => {
+    if (companyColOrder.length === 0) return companyColumnsWithWidths;
+    const frozen = companyColumnsWithWidths.filter(c => (c as { frozen?: boolean }).frozen || (c.key as string) === "select-row");
+    const movable = companyColumnsWithWidths.filter(c => !(c as { frozen?: boolean }).frozen && (c.key as string) !== "select-row");
+    const sorted = [...movable].sort((a, b) => {
+      const ai = companyColOrder.indexOf(a.key as string);
+      const bi = companyColOrder.indexOf(b.key as string);
+      if (ai === -1 && bi === -1) return 0;
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+    return [...frozen, ...sorted];
+  }, [companyColumnsWithWidths, companyColOrder]);
+
+  const orderedContactColumns = useMemo(() => {
+    if (contactColOrder.length === 0) return contactColumnsWithWidths;
+    const frozen = contactColumnsWithWidths.filter(c => (c as { frozen?: boolean }).frozen || (c.key as string) === "select-row");
+    const movable = contactColumnsWithWidths.filter(c => !(c as { frozen?: boolean }).frozen && (c.key as string) !== "select-row");
+    const sorted = [...movable].sort((a, b) => {
+      const ai = contactColOrder.indexOf(a.key as string);
+      const bi = contactColOrder.indexOf(b.key as string);
+      if (ai === -1 && bi === -1) return 0;
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+    return [...frozen, ...sorted];
+  }, [contactColumnsWithWidths, contactColOrder]);
+
+  // ─── Reorder helpers ──────────────────────────────────────────────────────
+
+  function reorderKeys(order: string[], fromKey: string, toKey: string): string[] {
+    const result = [...order];
+    const fi = result.indexOf(fromKey);
+    const ti = result.indexOf(toKey);
+    if (fi === -1 || ti === -1 || fi === ti) return result;
+    result.splice(fi, 1);
+    result.splice(ti, 0, fromKey);
+    return result;
+  }
+
+  function addDraggableHeaders<T>(
+    cols: Column<T>[],
+    dragRef: React.MutableRefObject<string | null>,
+    dragOverRef: React.MutableRefObject<string | null>,
+    onReorder: (fromKey: string, toKey: string) => void
+  ): Column<T>[] {
+    return cols.map(col => {
+      const key = col.key as string;
+      const frozen = (col as { frozen?: boolean }).frozen;
+      const isMeta = key === "select-row";
+      if (isMeta || frozen) return col;
+      return {
+        ...col,
+        renderHeaderCell: () => (
+          <div
+            draggable
+            onDragStart={e => {
+              dragRef.current = key;
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", key);
+            }}
+            onDragOver={e => {
+              e.preventDefault();
+              dragOverRef.current = key;
+              e.dataTransfer.dropEffect = "move";
+            }}
+            onDrop={e => {
+              e.preventDefault();
+              const from = dragRef.current;
+              if (from && from !== key) onReorder(from, key);
+              dragRef.current = null;
+              dragOverRef.current = null;
+            }}
+            onDragEnd={() => {
+              dragRef.current = null;
+              dragOverRef.current = null;
+            }}
+            style={{
+              cursor: "grab",
+              userSelect: "none",
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              padding: "0 4px",
+              gap: 4,
+            }}
+            title="Drag to reorder"
+          >
+            <span style={{ fontSize: 11 }}>⠿</span>
+            <span>{typeof col.name === "string" ? col.name : ""}</span>
+          </div>
+        ),
+      };
+    });
+  }
+
+  const handleCompanyReorder = useCallback((fromKey: string, toKey: string) => {
+    setCompanyColOrder(prev => {
+      const base = prev.length ? prev : orderedCompanyColumns.map(c => c.key as string);
+      const next = reorderKeys(base, fromKey, toKey);
+      localStorage.setItem("admin_company_col_order", JSON.stringify(next));
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderedCompanyColumns]);
+
+  const handleContactReorder = useCallback((fromKey: string, toKey: string) => {
+    setContactColOrder(prev => {
+      const base = prev.length ? prev : orderedContactColumns.map(c => c.key as string);
+      const next = reorderKeys(base, fromKey, toKey);
+      localStorage.setItem("admin_contact_col_order", JSON.stringify(next));
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderedContactColumns]);
+
+  const finalCompanyColumns = useMemo(
+    () => addDraggableHeaders(orderedCompanyColumns, dragCompanyColKey, dragCompanyOverKey, handleCompanyReorder),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orderedCompanyColumns, handleCompanyReorder]
+  );
+
+  const finalContactColumns = useMemo(
+    () => addDraggableHeaders(orderedContactColumns, dragContactColKey, dragContactOverKey, handleContactReorder),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orderedContactColumns, handleContactReorder]
   );
 
   // ─── Filtered + sorted rows ───────────────────────────────────────────────
@@ -974,6 +1879,45 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
     setSelectedContactRows(new Set());
     showToast("Deleted ✓", "saved");
   }
+
+  // ─── Match All handler ────────────────────────────────────────────────────
+
+  const handleMatchAll = useCallback(async () => {
+    const toMatch = contacts.filter(c => c.email && c.company_id === null);
+    if (toMatch.length === 0) return;
+    setMatchingAll(true);
+    setMatchProgress({ done: 0, total: toMatch.length, matched: 0 });
+    let matched = 0;
+    for (let i = 0; i < toMatch.length; i++) {
+      const contact = toMatch[i];
+      try {
+        const res = await fetch("/api/contacts/match-company", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: contact.email }),
+        });
+        const data = await res.json();
+        if (data.match?.id) {
+          const company = companies.find(c => c.id === data.match.id);
+          if (company) {
+            await supabase.from("contacts").update({ company_id: data.match.id }).eq("id", contact.id);
+            setContacts(prev => prev.map(c => c.id === contact.id ? { ...c, company_id: data.match.id, company_name: company.name } : c));
+            matched++;
+          }
+        }
+      } catch {
+        // silently continue
+      }
+      setMatchProgress({ done: i + 1, total: toMatch.length, matched });
+      if (i < toMatch.length - 1) {
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+    // Brief "done" message then hide
+    setMatchProgress({ done: toMatch.length, total: toMatch.length, matched });
+    await new Promise(r => setTimeout(r, 2000));
+    setMatchingAll(false);
+  }, [contacts, companies, supabase]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -1291,6 +2235,13 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           </button>
         )}
 
+        {/* Match Companies button — only on contacts tab */}
+        {!matchingAll && activeTab === "contacts" && (
+          <button onClick={handleMatchAll} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 rounded-md hover:bg-violet-100 transition-colors">
+            <Sparkles size={13} /> Match Companies
+          </button>
+        )}
+
         {/* Add Row button */}
         <button
           onClick={isCompanies ? handleAddCompany : handleAddContact}
@@ -1309,7 +2260,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           <AiConfigPanel />
         ) : isCompanies ? (
           <DataGrid<CompanyRow, unknown, string>
-            columns={companyColumns}
+            columns={finalCompanyColumns}
             rows={filteredCompanies}
             onRowsChange={handleCompanyRowsChange}
             rowKeyGetter={(row: CompanyRow) => row.id}
@@ -1317,12 +2268,20 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
             onSelectedRowsChange={setSelectedCompanyRows}
             sortColumns={companySortColumns}
             onSortColumnsChange={setCompanySortColumns}
+            onColumnResize={(col, width) => {
+              const key = col.key as string;
+              setCompanyColWidths(prev => {
+                const next = { ...prev, [key]: width };
+                localStorage.setItem("admin_company_col_widths", JSON.stringify(next));
+                return next;
+              });
+            }}
             className="rdg-light"
             style={{ height: "calc(100vh - 108px)", blockSize: "calc(100vh - 108px)" }}
           />
         ) : (
           <DataGrid<ContactRow, unknown, string>
-            columns={contactColumns}
+            columns={finalContactColumns}
             rows={filteredContacts}
             onRowsChange={handleContactRowsChange}
             rowKeyGetter={(row: ContactRow) => row.id}
@@ -1330,6 +2289,14 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
             onSelectedRowsChange={setSelectedContactRows}
             sortColumns={contactSortColumns}
             onSortColumnsChange={setContactSortColumns}
+            onColumnResize={(col, width) => {
+              const key = col.key as string;
+              setContactColWidths(prev => {
+                const next = { ...prev, [key]: width };
+                localStorage.setItem("admin_contact_col_widths", JSON.stringify(next));
+                return next;
+              });
+            }}
             className="rdg-light"
             style={{ height: "calc(100vh - 108px)", blockSize: "calc(100vh - 108px)" }}
           />
@@ -1348,6 +2315,19 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           }`}
         >
           {toast.message}
+        </div>
+      )}
+
+      {/* ── Match All progress overlay ── */}
+      {matchingAll && (
+        <div className="fixed bottom-6 right-6 z-50 bg-white border border-slate-200 rounded-xl shadow-2xl px-5 py-4 flex items-center gap-3 min-w-[240px]">
+          <Sparkles size={16} className="text-violet-500 animate-pulse" />
+          <div>
+            <p className="text-sm font-semibold text-slate-700">
+              {matchProgress.done < matchProgress.total ? "Matching companies…" : `✓ Matched ${matchProgress.matched} contacts`}
+            </p>
+            <p className="text-xs text-slate-400">{matchProgress.done} of {matchProgress.total} · {matchProgress.matched} matched</p>
+          </div>
         </div>
       )}
 

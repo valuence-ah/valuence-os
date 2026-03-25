@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2, Save, Check, Sparkles, FileText } from "lucide-react";
+import { Loader2, Save, Check, Sparkles, FileText, Bot } from "lucide-react";
 
 const MODELS = [
   { group: "Claude 4.6", options: [
@@ -43,7 +43,13 @@ interface CardState {
   saved: boolean;
 }
 
-const CONFIG_META: Record<string, { icon: React.ReactNode; description: string; variables: string[] }> = {
+const CONFIG_META: Record<string, { icon: React.ReactNode; description: string; variables: string[]; hint?: string }> = {
+  pipeline_assistant: {
+    icon: <Bot size={14} className="text-blue-600" />,
+    description: "The Valuence AI Assistant chat widget in CRM/Pipeline. Controls model, tone, and custom instructions.",
+    variables: [],
+    hint: "System Instruction overrides the entire base prompt. Leave blank to use the default. Use 'Additional Instructions' (Prompt field) to append rules without replacing the full prompt — e.g. investment focus, response style, or fund-specific context.",
+  },
   company_description: {
     icon: <FileText size={14} className="text-blue-500" />,
     description: "Generates the ~100-word company overview shown on each company card.",
@@ -210,21 +216,29 @@ export function AiConfigPanel() {
                   rows={6}
                   value={config.system_prompt ?? ""}
                   onChange={e => update(config.name, "system_prompt", e.target.value)}
-                  placeholder="Optional system instruction for Claude…"
+                  placeholder="Optional — overrides the default system prompt entirely. Leave blank to use the built-in prompt."
                   className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 resize-y font-mono leading-relaxed"
                 />
               </div>
 
               {/* User Prompt */}
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Prompt / Writing Rules</label>
+                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                  {config.name === "pipeline_assistant" ? "Additional Instructions" : "Prompt / Writing Rules"}
+                </label>
                 <textarea
-                  rows={10}
+                  rows={config.name === "pipeline_assistant" ? 6 : 10}
                   value={config.user_prompt}
                   onChange={e => update(config.name, "user_prompt", e.target.value)}
+                  placeholder={config.name === "pipeline_assistant"
+                    ? "Append extra rules or focus areas to the assistant. E.g. 'Always prioritise cleantech deals', 'Default currency is USD', 'Response language: English'…"
+                    : ""}
                   className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 resize-y font-mono leading-relaxed"
                 />
-                {meta?.variables && (
+                {meta?.hint && (
+                  <p className="text-[10px] text-slate-400 leading-relaxed">{meta.hint}</p>
+                )}
+                {meta?.variables && meta.variables.length > 0 && (
                   <p className="text-[10px] text-slate-400">
                     Available variables: {meta.variables.map(v => (
                       <code key={v} className="bg-slate-100 px-1 rounded text-slate-500 mr-1">{v}</code>

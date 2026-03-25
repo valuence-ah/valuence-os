@@ -10,7 +10,7 @@ import {
   Download, Plus, Target, TrendingUp, DollarSign,
   BarChart2, AlertCircle, CheckSquare, Video,
   ChevronDown, ChevronUp, ChevronsUpDown, MoreHorizontal, Loader2, ArrowUpRight, FileText,
-  Pencil, Check, LayoutGrid, List, Globe, Wand2, Send, Copy, RefreshCw,
+  Pencil, Check, LayoutGrid, List, Globe, Wand2, Send, Copy, RefreshCw, Link2,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -332,6 +332,7 @@ function MapView({ companies, onSelect, selectedId }: { companies: Company[]; on
 // ── Filter pills ──────────────────────────────────────────────────────────────
 const FILTER_PILLS = [
   { id: "all",      label: "All" },
+  { id: "active",   label: "Active" },
   { id: "anchor",   label: "Anchor" },
   { id: "family",   label: "Family Office" },
   { id: "overdue",  label: "Overdue follow-ups" },
@@ -428,6 +429,17 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [showAddContactForm, setShowAddContactForm] = useState(false);
   const [newContact, setNewContact]                 = useState(EMPTY_CONTACT);
   const [addingContact, setAddingContact]           = useState(false);
+  const [contactOrder, setContactOrder]             = useState<string[]>([]);
+  const lpContactDragIdx                            = useRef<number | null>(null);
+
+  // Link existing contact
+  const [showLinkContactForm, setShowLinkContactForm] = useState(false);
+  const [linkContactSearch, setLinkContactSearch]     = useState("");
+  const [linkContactSuggestions, setLinkContactSuggestions] = useState<Contact[]>([]);
+  const [linkingContact, setLinkingContact]           = useState(false);
+
+  // Tag contacts in activity
+  const [activityContactIds, setActivityContactIds]   = useState<string[]>([]);
 
   // Activity
   const [addingActivity, setAddingActivity] = useState(false);
@@ -465,6 +477,8 @@ export function LpViewClient({ initialCompanies }: Props) {
   // Resizable columns
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_COL_WIDTHS);
   const resizingCol = useRef<{ col: string; startX: number; startW: number } | null>(null);
+  const activityFormRef = useRef<HTMLDivElement>(null);
+  const linkSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function onResizeStart(col: string, e: React.MouseEvent) {
     e.preventDefault();
@@ -486,6 +500,20 @@ export function LpViewClient({ initialCompanies }: Props) {
         setLastTouchMap(map);
       });
   }, [supabase]);
+
+  // Close Add Activity form on outside click
+  useEffect(() => {
+    if (!addingActivity) return;
+    function handleOutside(e: MouseEvent) {
+      if (activityFormRef.current && !activityFormRef.current.contains(e.target as Node)) {
+        setAddingActivity(false);
+        setActivityNote("");
+        setActivityContactIds([]);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [addingActivity]);
 
   // Metrics
   const metrics = useMemo(() => {
@@ -516,6 +544,7 @@ export function LpViewClient({ initialCompanies }: Props) {
       if (q && !c.name.toLowerCase().includes(q) && !(c.location_city ?? "").toLowerCase().includes(q) && !(c.lp_type ?? "").toLowerCase().includes(q)) return false;
       if (filterCity    && c.location_city    !== filterCity)    return false;
       if (filterCountry && c.location_country !== filterCountry) return false;
+      if (activeFilter === "active")   return !!(c.lp_stage && c.lp_stage !== "Passed");
       if (activeFilter === "anchor")   return c.lp_type === "Anchor";
       if (activeFilter === "family")   return c.lp_type === "Family Office";
       if (activeFilter === "overdue") { const last = lastTouchMap[c.id]?.date; return !last || (Date.now() - new Date(last).getTime()) / 86_400_000 > 30; }
@@ -612,13 +641,19 @@ export function LpViewClient({ initialCompanies }: Props) {
       company_id: selected.id, type: activityType, date: activityDate,
       subject: { call: "Call", meeting: "Meeting", email: "Email" }[activityType],
       body: activityNote.trim() || null, created_by: user?.id ?? null,
+      contact_ids: activityContactIds.length > 0 ? activityContactIds : null,
     }).select().single();
     setSavingActivity(false);
     if (newInt) {
       setInteractions(prev => [newInt as Interaction, ...prev]);
       setLastTouchMap(prev => ({ ...prev, [selected.id]: { date: activityDate, type: activityType } }));
     }
-    setAddingActivity(false); setActivityNote(""); setActivityDate(new Date().toISOString().slice(0, 10)); setActivityType("call");
+    // Update last_contact_date for tagged contacts
+    if (activityContactIds.length > 0) {
+      await supabase.from("contacts").update({ last_contact_date: new Date(activityDate).toISOString() }).in("id", activityContactIds);
+      setContacts(prev => prev.map(c => activityContactIds.includes(c.id) ? { ...c, last_contact_date: new Date(activityDate).toISOString() } : c));
+    }
+    setAddingActivity(false); setActivityNote(""); setActivityDate(new Date().toISOString().slice(0, 10)); setActivityType("call"); setActivityContactIds([]);
   }
 
   async function handleAddContact() {
@@ -634,6 +669,40 @@ export function LpViewClient({ initialCompanies }: Props) {
     }).select().single();
     setAddingContact(false);
     if (newC) { setContacts(prev => [...prev, newC as Contact]); setShowAddContactForm(false); setNewContact(EMPTY_CONTACT); }
+  }
+
+  // ── Link existing contact ─────────────────────────────────────────────────
+  function searchLinkContacts(query: string) {
+    if (linkSearchTimer.current) clearTimeout(linkSearchTimer.current);
+    setLinkContactSearch(query);
+    if (!query.trim() || query.length < 2) { setLinkContactSuggestions([]); return; }
+    linkSearchTimer.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from("contacts")
+        .select("id, first_name, last_name, email, title, company_id")
+        .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(8);
+      setLinkContactSuggestions((data as Contact[]) ?? []);
+    }, 250);
+  }
+
+  async function linkContactToCompany(contactId: string) {
+    if (!selected) return;
+    setLinkingContact(true);
+    const { data, error } = await supabase
+      .from("contacts")
+      .update({ company_id: selected.id })
+      .eq("id", contactId)
+      .select()
+      .single();
+    if (error) { alert(error.message); }
+    else if (data) {
+      setContacts(prev => [...prev, data as Contact]);
+      setShowLinkContactForm(false);
+      setLinkContactSearch("");
+      setLinkContactSuggestions([]);
+    }
+    setLinkingContact(false);
   }
 
   // Add LP
@@ -1377,8 +1446,20 @@ export function LpViewClient({ initialCompanies }: Props) {
                     [1, 2].map(i => <div key={i} className="h-14 bg-slate-50 rounded-lg animate-pulse" />)
                   ) : contactsManaging ? (<>
                     {contacts.length === 0 && !showAddContactForm && <p className="text-xs text-slate-400 italic">No contacts linked yet.</p>}
-                    {contacts.map(c => (
-                      <div key={c.id} className="flex items-start gap-2.5 p-3 border border-slate-100 rounded-xl hover:border-blue-200 hover:bg-blue-50 transition-colors">
+                    {(contactOrder.length > 0 ? [...contacts].sort((a, b) => contactOrder.indexOf(a.id) - contactOrder.indexOf(b.id)) : contacts).map((c, idx, arr) => (
+                      <div key={c.id}
+                        draggable
+                        onDragStart={() => { lpContactDragIdx.current = idx; }}
+                        onDragOver={e => e.preventDefault()}
+                        onDrop={() => {
+                          if (lpContactDragIdx.current === null || lpContactDragIdx.current === idx) return;
+                          const order = arr.map(x => x.id);
+                          const [moved] = order.splice(lpContactDragIdx.current, 1);
+                          order.splice(idx, 0, moved);
+                          setContactOrder(order);
+                          lpContactDragIdx.current = null;
+                        }}
+                        className="flex items-start gap-2.5 p-3 border border-slate-100 rounded-xl hover:border-blue-200 hover:bg-blue-50 transition-colors cursor-grab">
                         <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5"><User size={11} className="text-violet-600" /></div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}{c.is_primary_contact && <span className="ml-1.5 text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">Primary</span>}</p>
@@ -1412,7 +1493,38 @@ export function LpViewClient({ initialCompanies }: Props) {
                         </div>
                       </div>
                     ) : (
-                      <button onClick={() => setShowAddContactForm(true)} className="w-full flex items-center justify-center gap-1.5 py-2 border-2 border-dashed border-slate-200 rounded-xl text-xs text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors"><Plus size={12} /> Add Contact</button>
+                      <div className="space-y-2">
+                        <button onClick={() => setShowAddContactForm(true)} className="w-full flex items-center justify-center gap-1.5 py-2 border-2 border-dashed border-slate-200 rounded-xl text-xs text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors"><Plus size={12} /> Add New Contact</button>
+                        {showLinkContactForm ? (
+                          <div className="border border-indigo-200 rounded-xl bg-indigo-50 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-semibold text-slate-700">Link Existing Contact</p>
+                              <button onClick={() => { setShowLinkContactForm(false); setLinkContactSearch(""); setLinkContactSuggestions([]); }}><X size={12} className="text-slate-400" /></button>
+                            </div>
+                            <input className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                              placeholder="Search by name or email…" value={linkContactSearch}
+                              onChange={e => searchLinkContacts(e.target.value)} autoFocus />
+                            {linkContactSuggestions.length > 0 && (
+                              <div className="max-h-[150px] overflow-y-auto border border-slate-200 rounded-lg bg-white divide-y divide-slate-100">
+                                {linkContactSuggestions.map(c => (
+                                  <button key={c.id} disabled={linkingContact} onClick={() => linkContactToCompany(c.id)}
+                                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-indigo-50 disabled:opacity-50">
+                                    <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0"><User size={10} className="text-indigo-600" /></div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                                      {c.email && <p className="text-[10px] text-slate-400 truncate">{c.email}</p>}
+                                    </div>
+                                    {c.company_id && c.company_id !== selected?.id && <span className="text-[10px] text-amber-600 bg-amber-50 px-1 rounded flex-shrink-0">Linked</span>}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {linkContactSearch.length >= 2 && linkContactSuggestions.length === 0 && <p className="text-[10px] text-slate-400 italic">No contacts found</p>}
+                          </div>
+                        ) : (
+                          <button onClick={() => setShowLinkContactForm(true)} className="w-full flex items-center justify-center gap-1.5 py-2 border-2 border-dashed border-indigo-200 rounded-xl text-xs text-indigo-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors"><Link2 size={12} /> Link Existing Contact</button>
+                        )}
+                      </div>
                     )}
                   </>) : contacts.length === 0 ? (
                     <p className="text-xs text-slate-400 italic">No contacts linked yet</p>
@@ -1480,7 +1592,7 @@ export function LpViewClient({ initialCompanies }: Props) {
 
                 {/* Add Activity form */}
                 {addingActivity && (
-                  <div className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
+                  <div ref={activityFormRef} className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block">Date</label>
@@ -1496,8 +1608,27 @@ export function LpViewClient({ initialCompanies }: Props) {
                       </div>
                     </div>
                     <textarea className="w-full text-xs border border-slate-200 rounded-lg p-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" rows={2} placeholder="Notes (optional)…" value={activityNote} onChange={e => setActivityNote(e.target.value)} />
+                    {/* Tag Contacts */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Tag Contacts</p>
+                      {contacts.length === 0 ? (
+                        <p className="text-[10px] text-slate-300 italic">No contacts linked yet</p>
+                      ) : (
+                        <div className="max-h-[100px] overflow-y-auto border border-slate-200 rounded-lg bg-white p-1.5 space-y-1">
+                          {contacts.map(c => (
+                            <label key={c.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-1 py-0.5 rounded">
+                              <input type="checkbox" checked={activityContactIds.includes(c.id)}
+                                onChange={e => setActivityContactIds(prev => e.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id))}
+                                className="w-3 h-3 accent-blue-600" />
+                              <span className="text-xs text-slate-700">{c.first_name} {c.last_name}</span>
+                              {c.title && <span className="text-[10px] text-slate-400 truncate">· {c.title}</span>}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <div className="flex gap-2 justify-end">
-                      <button onClick={() => { setAddingActivity(false); setActivityNote(""); }} className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-white">Cancel</button>
+                      <button onClick={() => { setAddingActivity(false); setActivityNote(""); setActivityContactIds([]); }} className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-white">Cancel</button>
                       <button onClick={handleAddActivity} disabled={savingActivity} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 flex items-center gap-1">
                         {savingActivity ? <><Loader2 size={10} className="animate-spin" />Saving…</> : <><Check size={10} />Save</>}
                       </button>
@@ -1521,8 +1652,24 @@ export function LpViewClient({ initialCompanies }: Props) {
                             <div className="flex items-start gap-1.5">
                               <InteractionIcon type={int.type} />
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-slate-700 leading-tight truncate">{int.subject ?? int.type.charAt(0).toUpperCase() + int.type.slice(1)}</p>
+                                <div className="flex items-start justify-between gap-1">
+                                  <p className="text-xs font-medium text-slate-700 leading-tight truncate">{int.subject ?? int.type.charAt(0).toUpperCase() + int.type.slice(1)}</p>
+                                  <button
+                                    onClick={async () => { if (!confirm("Delete this interaction?")) return; await supabase.from("interactions").delete().eq("id", int.id); setInteractions(prev => prev.filter(i => i.id !== int.id)); }}
+                                    className="text-slate-300 hover:text-red-400 flex-shrink-0 ml-1"
+                                    title="Delete"
+                                  ><X size={10} /></button>
+                                </div>
                                 {int.body && <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{int.body}</p>}
+                                {(int as { contact_ids?: string[] }).contact_ids && (int as { contact_ids?: string[] }).contact_ids!.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {(int as { contact_ids?: string[] }).contact_ids!.map((cid: string) => {
+                                      const tc = contacts.find(c => c.id === cid);
+                                      if (!tc) return null;
+                                      return <span key={cid} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium"><User size={8} />{tc.first_name} {tc.last_name}</span>;
+                                    })}
+                                  </div>
+                                )}
                                 <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(int.date)}</p>
                               </div>
                             </div>
