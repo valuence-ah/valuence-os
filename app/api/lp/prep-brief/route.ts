@@ -65,7 +65,7 @@ Write a brief with these EXACT sections (use bold headers):
 [Specific, stage-appropriate ask — e.g., "Request first close commitment of $Xm", "Submit DDQ materials", "Confirm co-invest interest in Techbio portfolio companies"]`;
 
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-5",
+      model: "claude-4-opus-20250514",
       max_tokens: 1500,
       messages: [{ role: "user", content: prompt }],
     });

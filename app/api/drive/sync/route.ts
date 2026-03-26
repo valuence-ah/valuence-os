@@ -50,7 +50,7 @@ async function extractText(buffer: Buffer, mimeType: string, fileName: string): 
   ) {
     try {
       const { text } = await generateText({
-        model: anthropic("claude-opus-4-5"),
+        model: anthropic("claude-4-opus-20250514"),
         maxTokens: 4000,
         messages: [{
           role: "user",

@@ -108,7 +108,7 @@ Return ONLY a valid JSON object with these exact keys (no markdown, no extra tex
 }`;
 
   const { text } = await generateText({
-    model: anthropic((cfg?.model ?? "claude-opus-4-5") as Parameters<typeof anthropic>[0]),
+    model: anthropic((cfg?.model ?? "claude-4-opus-20250514") as Parameters<typeof anthropic>[0]),
     maxTokens: cfg?.max_tokens ?? 16000,
     temperature: cfg?.temperature ?? 0.3,
     system: systemPrompt,

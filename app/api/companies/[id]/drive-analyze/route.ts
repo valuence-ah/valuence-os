@@ -49,7 +49,7 @@ Keep it concise and actionable. Focus on what matters for a ${company.stage ?? "
 
   try {
     const { text } = await generateText({
-      model: anthropic("claude-opus-4-5"),
+      model: anthropic("claude-4-opus-20250514"),
       maxTokens: 1000,
       messages: [{ role: "user", content: prompt }],
     });

@@ -33,7 +33,7 @@ Write a short, professional email that:
 Keep the total email under 180 words. Avoid generic VC language. Be specific and genuine.`;
 
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-5",
+      model: "claude-4-opus-20250514",
       max_tokens: 800,
       messages: [{ role: "user", content: prompt }],
     });
