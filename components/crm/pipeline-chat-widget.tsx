@@ -111,10 +111,9 @@ export function PipelineChatWidget() {
   const listRef   = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
 
-  // v3 API: requires a Chat instance; sendMessage({ text }), status string
-  // `api` is a valid runtime option but missing from ChatInit types — cast required
+  // transport: { api } is the correct way to set the endpoint in @ai-sdk/react v3
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chat = useMemo(() => new Chat({ api: "/api/pipeline-chat" } as any), []);
+  const chat = useMemo(() => new Chat({ transport: { api: "/api/pipeline-chat" } as any }), []);
   const { messages, sendMessage, status, setMessages } = useChat({ chat });
 
   const isLoading = status === "submitted" || status === "streaming";
