@@ -44,6 +44,34 @@ export function parseFolderId(url: string): string | null {
   return match?.[1] ?? null;
 }
 
+// ── List subfolders in folder ─────────────────────────────────────────────────
+
+export interface DriveFolder {
+  id:   string;
+  name: string;
+}
+
+export async function listSubfolders(folderId: string): Promise<DriveFolder[]> {
+  const drive = google.drive({ version: "v3", auth: getAuth() });
+  const folders: DriveFolder[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const res = await drive.files.list({
+      q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: "nextPageToken, files(id, name)",
+      pageSize: 100,
+      pageToken,
+    });
+    for (const f of res.data.files ?? []) {
+      if (f.id && f.name) folders.push({ id: f.id, name: f.name });
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  return folders;
+}
+
 // ── List files in folder ──────────────────────────────────────────────────────
 
 export async function listFolderFiles(folderId: string): Promise<DriveFile[]> {
