@@ -97,13 +97,14 @@ export async function POST(req: Request) {
       .order("created_at", { ascending: false })
       .limit(500) as unknown as Promise<{ data: DealRow[] | null }>,
 
-    // Documents with extracted text
+    // Documents with extracted text — no arbitrary cap, load all available
     supabase
       .from("documents")
       .select("company_id, name, type, extracted_text, created_at")
       .not("extracted_text", "is", null)
+      .gt("extracted_text", "")
       .order("created_at", { ascending: false })
-      .limit(100) as unknown as Promise<{ data: DocumentRow[] | null }>,
+      .limit(300) as unknown as Promise<{ data: DocumentRow[] | null }>,
 
     // Recent interactions (last 180 days)
     supabase
@@ -245,13 +246,18 @@ export async function POST(req: Request) {
   const companyNameById = new Map<string, string>();
   (allCompanies ?? []).forEach(c => companyNameById.set(c.id, c.name));
 
+  // Give each document up to 6000 chars so Claude can meaningfully read content.
+  // With a 400k char system prompt cap there is ample room for up to ~50 documents.
+  const DOC_EXCERPT = 6000;
   const docContext = (documents ?? []).length > 0
     ? `\n── UPLOADED DOCUMENTS (${documents!.length}) ──────────────────────────────────\n` +
       documents!.map(d => {
         const company = companyNameById.get(d.company_id) ?? "Unknown";
-        const excerpt = (d.extracted_text ?? "").slice(0, 800);
-        return `  • ${company} — ${d.name} (${d.type})\n    ${excerpt}${excerpt.length >= 800 ? "…" : ""}`;
-      }).join("\n\n")
+        const text   = d.extracted_text ?? "";
+        const excerpt = text.slice(0, DOC_EXCERPT);
+        const truncated = text.length > DOC_EXCERPT;
+        return `  • ${company} — ${d.name} (${d.type})\n${excerpt}${truncated ? `\n    … [${text.length.toLocaleString()} chars total, first ${DOC_EXCERPT.toLocaleString()} shown]` : ""}`;
+      }).join("\n\n─────\n\n")
     : "";
 
   // ── Assemble context ───────────────────────────────────────────────────────
