@@ -1,8 +1,9 @@
 "use client";
 // ─── Pipeline AI Chat Widget ──────────────────────────────────────────────────
 // Floating "Valuence AI" button that opens a slide-in chat panel.
-// Uses native fetch + ReadableStream to call /api/pipeline-chat directly.
+// Uses native fetch + processDataStream to call /api/pipeline-chat directly.
 
+import { processDataStream } from "ai";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Sparkles,
@@ -165,31 +166,19 @@ export function PipelineChatWidget() {
         return;
       }
 
-      // Stream the response — parse AI SDK data stream format
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
+      // Stream the response using AI SDK's processDataStream (handles buffering/parsing)
       let accContent = "";
-
       setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: "" }]);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-
-        // AI SDK data stream: lines like `0:"text"\n` or `e:{...}\n`
-        for (const line of chunk.split("\n")) {
-          if (line.startsWith("0:")) {
-            try {
-              const token = JSON.parse(line.slice(2));
-              accContent += token;
-              setMessages(prev =>
-                prev.map(m => m.id === assistantId ? { ...m, content: accContent } : m)
-              );
-            } catch { /* skip malformed */ }
-          }
-        }
-      }
+      await processDataStream({
+        stream: res.body,
+        onTextPart(value) {
+          accContent += value;
+          setMessages(prev =>
+            prev.map(m => m.id === assistantId ? { ...m, content: accContent } : m)
+          );
+        },
+      });
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== "AbortError") {
         setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: "Something went wrong. Please try again." }]);
