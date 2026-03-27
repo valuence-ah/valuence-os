@@ -40,6 +40,7 @@ function matchCompany(
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const authClient = await createClient();
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -106,4 +107,10 @@ export async function POST(req: NextRequest) {
     share_with: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? null,
     note: "Folders linked. Now use 'Sync to AI' in the CRM for each company to ingest files.",
   });
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("Drive sync-bulk unhandled error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

@@ -117,6 +117,7 @@ async function extractText(buffer: Buffer, mimeType: string, fileName: string): 
 // ── Route handler ──────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  try {
   const authClient = await createClient();
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -155,13 +156,11 @@ export async function POST(req: NextRequest) {
     allFiles = await listFolderFiles(folderId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("403") || msg.includes("insufficientPermissions") || msg.includes("notFound")) {
-      return NextResponse.json({
-        error: `Cannot access this Drive folder. Share it with the service account: ${process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL}`,
-        share_with: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      }, { status: 403 });
-    }
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Any Drive access failure — return helpful JSON with the SA email
+    return NextResponse.json({
+      error: `Cannot access Drive folder. Make sure it is shared with: ${process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL}. (${msg})`,
+      share_with: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    }, { status: 403 });
   }
 
   // Separate ingestible from unsupported
@@ -242,4 +241,11 @@ export async function POST(req: NextRequest) {
     files: results,
     share_with: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? null,
   });
+
+  } catch (err) {
+    // Top-level catch — always return JSON, never plain text
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("Drive sync unhandled error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

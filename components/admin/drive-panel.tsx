@@ -34,7 +34,7 @@ export function DrivePanel() {
   const [showDetails, setShowDetails]    = useState(false);
 
   // ── Direct sync ────────────────────────────────────────────────────────────
-  const [companies, setCompanies]         = useState<{ id: string; name: string }[]>([]);
+  const [companies, setCompanies]         = useState<{ id: string; name: string; drive_folder_url?: string | null }[]>([]);
   const [directCompany, setDirectCompany] = useState("");
   const [directFolder, setDirectFolder]   = useState("");
   const [directSyncing, setDirectSyncing] = useState(false);
@@ -47,7 +47,7 @@ export function DrivePanel() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.from("companies").select("id, name").order("name").then(({ data }) => {
+    supabase.from("companies").select("id, name, drive_folder_url").order("name").then(({ data }) => {
       setCompanies((data ?? []).filter(c => c.name));
     });
   }, []);
@@ -238,9 +238,22 @@ export function DrivePanel() {
         </div>
 
         <div className="space-y-2">
-          <select value={directCompany} onChange={e => setDirectCompany(e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+          <select
+            value={directCompany}
+            onChange={e => {
+              setDirectCompany(e.target.value);
+              const co = companies.find(c => c.id === e.target.value);
+              if (co?.drive_folder_url) setDirectFolder(co.drive_folder_url);
+              else setDirectFolder("");
+            }}
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+          >
             <option value="">Select a company…</option>
-            {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {companies.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.name}{c.drive_folder_url ? " ✓" : ""}
+              </option>
+            ))}
           </select>
           <div className="flex gap-2">
             <input type="text" value={directFolder} onChange={e => setDirectFolder(e.target.value)}
