@@ -62,6 +62,8 @@ export async function listSubfolders(folderId: string): Promise<DriveFolder[]> {
       fields: "nextPageToken, files(id, name)",
       pageSize: 100,
       pageToken,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
     for (const f of res.data.files ?? []) {
       if (f.id && f.name) folders.push({ id: f.id, name: f.name });
@@ -92,6 +94,8 @@ export async function listFolderFiles(
       fields: "nextPageToken, files(id, name, mimeType, size, modifiedTime, webViewLink)",
       pageSize: 100,
       pageToken,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
     for (const f of res.data.files ?? []) {
       if (!f.id || !f.name || !f.mimeType) continue;
@@ -142,7 +146,7 @@ export async function downloadFile(
   if (exportMime) {
     // Export Google Workspace format → PDF
     const res = await drive.files.export(
-      { fileId, mimeType: exportMime },
+      { fileId, mimeType: exportMime, supportsAllDrives: true },
       { responseType: "arraybuffer" }
     );
     return {
@@ -153,7 +157,7 @@ export async function downloadFile(
 
   // Direct download
   const res = await drive.files.get(
-    { fileId, alt: "media" },
+    { fileId, alt: "media", supportsAllDrives: true },
     { responseType: "arraybuffer" }
   );
   return {
