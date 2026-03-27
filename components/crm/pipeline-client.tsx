@@ -2280,7 +2280,10 @@ export function PipelineClient({ initialCompanies }: Props) {
                       ) : driveSyncResult.error ? (
                         <span>Error: {driveSyncResult.error}</span>
                       ) : (
-                        <span>✓ {driveSyncResult.synced} file{driveSyncResult.synced !== 1 ? "s" : ""} synced to AI{driveSyncResult.skipped > 0 ? `, ${driveSyncResult.skipped} already up-to-date` : ""}{(driveSyncResult.not_ingestible ?? 0) > 0 ? ` (${driveSyncResult.not_ingestible} skipped — unsupported format)` : ""}</span>
+                        <span>
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {(() => { const n = (driveSyncResult as any).saved ?? driveSyncResult.synced ?? 0; return <>✓ {n} file{n!==1?"s":""} indexed{driveSyncResult.skipped>0?`, ${driveSyncResult.skipped} already saved`:""}{n>0&&<><br/><span className="text-amber-700 font-medium">Now click &quot;Extract Uploaded PDFs&quot; to make files readable by AI.</span></>}</>; })()}
+                        </span>
                       )}
                     </div>
                   )}
