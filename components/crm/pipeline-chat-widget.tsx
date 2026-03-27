@@ -3,7 +3,6 @@
 // Floating "Valuence AI" button that opens a slide-in chat panel.
 // Uses native fetch + processDataStream to call /api/pipeline-chat directly.
 
-import { processDataStream } from "ai";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Sparkles,
@@ -166,19 +165,20 @@ export function PipelineChatWidget() {
         return;
       }
 
-      // Stream the response using AI SDK's processDataStream (handles buffering/parsing)
+      // Route uses toTextStreamResponse() — stream is plain text, no protocol parsing needed
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
       let accContent = "";
       setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: "" }]);
 
-      await processDataStream({
-        stream: res.body,
-        onTextPart(value) {
-          accContent += value;
-          setMessages(prev =>
-            prev.map(m => m.id === assistantId ? { ...m, content: accContent } : m)
-          );
-        },
-      });
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        accContent += decoder.decode(value, { stream: true });
+        setMessages(prev =>
+          prev.map(m => m.id === assistantId ? { ...m, content: accContent } : m)
+        );
+      }
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== "AbortError") {
         setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: "Something went wrong. Please try again." }]);

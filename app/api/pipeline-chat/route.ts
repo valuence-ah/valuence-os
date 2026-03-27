@@ -312,5 +312,5 @@ ${fullContext}`;
     maxTokens: aiConfig?.max_tokens ?? 4096,
   });
 
-  return result.toDataStreamResponse();
+  return result.toTextStreamResponse();
 }
