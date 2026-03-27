@@ -171,7 +171,11 @@ export function isIngestible(mimeType: string): boolean {
     "text/plain",
     "text/markdown",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // DOCX
-    "application/msword",
+    "application/msword",                                                       // DOC
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",       // XLSX
+    "application/vnd.ms-excel",                                                 // XLS
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation", // PPTX
+    "application/vnd.ms-powerpoint",                                            // PPT
   ].includes(mimeType);
 }
 

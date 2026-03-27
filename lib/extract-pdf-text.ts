@@ -24,7 +24,7 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
   console.log("pdf-parse returned no usable text — falling back to Claude vision");
   try {
     const { text } = await generateText({
-      model: anthropic("claude-opus-4-5"),
+      model: anthropic("claude-sonnet-4-5"),
       maxTokens: 4000,
       messages: [
         {
