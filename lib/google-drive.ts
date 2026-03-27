@@ -146,7 +146,7 @@ export async function downloadFile(
   if (exportMime) {
     // Export Google Workspace format → PDF
     const res = await drive.files.export(
-      { fileId, mimeType: exportMime, supportsAllDrives: true },
+      { fileId, mimeType: exportMime },
       { responseType: "arraybuffer" }
     );
     return {
