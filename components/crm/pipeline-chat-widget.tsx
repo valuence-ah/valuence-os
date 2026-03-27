@@ -1,11 +1,9 @@
 "use client";
 // ─── Pipeline AI Chat Widget ──────────────────────────────────────────────────
-// Floating "Valuence AI" button (bottom-right) that opens a slide-in chat panel.
-// Uses the /api/pipeline-chat endpoint which gives Claude full pipeline context.
-// API: @ai-sdk/react v3 — useChat returns { messages, sendMessage, status, setMessages }
+// Floating "Valuence AI" button that opens a slide-in chat panel.
+// Uses native fetch + ReadableStream to call /api/pipeline-chat directly.
 
-import { Chat, useChat } from "@ai-sdk/react";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Sparkles,
   X,
@@ -17,7 +15,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ── Starter prompts ────────────────────────────────────────────────────────────
+// ── Types ───────────────────────────────────────────────────────────────────
+type Message = { id: string; role: "user" | "assistant"; content: string };
+
+// ── Starter prompts ──────────────────────────────────────────────────────────
 const STARTER_PROMPTS = [
   "Summarise the full pipeline by stage",
   "Which companies need follow-up this week?",
@@ -29,17 +30,12 @@ const STARTER_PROMPTS = [
   "What documents have been uploaded for our active deals?",
 ];
 
-/** Extract plain text from a UIMessage's parts array (v3 SDK) */
-function extractText(parts: Array<{ type: string; text?: string }>): string {
-  return parts
-    .filter(p => p.type === "text" && p.text)
-    .map(p => p.text!)
-    .join("");
-}
-
-// ── Message bubble ─────────────────────────────────────────────────────────────
+// ── Message bubble ────────────────────────────────────────────────────────────
 function MessageBubble({ role, content }: { role: string; content: string }) {
   const isUser = role === "user";
+  function boldify(t: string) {
+    return t.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  }
   return (
     <div className={cn("flex gap-2.5", isUser ? "flex-row-reverse" : "flex-row")}>
       {!isUser && (
@@ -80,10 +76,6 @@ function MessageBubble({ role, content }: { role: string; content: string }) {
   );
 }
 
-function boldify(t: string) {
-  return t.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-}
-
 function TypingDots() {
   return (
     <div className="flex gap-2.5">
@@ -102,23 +94,19 @@ function TypingDots() {
   );
 }
 
-// ── Main widget ────────────────────────────────────────────────────────────────
+// ── Main widget ───────────────────────────────────────────────────────────────
 export function PipelineChatWidget() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const listRef   = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
+  const abortRef  = useRef<AbortController | null>(null);
 
-  // transport: { api } is the correct way to set the endpoint in @ai-sdk/react v3
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chat = useMemo(() => new Chat({ transport: { api: "/api/pipeline-chat" } as any }), []);
-  const { messages, sendMessage, status, setMessages } = useChat({ chat });
-
-  const isLoading = status === "submitted" || status === "streaming";
-
-  // Auto-scroll on new messages
+  // Auto-scroll
   useEffect(() => {
     if (open) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open, isLoading]);
@@ -142,13 +130,75 @@ export function PipelineChatWidget() {
     }
   }
 
-  function send(msg: string) {
+  const send = useCallback(async (msg: string) => {
     const trimmed = msg.trim();
     if (!trimmed || isLoading) return;
     setText("");
     if (inputRef.current) inputRef.current.style.height = "auto";
-    sendMessage({ text: trimmed });
-  }
+
+    const userMsg: Message = { id: Date.now().toString(), role: "user", content: trimmed };
+    const assistantId = (Date.now() + 1).toString();
+
+    setMessages(prev => [...prev, userMsg]);
+    setIsLoading(true);
+
+    // Build message history for API (role + content pairs)
+    const history = [...messages, userMsg].map(m => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    abortRef.current = new AbortController();
+
+    try {
+      const res = await fetch("/api/pipeline-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history }),
+        signal: abortRef.current.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        const errText = await res.text().catch(() => "Unknown error");
+        setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: `Error: ${errText}` }]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Stream the response — parse AI SDK data stream format
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accContent = "";
+
+      setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: "" }]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+
+        // AI SDK data stream: lines like `0:"text"\n` or `e:{...}\n`
+        for (const line of chunk.split("\n")) {
+          if (line.startsWith("0:")) {
+            try {
+              const token = JSON.parse(line.slice(2));
+              accContent += token;
+              setMessages(prev =>
+                prev.map(m => m.id === assistantId ? { ...m, content: accContent } : m)
+              );
+            } catch { /* skip malformed */ }
+          }
+        }
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== "AbortError") {
+        setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: "Something went wrong. Please try again." }]);
+      }
+    } finally {
+      setIsLoading(false);
+      abortRef.current = null;
+    }
+  }, [isLoading, messages]);
 
   return (
     <>
@@ -250,10 +300,10 @@ export function PipelineChatWidget() {
             )}
 
             {messages.map(m => (
-              <MessageBubble key={m.id} role={m.role} content={extractText(m.parts)} />
+              <MessageBubble key={m.id} role={m.role} content={m.content} />
             ))}
 
-            {isLoading && (messages.at(-1)?.role === "user" || messages.length === 0) && <TypingDots />}
+            {isLoading && messages.at(-1)?.role === "user" && <TypingDots />}
             <div ref={bottomRef} />
           </div>
 
