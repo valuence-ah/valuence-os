@@ -2335,7 +2335,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     className="w-full text-xs px-2.5 py-1.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
                   >
                     {driveAnalyzing ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                    {driveAnalyzing ? "Analyzing…" : "Analyze with AI"}
+                    {driveAnalyzing ? "Extracting…" : "Extract with AI"}
                   </button>
                   {driveAnalysis && (
                     <div className="border border-violet-200 bg-violet-50 rounded-xl overflow-hidden">
