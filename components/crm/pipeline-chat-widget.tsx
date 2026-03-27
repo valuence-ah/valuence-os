@@ -110,6 +110,7 @@ export function PipelineChatWidget() {
     isLoading,
     setMessages,
     append,
+    error,
   } = useChat({
     api: "/api/pipeline-chat",
     initialMessages: [],
@@ -245,9 +246,21 @@ export function PipelineChatWidget() {
               </div>
             )}
 
-            {messages.map(m => (
-              <MessageBubble key={m.id} role={m.role} content={m.content} />
-            ))}
+            {messages.map(m => {
+              // AI SDK v4: text may be in parts[].text instead of content
+              const text = m.content ||
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (m as any).parts?.filter((p: any) => p.type === "text").map((p: any) => p.text).join("") ||
+                "";
+              if (!text && m.role === "assistant") return null;
+              return <MessageBubble key={m.id} role={m.role} content={text} />;
+            })}
+
+            {error && (
+              <div className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                Error: {error.message || "Something went wrong. Please try again."}
+              </div>
+            )}
 
             {isLoading && messages.at(-1)?.role === "user" && <TypingDots />}
             <div ref={bottomRef} />
