@@ -1,16 +1,15 @@
 // ─── Google Drive Bulk Sync  /api/drive/sync-bulk ─────────────────────────────
-// POST { folder_url: string }   ← top-level "Company" folder
+// POST { folder_url: string }   ← top-level "Company" folder (Shared Drive OK)
 //
-// 1. Lists all subfolders in the given folder (one subfolder = one company)
+// 1. Lists all subfolders in the parent folder (one subfolder = one company)
 // 2. Fuzzy-matches each subfolder name to a company in the database
-// 3. Syncs files from each matched subfolder (skips already-synced files)
-// 4. Returns { results: BulkResult[], synced_total, skipped_total, unmatched[] }
+// 3. Syncs all ingestible files recursively from each matched subfolder
+// 4. Saves the correct drive_folder_url on each matched company
+// 5. Returns { results, synced_total, skipped_total, unmatched[] }
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { generateText } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
 import {
   parseFolderId,
   listSubfolders,
@@ -23,35 +22,74 @@ import { extractPdfText } from "@/lib/extract-pdf-text";
 
 export const maxDuration = 300; // bulk sync can take several minutes
 
-// ── Text extraction ────────────────────────────────────────────────────────────
+// ── Text extraction (no Claude dependency — pure local parsing) ───────────────
 
 async function extractText(buffer: Buffer, mimeType: string, fileName: string): Promise<string> {
   const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
-  if (mimeType === "application/pdf" || ext === "pdf") return extractPdfText(buffer);
-  if (mimeType.startsWith("text/") || ext === "md" || ext === "txt") return buffer.toString("utf-8").slice(0, 50000);
+
+  if (mimeType === "application/pdf" || ext === "pdf") {
+    return extractPdfText(buffer);
+  }
+
+  if (mimeType.startsWith("text/") || ext === "md" || ext === "txt") {
+    return buffer.toString("utf-8").slice(0, 50000);
+  }
+
+  // XLSX
+  if (mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || ext === "xlsx") {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const XLSX = require("xlsx");
+      const wb = XLSX.read(buffer, { type: "buffer" });
+      const parts: string[] = [];
+      for (const name of wb.SheetNames as string[]) {
+        const csv: string = XLSX.utils.sheet_to_csv(wb.Sheets[name]);
+        if (csv.trim()) parts.push(`=== ${name} ===\n${csv}`);
+      }
+      return parts.join("\n\n").slice(0, 50000);
+    } catch { return ""; }
+  }
+
+  // PPTX — unzip XML
+  if (mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation" || ext === "pptx") {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const JSZip = require("jszip");
+      const zip = await JSZip.loadAsync(buffer);
+      const slideKeys: string[] = Object.keys(zip.files)
+        .filter((k: string) => /^ppt\/slides\/slide\d+\.xml$/.test(k))
+        .sort();
+      const parts: string[] = [];
+      for (const key of slideKeys) {
+        const xml: string = await zip.files[key].async("text");
+        const text = xml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        if (text) parts.push(text);
+      }
+      return parts.join("\n\n").slice(0, 50000);
+    } catch { return ""; }
+  }
+
+  // DOCX — unzip XML
   if (
     mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
     mimeType === "application/msword" || ext === "docx" || ext === "doc"
   ) {
     try {
-      const { text } = await generateText({
-        model: anthropic("claude-4-opus-20250514"),
-        maxTokens: 4000,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "text", text: "Extract ALL text content from this Word document. Preserve structure. Output raw text only." },
-            { type: "file", data: buffer, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
-          ],
-        }],
-      });
-      return text.slice(0, 50000);
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const JSZip = require("jszip");
+      const zip = await JSZip.loadAsync(buffer);
+      const wordDoc = zip.files["word/document.xml"];
+      if (wordDoc) {
+        const xml: string = await wordDoc.async("text");
+        return xml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 50000);
+      }
     } catch { return ""; }
   }
+
   return "";
 }
 
-// ── Fuzzy name matching ────────────────────────────────────────────────────────
+// ── Fuzzy company name matching ────────────────────────────────────────────────
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -62,16 +100,13 @@ function matchCompany(
   companies: { id: string; name: string }[]
 ): { id: string; name: string } | null {
   const fn = normalize(folderName);
-  // 1. Exact normalized match
   let hit = companies.find(c => normalize(c.name) === fn);
   if (hit) return hit;
-  // 2. One contains the other
   hit = companies.find(c => {
     const cn = normalize(c.name);
     return cn.includes(fn) || fn.includes(cn);
   });
   if (hit) return hit;
-  // 3. Starts-with (at least 4 chars)
   if (fn.length >= 4) {
     hit = companies.find(c => normalize(c.name).startsWith(fn.slice(0, 4)));
     if (hit) return hit;
@@ -97,32 +132,22 @@ export async function POST(req: NextRequest) {
   if (!topFolderId) return NextResponse.json({ error: "Invalid Google Drive folder URL" }, { status: 400 });
 
   const supabase = createAdminClient();
-
-  // Load all companies
   const { data: allCompanies } = await supabase.from("companies").select("id, name").order("name");
   const companies = (allCompanies ?? []).filter(c => c.name);
 
-  // List subfolders of the top-level folder
   let subfolders;
   try {
     subfolders = await listSubfolders(topFolderId);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  } catch {
     return NextResponse.json({
-      error: `Cannot access folder. Make sure it is shared with: ${process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL}`,
+      error: `Cannot access folder. Share it with: ${process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL}`,
       share_with: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     }, { status: 403 });
   }
 
   type BulkResult = {
-    folder:     string;
-    company?:   string;
-    company_id?: string;
-    matched:    boolean;
-    synced:     number;
-    skipped:    number;
-    errors:     number;
-    error?:     string;
+    folder: string; company?: string; company_id?: string;
+    matched: boolean; synced: number; skipped: number; errors: number; error?: string;
   };
 
   const results: BulkResult[] = [];
@@ -139,7 +164,14 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    // Load existing docs for this company
+    // Save the correct subfolder URL on the company immediately (so CRM sync works too)
+    const folderLink = `https://drive.google.com/drive/folders/${subfolder.id}`;
+    await supabase.from("companies").update({
+      drive_folder_url: folderLink,
+      updated_at: new Date().toISOString(),
+    }).eq("id", company.id);
+
+    // Existing docs (to skip re-syncing)
     const { data: existingDocs } = await supabase
       .from("documents")
       .select("google_drive_url")
@@ -168,7 +200,6 @@ export async function POST(req: NextRequest) {
         const text = await extractText(buffer, effectiveMime, file.name);
         const docType = mimeToDocType(file.mimeType, file.name);
 
-        // Insert into documents table (existingUrls check above prevents duplicates)
         const { error: insertErr } = await supabase.from("documents").insert({
           company_id:       company.id,
           name:             file.name,
@@ -181,21 +212,21 @@ export async function POST(req: NextRequest) {
           updated_at:       new Date().toISOString(),
         });
 
-        if (insertErr) throw new Error(insertErr.message);
-        synced++;
+        if (insertErr) {
+          if (insertErr.message.includes("duplicate") || insertErr.message.includes("unique")) {
+            skipped++;
+          } else {
+            throw new Error(insertErr.message);
+          }
+        } else {
+          synced++;
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`Bulk sync error for ${file.name} (${company.name}):`, msg);
         fileErrors++;
       }
     }
-
-    // Save drive folder URL on company
-    const folderLink = `https://drive.google.com/drive/folders/${subfolder.id}`;
-    await supabase.from("companies").update({
-      drive_folder_url: folderLink,
-      updated_at: new Date().toISOString(),
-    }).eq("id", company.id);
 
     synced_total += synced;
     skipped_total += skipped;
