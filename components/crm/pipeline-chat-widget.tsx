@@ -1,11 +1,12 @@
 "use client";
 // ─── Pipeline AI Chat Widget ──────────────────────────────────────────────────
 // Floating "Valuence AI" button that opens a slide-in chat panel.
-// Uses useChat from "ai/react" (same pattern as /components/chat/chat-client.tsx)
-// Route: /api/pipeline-chat — returns toDataStreamResponse()
+// Uses plain fetch + manual stream parsing — bypasses @ai-sdk/react entirely
+// to avoid protocol mismatch between @ai-sdk/react v3 (ai@6 internally) and
+// the server which uses ai@4.3.19 toDataStreamResponse() format.
+// Route: /api/pipeline-chat
 
-import { useChat } from "ai/react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Sparkles,
   X,
@@ -16,6 +17,9 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+type Msg = { id: string; role: "user" | "assistant"; content: string };
 
 // ── Starter prompts ──────────────────────────────────────────────────────────
 const STARTER_PROMPTS = [
@@ -93,28 +97,30 @@ function TypingDots() {
   );
 }
 
+// ── Stream parser: ai@4.3.19 toDataStreamResponse() format ───────────────────
+// Lines: `0:"text token"\n`  →  extract JSON-decoded text
+// Other line prefixes (2:, 8:, d:) are metadata — ignored for text display.
+function parseDataStreamLine(line: string): string | null {
+  if (!line.startsWith("0:")) return null;
+  try {
+    return JSON.parse(line.slice(2)) as string; // e.g. 0:"Hello" → "Hello"
+  } catch {
+    return null;
+  }
+}
+
 // ── Main widget ───────────────────────────────────────────────────────────────
 export function PipelineChatWidget() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]   = useState(false);
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const abortRef  = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const listRef   = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
-
-  // ── useChat — identical pattern to /components/chat/chat-client.tsx ────────
-  const {
-    messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    isLoading,
-    setMessages,
-    append,
-    error,
-  } = useChat({
-    api: "/api/pipeline-chat",
-    initialMessages: [],
-  });
 
   // Auto-scroll
   useEffect(() => {
@@ -127,9 +133,99 @@ export function PipelineChatWidget() {
     setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
   }
 
-  // Wrap handleInputChange to also auto-resize the textarea
+  const send = useCallback(async (text: string) => {
+    if (!text.trim() || isLoading) return;
+
+    setError(null);
+    const userMsg: Msg = { id: `u_${Date.now()}`, role: "user", content: text.trim() };
+    const history = [...messages, userMsg];
+    setMessages(history);
+
+    const assistantId = `a_${Date.now()}`;
+    setIsLoading(true);
+
+    abortRef.current = new AbortController();
+
+    try {
+      const res = await fetch("/api/pipeline-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: history.map(m => ({ role: m.role, content: m.content })),
+        }),
+        signal: abortRef.current.signal,
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => `HTTP ${res.status}`);
+        throw new Error(errText || `HTTP ${res.status}`);
+      }
+      if (!res.body) throw new Error("No response body.");
+
+      // Add placeholder assistant message
+      setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: "" }]);
+
+      // Stream and parse ai@4 data stream format (lines: `0:"token"\n`)
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete lines
+        let nlIdx: number;
+        while ((nlIdx = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, nlIdx);
+          buffer = buffer.slice(nlIdx + 1);
+
+          const token = parseDataStreamLine(line);
+          if (token !== null) {
+            accumulated += token;
+            const snap = accumulated;
+            setMessages(prev =>
+              prev.map(m => m.id === assistantId ? { ...m, content: snap } : m)
+            );
+          }
+        }
+      }
+
+      // Process any remaining buffer
+      if (buffer.trim()) {
+        const token = parseDataStreamLine(buffer.trim());
+        if (token !== null) {
+          accumulated += token;
+          const snap = accumulated;
+          setMessages(prev =>
+            prev.map(m => m.id === assistantId ? { ...m, content: snap } : m)
+          );
+        }
+      }
+
+      // If we got no content, remove the placeholder
+      if (!accumulated) {
+        setMessages(prev => prev.filter(m => m.id !== assistantId));
+        setError("No response received. Please try again.");
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        // User stopped — keep whatever was streamed
+      } else {
+        setMessages(prev => prev.filter(m => m.id !== assistantId));
+        setError(err instanceof Error ? err.message : "An error occurred. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
+      abortRef.current = null;
+    }
+  }, [isLoading, messages]);
+
   function handleTextChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    handleInputChange(e);
+    setInput(e.target.value);
     e.target.style.height = "auto";
     e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
   }
@@ -137,14 +233,29 @@ export function PipelineChatWidget() {
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey && !isLoading) {
       e.preventDefault();
-      handleSubmit(e as unknown as React.FormEvent);
+      const text = input.trim();
+      setInput("");
+      if (inputRef.current) inputRef.current.style.height = "auto";
+      send(text);
     }
   }
 
-  // Starter prompts send immediately via append
-  function sendStarter(prompt: string) {
-    if (isLoading) return;
-    append({ role: "user", content: prompt });
+  function handleFormSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const text = input.trim();
+    setInput("");
+    if (inputRef.current) inputRef.current.style.height = "auto";
+    send(text);
+  }
+
+  function stopGeneration() {
+    abortRef.current?.abort();
+  }
+
+  function clearChat() {
+    stopGeneration();
+    setMessages([]);
+    setError(null);
   }
 
   return (
@@ -202,7 +313,7 @@ export function PipelineChatWidget() {
             <div className="flex items-center gap-1">
               {messages.length > 0 && (
                 <button
-                  onClick={() => setMessages([])}
+                  onClick={clearChat}
                   title="Clear conversation"
                   className="p-1.5 rounded-lg text-blue-200 hover:text-white hover:bg-white/15 transition-colors"
                 >
@@ -225,7 +336,7 @@ export function PipelineChatWidget() {
             className="flex-1 overflow-y-auto bg-slate-50 px-4 py-4 space-y-3"
             style={{ scrollbarWidth: "thin" }}
           >
-            {messages.length === 0 && (
+            {messages.length === 0 && !error && (
               <div className="flex flex-col items-center pt-4 pb-2 text-center">
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mb-3 shadow-lg">
                   <Bot size={24} className="text-white" />
@@ -236,8 +347,9 @@ export function PipelineChatWidget() {
                   {STARTER_PROMPTS.map(p => (
                     <button
                       key={p}
-                      onClick={() => sendStarter(p)}
-                      className="text-xs bg-white border border-slate-200 text-slate-700 rounded-full px-3 py-1.5 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm"
+                      onClick={() => send(p)}
+                      disabled={isLoading}
+                      className="text-xs bg-white border border-slate-200 text-slate-700 rounded-full px-3 py-1.5 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm disabled:opacity-50"
                     >
                       {p}
                     </button>
@@ -246,19 +358,13 @@ export function PipelineChatWidget() {
               </div>
             )}
 
-            {messages.map(m => {
-              // AI SDK v4: text may be in parts[].text instead of content
-              const text = m.content ||
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (m as any).parts?.filter((p: any) => p.type === "text").map((p: any) => p.text).join("") ||
-                "";
-              if (!text && m.role === "assistant") return null;
-              return <MessageBubble key={m.id} role={m.role} content={text} />;
-            })}
+            {messages.map(m => (
+              <MessageBubble key={m.id} role={m.role} content={m.content} />
+            ))}
 
             {error && (
               <div className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
-                Error: {error.message || "Something went wrong. Please try again."}
+                {error}
               </div>
             )}
 
@@ -279,7 +385,7 @@ export function PipelineChatWidget() {
           {/* Input */}
           <div className="flex-shrink-0 bg-white border-t border-slate-200 px-3 py-2.5">
             <form
-              onSubmit={handleSubmit}
+              onSubmit={handleFormSubmit}
               className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus-within:border-blue-400 focus-within:bg-white transition-colors"
             >
               <textarea
@@ -293,21 +399,29 @@ export function PipelineChatWidget() {
                 className="flex-1 resize-none bg-transparent text-sm text-slate-800 placeholder-slate-400 outline-none leading-relaxed disabled:opacity-60"
                 style={{ minHeight: "24px", maxHeight: "120px" }}
               />
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                className={cn(
-                  "flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all",
-                  input.trim() && !isLoading
-                    ? "bg-blue-600 text-white hover:bg-blue-700 shadow"
-                    : "bg-slate-200 text-slate-400 cursor-not-allowed"
-                )}
-              >
-                {isLoading
-                  ? <Loader2 size={15} className="animate-spin" />
-                  : <Send size={15} />
-                }
-              </button>
+              {isLoading ? (
+                <button
+                  type="button"
+                  onClick={stopGeneration}
+                  className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-slate-200 text-slate-600 hover:bg-red-100 hover:text-red-600 transition-all"
+                  title="Stop"
+                >
+                  <Loader2 size={15} className="animate-spin" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim()}
+                  className={cn(
+                    "flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all",
+                    input.trim()
+                      ? "bg-blue-600 text-white hover:bg-blue-700 shadow"
+                      : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  )}
+                >
+                  <Send size={15} />
+                </button>
+              )}
             </form>
             <p className="text-center text-slate-400 text-[10px] mt-1.5">
               Powered by Claude · live pipeline data
