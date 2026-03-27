@@ -377,7 +377,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [includePassed, setIncludePassed] = useState(false);
   const [contacts, setContacts]           = useState<Contact[]>([]);
   const [interactions, setInteractions]   = useState<Interaction[]>([]);
-  const [documents, setDocuments]         = useState<Array<{id:string;name:string;type:string;storage_path:string|null;created_at:string}>>([]);
+  const [documents, setDocuments]         = useState<Array<{id:string;name:string;type:string;storage_path:string|null;google_drive_url:string|null;created_at:string}>>([]);
   const [memo, setMemo]                   = useState<IcMemo | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [emailEvents, setEmailEvents]     = useState<Array<{id:string;kind:"email";title:string;body:string;date:string;url:string}>>([]);
@@ -560,7 +560,7 @@ export function PipelineClient({ initialCompanies }: Props) {
       supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(20),
       supabase.from("ic_memos").select("*").eq("company_id", id).order("created_at", { ascending: false }).limit(1),
       supabase.from("companies").select("name, website").eq("id", id).single(),
-      supabase.from("documents").select("id,name,type,storage_path,created_at").eq("company_id", id).order("created_at", { ascending: false }),
+      supabase.from("documents").select("id,name,type,storage_path,google_drive_url,created_at").eq("company_id", id).order("created_at", { ascending: false }),
     ]);
 
     let contacts = ctcts ?? [];
@@ -1922,7 +1922,8 @@ export function PipelineClient({ initialCompanies }: Props) {
                     meta: i.sentiment ?? null,
                     contact_ids: (i as { contact_ids?: string[] }).contact_ids ?? null,
                   })),
-                  ...documents.map(d => ({
+                  // Drive-synced docs (google_drive_url set) are shown in Data Room only — not here
+                  ...documents.filter(d => !d.google_drive_url).map(d => ({
                     id: d.id,
                     kind: d.type === "deck" ? "deck" : "document",
                     title: d.name,
@@ -2054,15 +2055,15 @@ export function PipelineClient({ initialCompanies }: Props) {
               <div style={{flex: '0 0 40%', minWidth: 0}}>
                 <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                   <FileText size={12} /> Pitch Decks
-                  {documents.filter(d => d.type === "deck").length > 0 && (
+                  {documents.filter(d => d.type === "deck" && !d.google_drive_url).length > 0 && (
                     <span className="ml-1 text-slate-400 font-normal">
-                      ({documents.filter(d => d.type === "deck").length})
+                      ({documents.filter(d => d.type === "deck" && !d.google_drive_url).length})
                     </span>
                   )}
                 </p>
                 {/* Fixed-height container — more decks → more columns (narrower), never taller */}
                 {(() => {
-                  const decks = documents.filter(d => d.type === "deck");
+                  const decks = documents.filter(d => d.type === "deck" && !d.google_drive_url);
                   const total = decks.length + 1; // +1 for upload box
                   const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
                   const colClass = cols === 1 ? "grid-cols-1" : cols === 2 ? "grid-cols-2" : cols === 3 ? "grid-cols-3" : "grid-cols-4";
@@ -2120,14 +2121,14 @@ export function PipelineClient({ initialCompanies }: Props) {
               <div style={{flex: '0 0 40%', minWidth: 0}}>
                 <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                   <Paperclip size={12} /> Meeting Transcripts
-                  {documents.filter(d => d.type === "transcript").length > 0 && (
+                  {documents.filter(d => d.type === "transcript" && !d.google_drive_url).length > 0 && (
                     <span className="ml-1 text-slate-400 font-normal">
-                      ({documents.filter(d => d.type === "transcript").length})
+                      ({documents.filter(d => d.type === "transcript" && !d.google_drive_url).length})
                     </span>
                   )}
                 </p>
                 {(() => {
-                  const transcripts = documents.filter(d => d.type === "transcript");
+                  const transcripts = documents.filter(d => d.type === "transcript" && !d.google_drive_url);
                   const total = transcripts.length + 1;
                   const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
                   const colClass = cols === 1 ? "grid-cols-1" : cols === 2 ? "grid-cols-2" : cols === 3 ? "grid-cols-3" : "grid-cols-4";
@@ -2238,15 +2239,26 @@ export function PipelineClient({ initialCompanies }: Props) {
               ) : (
                 /* ── Linked state ── */
                 <div className="space-y-2">
-                  <a
-                    href={selected.drive_folder_url ?? "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-blue-600 hover:underline truncate"
-                  >
-                    <ExternalLink size={10} className="flex-shrink-0" />
-                    <span className="truncate">Open Drive Folder</span>
-                  </a>
+                  <div className="flex items-center justify-between gap-1">
+                    <a
+                      href={selected.drive_folder_url ?? "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-blue-600 hover:underline truncate"
+                    >
+                      <ExternalLink size={10} className="flex-shrink-0" />
+                      <span className="truncate">Open Drive Folder</span>
+                    </a>
+                    {/* Persistent sync status badge */}
+                    {(() => {
+                      const n = documents.filter(d => !!d.google_drive_url).length;
+                      return n > 0 ? (
+                        <span className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-1.5 py-0.5">
+                          <Check size={8} /> {n} synced
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
 
                   {/* Sync to AI button */}
                   <button
@@ -2262,6 +2274,14 @@ export function PipelineClient({ initialCompanies }: Props) {
                         });
                         const json = await res.json() as DriveSyncResult;
                         setDriveSyncResult(json);
+                        // Refresh documents so the sync badge updates immediately
+                        if (!json.error) {
+                          const { data: freshDocs } = await supabase.from("documents")
+                            .select("id,name,type,storage_path,google_drive_url,created_at")
+                            .eq("company_id", selected.id)
+                            .order("created_at", { ascending: false });
+                          if (freshDocs) setDocuments(freshDocs);
+                        }
                       } finally { setDriveSyncing(false); }
                     }}
                     className="w-full text-xs px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
