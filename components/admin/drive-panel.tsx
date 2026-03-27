@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FolderOpen, RefreshCw, CheckCircle2, XCircle, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { FolderOpen, RefreshCw, CheckCircle2, XCircle, AlertCircle, ChevronDown, ChevronUp, FileText } from "lucide-react";
 
 type BulkResult = {
   folder:      string;
@@ -26,12 +26,35 @@ type BulkSyncResponse = {
   setup_required?: boolean;
 };
 
+type ReextractResult = {
+  processed: number; success: number; failed: number;
+  results: { name: string; status: "ok" | "error"; chars?: number; reason?: string }[];
+  message?: string;
+  error?: string;
+};
+
 export function DrivePanel() {
   const [folderUrl, setFolderUrl]   = useState("");
   const [loading, setLoading]       = useState(false);
   const [result, setResult]         = useState<BulkSyncResponse | null>(null);
   const [showUnmatched, setShowUnmatched] = useState(false);
   const [showDetails, setShowDetails]    = useState(false);
+  const [reextracting, setReextracting]  = useState(false);
+  const [reextractResult, setReextractResult] = useState<ReextractResult | null>(null);
+
+  async function handleReextract() {
+    setReextracting(true);
+    setReextractResult(null);
+    try {
+      const res = await fetch("/api/drive/reextract", { method: "POST" });
+      const data = await res.json();
+      setReextractResult(data);
+    } catch (err) {
+      setReextractResult({ error: String(err), processed: 0, success: 0, failed: 0, results: [] });
+    } finally {
+      setReextracting(false);
+    }
+  }
 
   async function handleSync() {
     if (!folderUrl.trim()) return;
@@ -197,6 +220,60 @@ export function DrivePanel() {
           )}
         </div>
       )}
+
+      {/* ── Re-extract PDFs ──────────────────────────────────────────── */}
+      <div className="border-t border-slate-200 pt-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-violet-500 flex items-center justify-center flex-shrink-0">
+            <FileText size={18} className="text-white" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800">Re-extract PDF Text</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              For documents already uploaded but showing no extracted text. Downloads each PDF from storage and extracts its content so the AI can read it.
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={handleReextract}
+          disabled={reextracting}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {reextracting ? <RefreshCw size={14} className="animate-spin" /> : <FileText size={14} />}
+          {reextracting ? "Extracting…" : "Re-extract All PDFs"}
+        </button>
+
+        {reextractResult && !reextracting && (
+          <div className={`rounded-xl p-4 text-xs space-y-2 ${reextractResult.error ? "bg-red-50 border border-red-200 text-red-700" : "bg-violet-50 border border-violet-200 text-violet-800"}`}>
+            {reextractResult.error ? (
+              <p>{reextractResult.error}</p>
+            ) : reextractResult.message ? (
+              <p className="font-medium">{reextractResult.message}</p>
+            ) : (
+              <>
+                <p className="font-semibold">
+                  ✓ {reextractResult.success} of {reextractResult.processed} documents extracted
+                  {reextractResult.failed > 0 && ` · ${reextractResult.failed} failed`}
+                </p>
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {reextractResult.results.map(r => (
+                    <div key={r.name} className="flex items-center gap-2">
+                      {r.status === "ok"
+                        ? <CheckCircle2 size={11} className="text-green-500 flex-shrink-0" />
+                        : <XCircle size={11} className="text-red-400 flex-shrink-0" />
+                      }
+                      <span className="truncate text-slate-700" title={r.name}>{r.name}</span>
+                      {r.status === "ok" && <span className="text-slate-400 ml-auto flex-shrink-0">{r.chars?.toLocaleString()} chars</span>}
+                      {r.status === "error" && <span className="text-red-500 ml-auto flex-shrink-0 truncate max-w-[120px]" title={r.reason}>{r.reason}</span>}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

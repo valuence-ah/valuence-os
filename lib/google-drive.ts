@@ -72,11 +72,18 @@ export async function listSubfolders(folderId: string): Promise<DriveFolder[]> {
   return folders;
 }
 
-// ── List files in folder ──────────────────────────────────────────────────────
+// ── List files in folder (recursive) ─────────────────────────────────────────
+// Scans the folder and all subfolders up to `maxDepth` levels deep (default 4).
+// This handles typical data room structures like Company/SubFolder/Files.
 
-export async function listFolderFiles(folderId: string): Promise<DriveFile[]> {
+export async function listFolderFiles(
+  folderId: string,
+  maxDepth = 4,
+  _depth = 0,
+): Promise<DriveFile[]> {
   const drive = google.drive({ version: "v3", auth: getAuth() });
   const allFiles: DriveFile[] = [];
+  const subFolderIds: string[] = [];
   let pageToken: string | undefined;
 
   do {
@@ -88,8 +95,11 @@ export async function listFolderFiles(folderId: string): Promise<DriveFile[]> {
     });
     for (const f of res.data.files ?? []) {
       if (!f.id || !f.name || !f.mimeType) continue;
-      // Skip sub-folders (recurse not needed for typical data rooms)
-      if (f.mimeType === "application/vnd.google-apps.folder") continue;
+      if (f.mimeType === "application/vnd.google-apps.folder") {
+        // Queue subfolder for recursive scan
+        if (_depth < maxDepth) subFolderIds.push(f.id);
+        continue;
+      }
       allFiles.push({
         id:           f.id,
         name:         f.name,
@@ -101,6 +111,12 @@ export async function listFolderFiles(folderId: string): Promise<DriveFile[]> {
     }
     pageToken = res.data.nextPageToken ?? undefined;
   } while (pageToken);
+
+  // Recursively scan subfolders
+  for (const subId of subFolderIds) {
+    const subFiles = await listFolderFiles(subId, maxDepth, _depth + 1);
+    allFiles.push(...subFiles);
+  }
 
   return allFiles;
 }
