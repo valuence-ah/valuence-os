@@ -475,10 +475,10 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [driveAnalyzing, setDriveAnalyzing]   = useState(false);
   const [driveAnalysis, setDriveAnalysis]     = useState<string | null>(null);
   const [driveSyncing, setDriveSyncing]       = useState(false);
-  type DriveSyncResult = { synced: number; skipped: number; total: number; not_ingestible?: number; files_found?: number; files: { name: string; status: string; chars?: number }[]; error?: string; share_with?: string; setup_required?: boolean };
+  type DriveSyncResult = { saved?: number; synced?: number; skipped: number; total: number; not_ingestible?: number; files_found?: number; files: { name: string; status: string; chars?: number }[]; error?: string; share_with?: string; setup_required?: boolean };
   const [driveSyncResult, setDriveSyncResult] = useState<DriveSyncResult | null>(null);
   const [driveReextracting, setDriveReextracting] = useState(false);
-  const [driveReextractResult, setDriveReextractResult] = useState<{ success: number; failed: number; processed: number; message?: string } | null>(null);
+  const [driveReextractResult, setDriveReextractResult] = useState<{ success: number; failed: number; processed: number; has_more?: boolean; message?: string } | null>(null);
   const [driveAnalysisOpen, setDriveAnalysisOpen] = useState(false);
 
   // Link existing contact in manage panel
@@ -2282,7 +2282,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                       ) : (
                         <span>
                           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                          {(() => { const n = (driveSyncResult as any).saved ?? driveSyncResult.synced ?? 0; return <>✓ {n} file{n!==1?"s":""} indexed{driveSyncResult.skipped>0?`, ${driveSyncResult.skipped} already saved`:""}{n>0&&<><br/><span className="text-amber-700 font-medium">Now click &quot;Extract Uploaded PDFs&quot; to make files readable by AI.</span></>}</>; })()}
+                          {(() => { const n = driveSyncResult.saved ?? driveSyncResult.synced ?? 0; return <>✓ {n} file{n!==1?"s":""} indexed{driveSyncResult.skipped>0?`, ${driveSyncResult.skipped} already saved`:""}{n>0&&<><br/><span className="text-amber-700 font-medium">Now click &quot;Extract All Documents&quot; to make files readable by AI.</span></>}</>; })()}
                         </span>
                       )}
                     </div>
@@ -2307,13 +2307,13 @@ export function PipelineClient({ initialCompanies }: Props) {
                     className="w-full text-xs px-2.5 py-1.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
                   >
                     {driveReextracting ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
-                    {driveReextracting ? "Extracting…" : "Extract Uploaded PDFs"}
+                    {driveReextracting ? "Extracting…" : "Extract All Documents"}
                   </button>
                   {driveReextractResult && !driveReextracting && (
                     <div className={`rounded-lg px-2.5 py-2 text-[10px] ${driveReextractResult.processed === 0 ? "bg-slate-50 border border-slate-200 text-slate-500" : "bg-slate-50 border border-slate-200 text-slate-700"}`}>
                       {driveReextractResult.message
                         ? <span>✓ {driveReextractResult.message}</span>
-                        : <span>✓ {driveReextractResult.success} PDF{driveReextractResult.success !== 1 ? "s" : ""} extracted{driveReextractResult.failed > 0 ? ` · ${driveReextractResult.failed} failed` : ""}</span>
+                        : <span>✓ {driveReextractResult.success} doc{driveReextractResult.success !== 1 ? "s" : ""} extracted{driveReextractResult.failed > 0 ? ` · ${driveReextractResult.failed} failed` : ""}{driveReextractResult.has_more ? " · more remaining, click again" : ""}</span>
                       }
                     </div>
                   )}

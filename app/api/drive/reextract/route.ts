@@ -103,10 +103,12 @@ export async function POST(req: Request) {
 
     if (companyId) query = query.eq("company_id", companyId);
 
-    const { data: docs, error } = await query.limit(50); // process in batches of 50
+    // When targeting a specific company fetch all its docs; otherwise batch globally to 50
+    const batchSize = companyId ? 200 : 50;
+    const { data: docs, error } = await query.limit(batchSize);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (!docs?.length) return NextResponse.json({ message: "All documents already have extracted text.", processed: 0, success: 0, failed: 0, results: [] });
+    if (!docs?.length) return NextResponse.json({ message: "All documents already have extracted text.", processed: 0, success: 0, failed: 0, has_more: false, results: [] });
 
     const results: { name: string; status: "ok" | "error"; chars?: number; reason?: string }[] = [];
     let success = 0;
@@ -161,7 +163,9 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ processed: docs.length, success, failed, results });
+    // has_more = true when we hit the batch ceiling (caller should click again)
+    const has_more = docs.length === batchSize;
+    return NextResponse.json({ processed: docs.length, success, failed, has_more, results });
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
