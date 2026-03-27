@@ -5,6 +5,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 
 export const maxDuration = 60;
 
@@ -54,7 +55,6 @@ type AiConfigRow = {
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
-  const { createClient: createServerClient } = await import("@/lib/supabase/server");
   const authClient = await createServerClient();
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
@@ -304,13 +304,35 @@ ${fullContext}`;
     : defaultSystemPrompt;
 
   // ── Stream response ────────────────────────────────────────────────────────
-  const result = streamText({
-    model: anthropic(aiConfig?.model ?? "claude-3-5-sonnet-latest"),
-    system: systemPrompt,
-    messages,
-    temperature: aiConfig?.temperature ?? 0.25,
-    maxTokens: aiConfig?.max_tokens ?? 4096,
-  });
+  const modelId = aiConfig?.model ?? "claude-3-5-sonnet-latest";
+  console.log(`[pipeline-chat] model=${modelId} promptChars=${systemPrompt.length} msgs=${messages.length}`);
 
-  return result.toDataStreamResponse();
+  // Trim system prompt if it exceeds ~400k chars (~100k tokens) to stay safe
+  const trimmedPrompt = systemPrompt.length > 400_000
+    ? systemPrompt.slice(0, 400_000) + "\n\n[Context truncated due to length]"
+    : systemPrompt;
+
+  let result;
+  try {
+    result = streamText({
+      model: anthropic(modelId),
+      system: trimmedPrompt,
+      messages: messages.map((m: { role: string; content: unknown }) => ({
+        role: m.role,
+        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+      })),
+      temperature: aiConfig?.temperature ?? 0.25,
+      maxTokens: aiConfig?.max_tokens ?? 4096,
+    });
+  } catch (err) {
+    console.error("[pipeline-chat] streamText setup error:", err);
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+  }
+
+  return result.toDataStreamResponse({
+    getErrorMessage: (err) => {
+      console.error("[pipeline-chat] stream error:", err);
+      return err instanceof Error ? err.message : "An error occurred in the AI stream.";
+    },
+  });
 }
