@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ingestible = files.filter(f => isIngestible(f.mimeType));
-  const results: { name: string; status: "synced" | "skipped" | "error"; type: string; chars?: number }[] = [];
+  const results: { name: string; status: "synced" | "skipped" | "error"; type: string; chars?: number; reason?: string }[] = [];
   let synced = 0;
   let skipped = 0;
 
@@ -143,8 +143,8 @@ export async function POST(req: NextRequest) {
       const text = await extractText(buffer, effectiveMime, file.name);
       const docType = mimeToDocType(file.mimeType, file.name);
 
-      // Upsert into documents table
-      await supabase.from("documents").upsert({
+      // Insert into documents table (existingUrls check above already prevents duplicates)
+      const { error: insertErr } = await supabase.from("documents").insert({
         company_id,
         name:             file.name,
         type:             docType,
@@ -154,14 +154,16 @@ export async function POST(req: NextRequest) {
         extracted_text:   text || null,
         uploaded_by:      user.id,
         updated_at:       new Date().toISOString(),
-      }, { onConflict: "google_drive_url" });
+      });
+
+      if (insertErr) throw new Error(insertErr.message);
 
       results.push({ name: file.name, status: "synced", type: docType, chars: text.length });
       synced++;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`Drive sync error for ${file.name}:`, msg);
-      results.push({ name: file.name, status: "error", type: file.mimeType });
+      results.push({ name: file.name, status: "error", type: file.mimeType, reason: msg });
     }
   }
 

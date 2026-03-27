@@ -470,6 +470,7 @@ export function PipelineClient({ initialCompanies }: Props) {
 
   // Data Room state
   const [driveInput, setDriveInput]           = useState("");
+  const [driveChanging, setDriveChanging]     = useState(false);
   const [driveLinking, setDriveLinking]       = useState(false);
   const [driveAnalyzing, setDriveAnalyzing]   = useState(false);
   const [driveAnalysis, setDriveAnalysis]     = useState<string | null>(null);
@@ -615,6 +616,7 @@ export function PipelineClient({ initialCompanies }: Props) {
       setDriveAnalysis(null);
       setDriveAnalysisOpen(false);
       setDriveInput("");
+      setDriveChanging(false);
       setEditField(null);
       setNoteContactIds([]);
       setNoteContactsOpen(false);
@@ -2184,7 +2186,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   </p>
                   {selected.drive_folder_url && (
                     <button
-                      onClick={() => { setDriveInput(selected.drive_folder_url ?? ""); }}
+                      onClick={() => { setDriveChanging(true); setDriveInput(""); }}
                       className="text-[10px] text-slate-400 hover:text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-50"
                     >
                       Change
@@ -2193,7 +2195,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </div>
 
               <div className="h-24 overflow-y-auto">
-              {!selected.drive_folder_url || (driveInput !== "" && driveInput !== selected.drive_folder_url) ? (
+              {!selected.drive_folder_url || driveChanging ? (
                 /* ── Link state ── */
                 <div className="border-2 border-dashed border-slate-200 rounded-xl p-3 space-y-2">
                   <input
@@ -2219,6 +2221,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                             c.id === selected.id ? { ...c, drive_folder_url: driveInput } : c
                           ));
                           setDriveInput("");
+                          setDriveChanging(false);
                         }
                       } finally {
                         setDriveLinking(false);

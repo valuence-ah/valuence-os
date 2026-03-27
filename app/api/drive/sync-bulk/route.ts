@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
     matched:    boolean;
     synced:     number;
     skipped:    number;
+    errors:     number;
     error?:     string;
   };
 
@@ -134,7 +135,7 @@ export async function POST(req: NextRequest) {
 
     if (!company) {
       unmatched.push(subfolder.name);
-      results.push({ folder: subfolder.name, matched: false, synced: 0, skipped: 0 });
+      results.push({ folder: subfolder.name, matched: false, synced: 0, skipped: 0, errors: 0 });
       continue;
     }
 
@@ -151,12 +152,12 @@ export async function POST(req: NextRequest) {
       files = await listFolderFiles(subfolder.id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      results.push({ folder: subfolder.name, company: company.name, company_id: company.id, matched: true, synced: 0, skipped: 0, error: msg });
+      results.push({ folder: subfolder.name, company: company.name, company_id: company.id, matched: true, synced: 0, skipped: 0, errors: 0, error: msg });
       continue;
     }
 
     const ingestible = files.filter(f => isIngestible(f.mimeType));
-    let synced = 0, skipped = 0;
+    let synced = 0, skipped = 0, fileErrors = 0;
 
     for (const file of ingestible) {
       const fileUrl = file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`;
@@ -167,7 +168,8 @@ export async function POST(req: NextRequest) {
         const text = await extractText(buffer, effectiveMime, file.name);
         const docType = mimeToDocType(file.mimeType, file.name);
 
-        await supabase.from("documents").upsert({
+        // Insert into documents table (existingUrls check above prevents duplicates)
+        const { error: insertErr } = await supabase.from("documents").insert({
           company_id:       company.id,
           name:             file.name,
           type:             docType,
@@ -177,11 +179,14 @@ export async function POST(req: NextRequest) {
           extracted_text:   text || null,
           uploaded_by:      user.id,
           updated_at:       new Date().toISOString(),
-        }, { onConflict: "google_drive_url" });
+        });
 
+        if (insertErr) throw new Error(insertErr.message);
         synced++;
-      } catch {
-        // skip failed files silently
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`Bulk sync error for ${file.name} (${company.name}):`, msg);
+        fileErrors++;
       }
     }
 
@@ -194,7 +199,7 @@ export async function POST(req: NextRequest) {
 
     synced_total += synced;
     skipped_total += skipped;
-    results.push({ folder: subfolder.name, company: company.name, company_id: company.id, matched: true, synced, skipped });
+    results.push({ folder: subfolder.name, company: company.name, company_id: company.id, matched: true, synced, skipped, errors: fileErrors });
   }
 
   return NextResponse.json({
