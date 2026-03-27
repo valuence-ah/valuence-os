@@ -59,7 +59,13 @@ export async function POST(req: Request) {
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const supabase = createAdminClient();
+  let supabase;
+  try {
+    supabase = createAdminClient();
+  } catch (err) {
+    console.error("[pipeline-chat] createAdminClient failed:", err);
+    return new Response(JSON.stringify({ error: "Server config error" }), { status: 500 });
+  }
 
   // ── Fetch all data in parallel ─────────────────────────────────────────────
   const [
