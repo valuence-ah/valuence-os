@@ -5,13 +5,13 @@ import { FolderOpen, RefreshCw, CheckCircle2, XCircle, AlertCircle, ChevronDown,
 import { createClient } from "@/lib/supabase/client";
 
 type BulkResult = {
-  folder: string; company?: string; company_id?: string;
-  matched: boolean; synced: number; skipped: number; errors: number; error?: string;
+  folder: string; company?: string; company_id?: string; matched: boolean; error?: string;
 };
 type BulkSyncResponse = {
-  synced_total: number; skipped_total: number; total_folders: number;
-  matched: number; unmatched_count: number; unmatched: string[];
+  linked: number; total_folders: number;
+  unmatched_count: number; unmatched: string[];
   results: BulkResult[]; share_with?: string; error?: string; setup_required?: boolean;
+  note?: string;
 };
 type ReextractResult = {
   processed: number; success: number; failed: number;
@@ -64,7 +64,7 @@ export function DrivePanel() {
       });
       setBulkResult(await res.json());
     } catch (err) {
-      setBulkResult({ error: String(err), synced_total: 0, skipped_total: 0, total_folders: 0, matched: 0, unmatched_count: 0, unmatched: [], results: [] });
+      setBulkResult({ error: String(err), linked: 0, total_folders: 0, unmatched_count: 0, unmatched: [], results: [] });
     } finally {
       setBulkLoading(false);
     }
@@ -166,11 +166,10 @@ export function DrivePanel() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   {[
                     { label: "Folders found",    value: bulkResult.total_folders,   color: "slate" },
-                    { label: "Companies matched", value: bulkResult.matched,         color: "green" },
-                    { label: "Files synced",      value: bulkResult.synced_total,    color: "blue"  },
+                    { label: "Companies linked",  value: bulkResult.linked,          color: "green" },
                     { label: "Unmatched",         value: bulkResult.unmatched_count, color: bulkResult.unmatched_count > 0 ? "amber" : "slate" },
                   ].map(c => (
                     <div key={c.label} className="bg-white border border-slate-200 rounded-xl p-3 text-center">
@@ -197,9 +196,13 @@ export function DrivePanel() {
                   </div>
                 )}
 
-                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-xs text-green-800">
+                    ✓ <strong>{bulkResult.linked} companies</strong> linked to Drive folders. Now go to <strong>CRM → Pipeline → Data Room → Sync to AI</strong> per company to ingest files.
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                   <button onClick={() => setShowDetails(v => !v)} className="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                    <span>Per-company breakdown</span>
+                    <span>Linked companies ({bulkResult.linked})</span>
                     {showDetails ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                   </button>
                   {showDetails && (
@@ -210,17 +213,12 @@ export function DrivePanel() {
                           <span className="font-medium text-slate-700 w-32 truncate" title={r.folder}>{r.folder}</span>
                           <span className="text-slate-400">→</span>
                           <span className="text-slate-600 flex-1 truncate">{r.company}</span>
-                          <span className="text-green-600 font-medium ml-auto">{r.synced} synced</span>
-                          {r.skipped > 0 && <span className="text-slate-400 ml-2">{r.skipped} skipped</span>}
-                          {r.errors > 0 && <span className="text-red-400 ml-2">{r.errors} failed</span>}
+                          {r.error && <span className="text-red-500 ml-auto text-[10px]">link failed</span>}
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-slate-400 text-center">
-                  Sync complete · {bulkResult.skipped_total} files already up to date
-                </p>
               </>
             )}
           </div>

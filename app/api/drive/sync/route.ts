@@ -17,7 +17,7 @@ import {
 } from "@/lib/google-drive";
 import { extractPdfText } from "@/lib/extract-pdf-text";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 // ── XLSX text extraction ───────────────────────────────────────────────────────
 function extractXlsxText(buffer: Buffer): string {
@@ -178,49 +178,53 @@ export async function POST(req: NextRequest) {
   let synced = 0;
   let skipped = 0;
 
-  for (const file of ingestible) {
-    const fileUrl = file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`;
+  // Process in parallel batches of 5 — fast enough for large folders without overwhelming Drive API
+  const CONCURRENCY = 5;
+  for (let i = 0; i < ingestible.length; i += CONCURRENCY) {
+    const batch = ingestible.slice(i, i + CONCURRENCY);
+    await Promise.all(batch.map(async (file) => {
+      const fileUrl = file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`;
 
-    if (existingUrls.has(fileUrl)) {
-      results.push({ name: file.name, status: "skipped", type: file.mimeType });
-      skipped++;
-      continue;
-    }
-
-    try {
-      const { buffer, effectiveMime } = await downloadFile(file.id, file.mimeType);
-      const text = await extractText(buffer, effectiveMime, file.name);
-      const docType = mimeToDocType(file.mimeType, file.name);
-
-      const { error: insertErr } = await supabase.from("documents").insert({
-        company_id,
-        name:             file.name,
-        type:             docType,
-        google_drive_url: fileUrl,
-        mime_type:        file.mimeType,
-        file_size:        file.size ?? null,
-        extracted_text:   text || null,
-        uploaded_by:      user.id,
-        updated_at:       new Date().toISOString(),
-      });
-
-      if (insertErr) {
-        // If it's a duplicate (unique constraint), just mark skipped
-        if (insertErr.message.includes("duplicate") || insertErr.message.includes("unique")) {
-          results.push({ name: file.name, status: "skipped", type: docType });
-          skipped++;
-        } else {
-          throw new Error(insertErr.message);
-        }
-      } else {
-        results.push({ name: file.name, status: "synced", type: docType, chars: text.length });
-        synced++;
+      if (existingUrls.has(fileUrl)) {
+        results.push({ name: file.name, status: "skipped", type: file.mimeType });
+        skipped++;
+        return;
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`Drive sync error for ${file.name}:`, msg);
-      results.push({ name: file.name, status: "error", type: file.mimeType, reason: msg });
-    }
+
+      try {
+        const { buffer, effectiveMime } = await downloadFile(file.id, file.mimeType);
+        const text = await extractText(buffer, effectiveMime, file.name);
+        const docType = mimeToDocType(file.mimeType, file.name);
+
+        const { error: insertErr } = await supabase.from("documents").insert({
+          company_id,
+          name:             file.name,
+          type:             docType,
+          google_drive_url: fileUrl,
+          mime_type:        file.mimeType,
+          file_size:        file.size ?? null,
+          extracted_text:   text || null,
+          uploaded_by:      user.id,
+          updated_at:       new Date().toISOString(),
+        });
+
+        if (insertErr) {
+          if (insertErr.message.includes("duplicate") || insertErr.message.includes("unique")) {
+            results.push({ name: file.name, status: "skipped", type: docType });
+            skipped++;
+          } else {
+            throw new Error(insertErr.message);
+          }
+        } else {
+          results.push({ name: file.name, status: "synced", type: docType, chars: text.length });
+          synced++;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`Drive sync error for ${file.name}:`, msg);
+        results.push({ name: file.name, status: "error", type: file.mimeType, reason: msg });
+      }
+    }));
   }
 
   // Save the drive_folder_url on the company

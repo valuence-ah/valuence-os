@@ -78,6 +78,10 @@ export async function listSubfolders(folderId: string): Promise<DriveFolder[]> {
 // Scans the folder and all subfolders up to `maxDepth` levels deep (default 4).
 // This handles typical data room structures like Company/SubFolder/Files.
 
+// Folder names (case-insensitive) to skip during recursive scan.
+// These are typically archive/backup folders containing old versions.
+const SKIP_FOLDER_NAMES = new Set(["archive", "archives", "old", "backup", "backups", "archived"]);
+
 export async function listFolderFiles(
   folderId: string,
   maxDepth = 4,
@@ -85,14 +89,14 @@ export async function listFolderFiles(
 ): Promise<DriveFile[]> {
   const drive = google.drive({ version: "v3", auth: getAuth() });
   const allFiles: DriveFile[] = [];
-  const subFolderIds: string[] = [];
+  const subFolders: { id: string; name: string }[] = [];
   let pageToken: string | undefined;
 
   do {
     const res = await drive.files.list({
       q: `'${folderId}' in parents and trashed = false`,
       fields: "nextPageToken, files(id, name, mimeType, size, modifiedTime, webViewLink)",
-      pageSize: 100,
+      pageSize: 1000,
       pageToken,
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
@@ -100,8 +104,10 @@ export async function listFolderFiles(
     for (const f of res.data.files ?? []) {
       if (!f.id || !f.name || !f.mimeType) continue;
       if (f.mimeType === "application/vnd.google-apps.folder") {
-        // Queue subfolder for recursive scan
-        if (_depth < maxDepth) subFolderIds.push(f.id);
+        // Skip archive-type folders; recurse into the rest
+        if (_depth < maxDepth && !SKIP_FOLDER_NAMES.has(f.name.toLowerCase())) {
+          subFolders.push({ id: f.id, name: f.name });
+        }
         continue;
       }
       allFiles.push({
@@ -116,11 +122,11 @@ export async function listFolderFiles(
     pageToken = res.data.nextPageToken ?? undefined;
   } while (pageToken);
 
-  // Recursively scan subfolders
-  for (const subId of subFolderIds) {
-    const subFiles = await listFolderFiles(subId, maxDepth, _depth + 1);
-    allFiles.push(...subFiles);
-  }
+  // Recurse into subfolders in parallel (faster than sequential)
+  const subResults = await Promise.all(
+    subFolders.map(sub => listFolderFiles(sub.id, maxDepth, _depth + 1))
+  );
+  for (const files of subResults) allFiles.push(...files);
 
   return allFiles;
 }
