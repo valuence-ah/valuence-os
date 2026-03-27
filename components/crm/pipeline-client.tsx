@@ -475,8 +475,10 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [driveAnalyzing, setDriveAnalyzing]   = useState(false);
   const [driveAnalysis, setDriveAnalysis]     = useState<string | null>(null);
   const [driveSyncing, setDriveSyncing]       = useState(false);
-  type DriveSyncResult = { synced: number; skipped: number; total: number; not_ingestible?: number; files: { name: string; status: string; chars?: number }[]; error?: string; share_with?: string; setup_required?: boolean };
+  type DriveSyncResult = { synced: number; skipped: number; total: number; not_ingestible?: number; files_found?: number; files: { name: string; status: string; chars?: number }[]; error?: string; share_with?: string; setup_required?: boolean };
   const [driveSyncResult, setDriveSyncResult] = useState<DriveSyncResult | null>(null);
+  const [driveReextracting, setDriveReextracting] = useState(false);
+  const [driveReextractResult, setDriveReextractResult] = useState<{ success: number; failed: number; processed: number; message?: string } | null>(null);
   const [driveAnalysisOpen, setDriveAnalysisOpen] = useState(false);
 
   // Link existing contact in manage panel
@@ -2280,6 +2282,36 @@ export function PipelineClient({ initialCompanies }: Props) {
                       ) : (
                         <span>✓ {driveSyncResult.synced} file{driveSyncResult.synced !== 1 ? "s" : ""} synced to AI{driveSyncResult.skipped > 0 ? `, ${driveSyncResult.skipped} already up-to-date` : ""}{(driveSyncResult.not_ingestible ?? 0) > 0 ? ` (${driveSyncResult.not_ingestible} skipped — unsupported format)` : ""}</span>
                       )}
+                    </div>
+                  )}
+
+                  {/* Re-extract uploaded docs button */}
+                  <button
+                    disabled={driveReextracting}
+                    onClick={async () => {
+                      setDriveReextracting(true);
+                      setDriveReextractResult(null);
+                      try {
+                        const res = await fetch("/api/drive/reextract", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ company_id: selected.id }),
+                        });
+                        const json = await res.json() as { success: number; failed: number; processed: number; message?: string };
+                        setDriveReextractResult(json);
+                      } finally { setDriveReextracting(false); }
+                    }}
+                    className="w-full text-xs px-2.5 py-1.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                  >
+                    {driveReextracting ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
+                    {driveReextracting ? "Extracting…" : "Extract Uploaded PDFs"}
+                  </button>
+                  {driveReextractResult && !driveReextracting && (
+                    <div className={`rounded-lg px-2.5 py-2 text-[10px] ${driveReextractResult.processed === 0 ? "bg-slate-50 border border-slate-200 text-slate-500" : "bg-slate-50 border border-slate-200 text-slate-700"}`}>
+                      {driveReextractResult.message
+                        ? <span>✓ {driveReextractResult.message}</span>
+                        : <span>✓ {driveReextractResult.success} PDF{driveReextractResult.success !== 1 ? "s" : ""} extracted{driveReextractResult.failed > 0 ? ` · ${driveReextractResult.failed} failed` : ""}</span>
+                      }
                     </div>
                   )}
 

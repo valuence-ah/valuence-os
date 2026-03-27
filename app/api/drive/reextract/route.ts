@@ -10,19 +10,30 @@ import { extractPdfText } from "@/lib/extract-pdf-text";
 
 export const maxDuration = 300; // Allow up to 5 minutes for batch extraction
 
-export async function POST() {
+export async function POST(req: Request) {
   const authClient = await createClient();
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = createAdminClient();
 
-  // Find all documents without extracted text
-  const { data: docs, error } = await supabase
+  // Optional company_id filter — if provided, only re-extract for that company
+  let companyId: string | null = null;
+  try {
+    const body = await req.json().catch(() => ({}));
+    companyId = body.company_id ?? null;
+  } catch { /* no body */ }
+
+  // Find documents without extracted text
+  let query = supabase
     .from("documents")
     .select("id, name, storage_path, mime_type, google_drive_url")
     .is("extracted_text", null)
     .not("storage_path", "is", null);
+
+  if (companyId) query = query.eq("company_id", companyId);
+
+  const { data: docs, error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!docs?.length) return NextResponse.json({ message: "All documents already have extracted text.", processed: 0 });
