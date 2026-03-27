@@ -2328,8 +2328,9 @@ export function PipelineClient({ initialCompanies }: Props) {
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ folderUrl: selected.drive_folder_url }),
                         });
-                        const json = await res.json() as { analysis?: string; error?: string };
-                        if (json.analysis) { setDriveAnalysis(json.analysis); setDriveAnalysisOpen(true); }
+                        const json = await res.json() as { analysis?: string; error?: string; docs_analyzed?: number };
+                        if (json.error) { setDriveAnalysis(`Error: ${json.error}`); setDriveAnalysisOpen(true); }
+                        else if (json.analysis) { setDriveAnalysis(json.analysis); setDriveAnalysisOpen(true); }
                       } finally { setDriveAnalyzing(false); }
                     }}
                     className="w-full text-xs px-2.5 py-1.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
