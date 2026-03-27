@@ -1,9 +1,11 @@
 "use client";
 // ─── Pipeline AI Chat Widget ──────────────────────────────────────────────────
 // Floating "Valuence AI" button that opens a slide-in chat panel.
-// Uses native fetch + processDataStream to call /api/pipeline-chat directly.
+// Uses useChat from "ai/react" (same pattern as /components/chat/chat-client.tsx)
+// Route: /api/pipeline-chat — returns toDataStreamResponse()
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useChat } from "ai/react";
+import { useState, useEffect, useRef } from "react";
 import {
   Sparkles,
   X,
@@ -14,9 +16,6 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// ── Types ───────────────────────────────────────────────────────────────────
-type Message = { id: string; role: "user" | "assistant"; content: string };
 
 // ── Starter prompts ──────────────────────────────────────────────────────────
 const STARTER_PROMPTS = [
@@ -97,14 +96,24 @@ function TypingDots() {
 // ── Main widget ───────────────────────────────────────────────────────────────
 export function PipelineChatWidget() {
   const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const listRef   = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
-  const abortRef  = useRef<AbortController | null>(null);
+
+  // ── useChat — identical pattern to /components/chat/chat-client.tsx ────────
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    setMessages,
+    append,
+  } = useChat({
+    api: "/api/pipeline-chat",
+    initialMessages: [],
+  });
 
   // Auto-scroll
   useEffect(() => {
@@ -117,8 +126,9 @@ export function PipelineChatWidget() {
     setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
   }
 
+  // Wrap handleInputChange to also auto-resize the textarea
   function handleTextChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    setText(e.target.value);
+    handleInputChange(e);
     e.target.style.height = "auto";
     e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
   }
@@ -126,68 +136,15 @@ export function PipelineChatWidget() {
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey && !isLoading) {
       e.preventDefault();
-      send(text);
+      handleSubmit(e as unknown as React.FormEvent);
     }
   }
 
-  const send = useCallback(async (msg: string) => {
-    const trimmed = msg.trim();
-    if (!trimmed || isLoading) return;
-    setText("");
-    if (inputRef.current) inputRef.current.style.height = "auto";
-
-    const userMsg: Message = { id: Date.now().toString(), role: "user", content: trimmed };
-    const assistantId = (Date.now() + 1).toString();
-
-    setMessages(prev => [...prev, userMsg]);
-    setIsLoading(true);
-
-    // Build message history for API (role + content pairs)
-    const history = [...messages, userMsg].map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
-
-    abortRef.current = new AbortController();
-
-    try {
-      const res = await fetch("/api/pipeline-chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
-        signal: abortRef.current.signal,
-      });
-
-      if (!res.ok || !res.body) {
-        const errText = await res.text().catch(() => "Unknown error");
-        setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: `Error: ${errText}` }]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Route uses toTextStreamResponse() — stream is plain text, no protocol parsing needed
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let accContent = "";
-      setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: "" }]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        accContent += decoder.decode(value, { stream: true });
-        setMessages(prev =>
-          prev.map(m => m.id === assistantId ? { ...m, content: accContent } : m)
-        );
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name !== "AbortError") {
-        setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: "Something went wrong. Please try again." }]);
-      }
-    } finally {
-      setIsLoading(false);
-      abortRef.current = null;
-    }
-  }, [isLoading, messages]);
+  // Starter prompts send immediately via append
+  function sendStarter(prompt: string) {
+    if (isLoading) return;
+    append({ role: "user", content: prompt });
+  }
 
   return (
     <>
@@ -278,7 +235,7 @@ export function PipelineChatWidget() {
                   {STARTER_PROMPTS.map(p => (
                     <button
                       key={p}
-                      onClick={() => send(p)}
+                      onClick={() => sendStarter(p)}
                       className="text-xs bg-white border border-slate-200 text-slate-700 rounded-full px-3 py-1.5 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm"
                     >
                       {p}
@@ -308,11 +265,14 @@ export function PipelineChatWidget() {
 
           {/* Input */}
           <div className="flex-shrink-0 bg-white border-t border-slate-200 px-3 py-2.5">
-            <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus-within:border-blue-400 focus-within:bg-white transition-colors">
+            <form
+              onSubmit={handleSubmit}
+              className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus-within:border-blue-400 focus-within:bg-white transition-colors"
+            >
               <textarea
                 ref={inputRef}
                 rows={1}
-                value={text}
+                value={input}
                 onChange={handleTextChange}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask about pipeline, LPs, strategics, or companies…"
@@ -321,11 +281,11 @@ export function PipelineChatWidget() {
                 style={{ minHeight: "24px", maxHeight: "120px" }}
               />
               <button
-                onClick={() => send(text)}
-                disabled={!text.trim() || isLoading}
+                type="submit"
+                disabled={!input.trim() || isLoading}
                 className={cn(
                   "flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all",
-                  text.trim() && !isLoading
+                  input.trim() && !isLoading
                     ? "bg-blue-600 text-white hover:bg-blue-700 shadow"
                     : "bg-slate-200 text-slate-400 cursor-not-allowed"
                 )}
@@ -335,7 +295,7 @@ export function PipelineChatWidget() {
                   : <Send size={15} />
                 }
               </button>
-            </div>
+            </form>
             <p className="text-center text-slate-400 text-[10px] mt-1.5">
               Powered by Claude · live pipeline data
             </p>
