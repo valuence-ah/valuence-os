@@ -165,7 +165,7 @@ function KeywordEditor({
         />
       )}
       {readOnly && tags.length === 0 && (
-        <span className="text-sm text-slate-300 italic">No keywords yet — click Edit to add</span>
+        <span className="text-xs text-slate-300 italic">No keywords yet — double-click to add</span>
       )}
     </div>
   );
@@ -339,7 +339,7 @@ function SectorQuickEdit({ current, onSave, onCancel }: {
   const [selected, setSelected] = useState<string[]>(current.map(s => s.toLowerCase()));
   function toggle(s: string) {
     const lower = s.toLowerCase();
-    setSelected(prev => prev.includes(lower) ? prev.filter(x => x !== lower) : [...prev, lower]);
+    setSelected(prev => prev.includes(lower) ? [] : [lower]);
   }
   return (
     <div className="space-y-2">
@@ -479,7 +479,17 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [driveSyncResult, setDriveSyncResult] = useState<DriveSyncResult | null>(null);
   const [driveReextracting, setDriveReextracting] = useState(false);
   const [driveReextractResult, setDriveReextractResult] = useState<{ success: number; failed: number; processed: number; has_more?: boolean; message?: string } | null>(null);
+  const [extractStep, setExtractStep] = useState<"extracting" | "analyzing" | null>(null);
   const [driveAnalysisOpen, setDriveAnalysisOpen] = useState(false);
+
+  // Inline tag editing (quick-edit outside full edit mode)
+  const [editTagsValue, setEditTagsValue] = useState<string[]>([]);
+
+  // Portfolio Intelligence
+  type IntelItem = { headline: string; source: string; date: string; summary?: string; url?: string };
+  const [intelligence, setIntelligence] = useState<IntelItem[]>([]);
+  const [loadingIntelligence, setLoadingIntelligence] = useState(false);
+  const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
 
   // Link existing contact in manage panel
   const [showLinkContactForm, setShowLinkContactForm] = useState(false);
@@ -622,6 +632,8 @@ export function PipelineClient({ initialCompanies }: Props) {
       setEditField(null);
       setNoteContactIds([]);
       setNoteContactsOpen(false);
+      setIntelligence([]);
+      setIntelligenceError(null);
       loadDetail(selectedId);
       loadEmails(selectedId);
     }
@@ -790,7 +802,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   function toggleSector(s: string) {
     const lower = s.toLowerCase();
     const curr = (editForm.sectors as string[] ?? []);
-    setEF("sectors", curr.includes(lower) ? curr.filter(x => x !== lower) : [...curr, lower]);
+    setEF("sectors", curr.map(x => x.toLowerCase()).includes(lower) ? [] : [lower]);
   }
 
   function toggleType(t: string) {
@@ -995,6 +1007,25 @@ export function PipelineClient({ initialCompanies }: Props) {
       alert(e instanceof Error ? e.message : "Description generation failed");
     } finally {
       setGeneratingDesc(false);
+    }
+  }
+
+  async function fetchIntelligence() {
+    if (!selected || loadingIntelligence) return;
+    setLoadingIntelligence(true);
+    setIntelligenceError(null);
+    try {
+      const res = await fetch(`/api/companies/${selected.id}/intelligence`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json() as { items?: IntelItem[] };
+        setIntelligence(data.items ?? []);
+      } else {
+        setIntelligenceError("Could not load intelligence");
+      }
+    } catch {
+      setIntelligenceError("Network error");
+    } finally {
+      setLoadingIntelligence(false);
     }
   }
 
@@ -1400,9 +1431,9 @@ export function PipelineClient({ initialCompanies }: Props) {
             {/* ── Overview Fields ── */}
             <section>
               <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Overview</h2>
-              <div className="grid grid-cols-4 gap-x-6 gap-y-5">
+              <div className="grid grid-cols-5 gap-x-6 gap-y-5">
 
-                {/* Row 1: Domain/Website, Type, Sector, Sub-sector */}
+                {/* Row 1: Domain/Website, Type, Sector, Sub-sector, Last Contact */}
                 <Field label="Domain / Website">
                   {editing ? (
                     <input className="input text-xs" value={editForm.website ?? ""} onChange={e => setEF("website", e.target.value)} placeholder="https://…" />
@@ -1459,7 +1490,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     >
                       {SECTOR_OPTIONS.map(s => {
                         const lower = s.toLowerCase();
-                        const active = (editing ? (editForm.sectors as string[] ?? []) : (selected.sectors ?? [])).includes(lower);
+                        const active = (editing ? (editForm.sectors as string[] ?? []) : (selected.sectors ?? [])).map(s => s.toLowerCase()).includes(lower);
                         return editing ? (
                           <button key={s} type="button" onClick={() => toggleSector(s)}
                             className={cn("px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
@@ -1498,13 +1529,50 @@ export function PipelineClient({ initialCompanies }: Props) {
                       {SUB_SECTOR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   ) : (
-                    <span className="text-xs text-slate-700 cursor-text" onDoubleClick={() => setEditField("sub_type")} title="Double-click to edit">
-                      {selected.sub_type ?? <span className="text-slate-300 italic">double-click to set</span>}
-                    </span>
+                    <div className="flex flex-wrap gap-1.5 mt-0.5 min-h-[28px] items-center cursor-text" onDoubleClick={() => setEditField("sub_type")} title="Double-click to edit">
+                      {selected.sub_type
+                        ? <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">{selected.sub_type}</span>
+                        : <span className="text-xs text-slate-400 border border-dashed border-slate-300 rounded-full px-2.5 py-1 hover:border-purple-400 hover:text-purple-500 transition-colors">+ double-click to set</span>
+                      }
+                    </div>
                   )}
                 </Field>
 
-                {/* Row 2: Status, Investment Round, Location, Last Contact */}
+                <Field label="Last Contact">
+                  <span className="text-xs text-slate-700 flex items-center gap-1">
+                    <Calendar size={12} className="text-slate-400" />
+                    {formatDate(selected.last_contact_date)}
+                  </span>
+                </Field>
+
+                {/* Row 2: Investment Round, Status, Location, Keywords, Data Room */}
+                <Field label="Investment Round">
+                  {editing ? (
+                    <select className="select text-xs" value={editForm.stage ?? ""} onChange={e => setEF("stage", e.target.value || null)}>
+                      <option value="">Not set</option>
+                      {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+                    </select>
+                  ) : editField === "stage" ? (
+                    <select
+                      autoFocus
+                      className="w-full text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
+                      defaultValue={selected.stage ?? ""}
+                      onBlur={e => quickSave("stage", e.target.value || null)}
+                      onChange={e => quickSave("stage", e.target.value || null)}
+                    >
+                      <option value="">Not set</option>
+                      {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+                    </select>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 mt-0.5 min-h-[28px] items-center cursor-text" onDoubleClick={() => setEditField("stage")} title="Double-click to edit">
+                      {selected.stage
+                        ? <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200">{selected.stage.replace("_", " ")}</span>
+                        : <span className="text-xs text-slate-400 border border-dashed border-slate-300 rounded-full px-2.5 py-1 hover:border-sky-400 hover:text-sky-500 transition-colors">+ double-click to set</span>
+                      }
+                    </div>
+                  )}
+                </Field>
+
                 <Field label="Status">
                   {editing ? (
                     <select className="select text-xs" value={editForm.deal_status ?? ""} onChange={e => setEF("deal_status", e.target.value as DealStatus || null)}>
@@ -1531,30 +1599,6 @@ export function PipelineClient({ initialCompanies }: Props) {
                   )}
                 </Field>
 
-                <Field label="Investment Round">
-                  {editing ? (
-                    <select className="select text-xs" value={editForm.stage ?? ""} onChange={e => setEF("stage", e.target.value || null)}>
-                      <option value="">Not set</option>
-                      {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
-                    </select>
-                  ) : editField === "stage" ? (
-                    <select
-                      autoFocus
-                      className="w-full text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
-                      defaultValue={selected.stage ?? ""}
-                      onBlur={e => quickSave("stage", e.target.value || null)}
-                      onChange={e => quickSave("stage", e.target.value || null)}
-                    >
-                      <option value="">Not set</option>
-                      {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
-                    </select>
-                  ) : (
-                    <span className="text-xs text-slate-700 capitalize cursor-text" onDoubleClick={() => setEditField("stage")} title="Double-click to edit">
-                      {selected.stage?.replace("_", " ") ?? <span className="text-slate-300 italic">double-click to set</span>}
-                    </span>
-                  )}
-                </Field>
-
                 <Field label="Location">
                   {editing ? (
                     <div className="flex gap-2">
@@ -1562,21 +1606,31 @@ export function PipelineClient({ initialCompanies }: Props) {
                       <input className="input text-xs flex-1" value={editForm.location_country ?? ""} onChange={e => setEF("location_country", e.target.value || null)} placeholder="Country" />
                     </div>
                   ) : editField === "location" ? (
-                    <div className="flex gap-1">
+                    <div
+                      className="flex gap-1"
+                      onBlur={e => {
+                        // Only save when focus moves completely outside this container
+                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                          const inputs = e.currentTarget.querySelectorAll("input");
+                          const city = (inputs[0] as HTMLInputElement)?.value.trim() || null;
+                          const country = (inputs[1] as HTMLInputElement)?.value.trim() || null;
+                          quickSave("location_city", city);
+                          quickSave("location_country", country);
+                        }
+                      }}
+                    >
                       <input
                         autoFocus
                         className="w-1/2 text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
-                        defaultValue={selected.location_city ?? ""}
+                        defaultValue={selected?.location_city ?? ""}
                         placeholder="City"
-                        onBlur={e => quickSave("location_city", e.target.value.trim() || null)}
-                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                        onKeyDown={e => { if (e.key === "Escape") setEditField(null); }}
                       />
                       <input
                         className="w-1/2 text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
-                        defaultValue={selected.location_country ?? ""}
+                        defaultValue={selected?.location_country ?? ""}
                         placeholder="Country"
-                        onBlur={e => quickSave("location_country", e.target.value.trim() || null)}
-                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                        onKeyDown={e => { if (e.key === "Escape") setEditField(null); }}
                       />
                     </div>
                   ) : (
@@ -1587,13 +1641,48 @@ export function PipelineClient({ initialCompanies }: Props) {
                   )}
                 </Field>
 
-                <Field label="Last Contact">
-                  <span className="text-xs text-slate-700 flex items-center gap-1">
-                    <Calendar size={12} className="text-slate-400" />
-                    {formatDate(selected.last_contact_date)}
-                  </span>
-                </Field>
-
+                {/* Keywords — spans 2 columns, inline-editable */}
+                <div className="col-span-2">
+                  <Field label="Keywords">
+                    {editing ? (
+                      <div className="min-h-[28px]">
+                        <KeywordEditor
+                          tags={(editForm.tags as string[]) ?? []}
+                          onChange={tags => setEF("tags", tags)}
+                          readOnly={false}
+                        />
+                      </div>
+                    ) : editField === "tags" ? (
+                      <div className="min-h-[28px]">
+                        <KeywordEditor
+                          tags={editTagsValue}
+                          onChange={async (tags) => {
+                            setEditTagsValue(tags);
+                            await quickSave("tags", tags);
+                          }}
+                          readOnly={false}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => { quickSave("tags", editTagsValue); setEditField(null); }}
+                          className="mt-1.5 text-[10px] px-2.5 py-0.5 bg-blue-600 text-white rounded-full hover:bg-blue-700"
+                        >Done</button>
+                      </div>
+                    ) : (
+                      <div
+                        className="min-h-[28px] cursor-text"
+                        onDoubleClick={() => { setEditTagsValue((selected.tags as string[]) ?? []); setEditField("tags"); }}
+                        title="Double-click to edit"
+                      >
+                        <KeywordEditor
+                          tags={(selected.tags as string[]) ?? []}
+                          onChange={() => {}}
+                          readOnly={true}
+                        />
+                      </div>
+                    )}
+                  </Field>
+                </div>
 
               </div>
             </section>
@@ -1616,153 +1705,7 @@ export function PipelineClient({ initialCompanies }: Props) {
               </p>
             </section>
 
-            {/* ── Key Words (left 50%) | Internal Notes (right 50%) ── */}
-            <div className="grid grid-cols-2 gap-6 items-start">
-
-              {/* Key Words */}
-              <section>
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
-                  <span className="flex items-center gap-1.5"><Tag size={12} /> Key Words</span>
-                </h2>
-                {editing ? (
-                  <div className="min-h-[80px] border border-slate-200 rounded-lg p-2.5 bg-white">
-                    <KeywordEditor
-                      tags={(editForm.tags as string[]) ?? []}
-                      onChange={tags => setEF("tags", tags)}
-                      readOnly={false}
-                    />
-                  </div>
-                ) : (
-                  <KeywordEditor
-                    tags={(selected.tags as string[]) ?? []}
-                    onChange={() => {}}
-                    readOnly={true}
-                  />
-                )}
-              </section>
-
-              {/* Strategic Partnerships */}
-              <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Strategic Partnerships</h2>
-                  <button onClick={() => setShowAddPartnership(v => !v)}
-                    className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                    <Plus size={11} /> Add
-                  </button>
-                </div>
-
-                {showAddPartnership && (
-                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
-                    {/* Company + Type row */}
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                      <input value={partnerSearch}
-                        onChange={e => { setPartnerSearch(e.target.value); setNewPartnerName(e.target.value); setSelectedPartnerId(null); setShowPartnerDropdown(true); }}
-                        onFocus={() => setShowPartnerDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowPartnerDropdown(false), 150)}
-                        placeholder="Partner / Company / Fund name"
-                        className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                      {showPartnerDropdown && (
-                        <div className="absolute z-20 top-full left-0 right-0 bg-white border border-slate-200 rounded shadow-lg max-h-40 overflow-y-auto mt-0.5">
-                          {partnerCompanies.filter(c => !partnerSearch || c.name.toLowerCase().includes(partnerSearch.toLowerCase())).slice(0, 10).map(c => (
-                            <button key={c.id} onMouseDown={() => { setNewPartnerName(c.name); setPartnerSearch(c.name); setSelectedPartnerId(c.id); setShowPartnerDropdown(false); }}
-                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 flex items-center justify-between gap-2">
-                              <span className="font-medium text-slate-700">{c.name}</span>
-                              <span className="text-[10px] text-slate-400">{(c.types ?? []).includes("strategic partner") ? "Strategic" : (c.types ?? []).includes("limited partner") ? "LP" : "Investor"}</span>
-                            </button>
-                          ))}
-                          {partnerSearch && partnerCompanies.filter(c => c.name.toLowerCase().includes(partnerSearch.toLowerCase())).length === 0 && (
-                            <p className="px-3 py-2 text-xs text-slate-400 italic">No match — will be added as-is</p>
-                          )}
-                        </div>
-                      )}
-                      </div>
-                      <select value={newPartnerType} onChange={e => setNewPartnerType(e.target.value)}
-                        className="w-32 flex-shrink-0 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
-                        {["Co-invest", "Introduction", "Pilot", "Diligence", "Customer", "Value-add"].map(t => <option key={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <input value={newPartnerNote} onChange={e => setNewPartnerNote(e.target.value)}
-                      placeholder="Note (optional)"
-                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                    <input type="date" value={newPartnerDate} onChange={e => setNewPartnerDate(e.target.value)}
-                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                    <div className="flex gap-2">
-                      <button onClick={addManualPartnership}
-                        className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">Add</button>
-                      <button onClick={() => { setShowAddPartnership(false); setPartnerSearch(""); setNewPartnerName(""); setSelectedPartnerId(null); setNewPartnerType("Introduction"); }}
-                        className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
-                    </div>
-                  </div>
-                )}
-
-                {portcoPartnerships.length === 0 && manualPartnerships.length === 0 && !showAddPartnership && (
-                  <p className="text-xs text-slate-300 italic">No strategic partnerships yet</p>
-                )}
-
-                <div className="divide-y divide-slate-100">
-                  {portcoPartnerships.map(p => (
-                    <div key={p.strategicId}>
-                      {confirmDeletePartner?.type === "portco" && confirmDeletePartner.id === p.strategicId ? (
-                        <div className="flex items-center gap-2 py-1.5">
-                          <span className="text-xs text-slate-500 flex-1 italic">Delete &ldquo;{p.strategicName}&rdquo;?</span>
-                          <button onMouseDown={() => { deletePortcoPartnership(p.strategicId); setConfirmDeletePartner(null); }} className="text-xs text-red-600 hover:underline font-medium flex-shrink-0">Yes</button>
-                          <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-xs text-slate-400 hover:underline flex-shrink-0">No</button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setExpandedPartner(expandedPartner === p.strategicId ? null : p.strategicId)}
-                          className="w-full flex items-center gap-2 py-1.5 px-1 text-left hover:bg-slate-50 rounded transition-colors"
-                        >
-                          <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.strategicName}</span>
-                          {p.due && <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(p.due)}</span>}
-                          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>
-                          <ChevronRight size={11} className={cn("text-slate-300 flex-shrink-0 transition-transform", expandedPartner === p.strategicId && "rotate-90")} />
-                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "portco", id: p.strategicId }); }} className="text-slate-300 hover:text-red-400 flex-shrink-0 cursor-pointer"><X size={11} /></span>
-                        </button>
-                      )}
-                      {expandedPartner === p.strategicId && (
-                        <div className="px-2 pb-2 text-xs text-slate-500">
-                          <p><span className="font-medium text-slate-600">Status:</span> {p.status}</p>
-                          {p.due && <p><span className="font-medium text-slate-600">Due:</span> {formatDate(p.due)}</p>}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {manualPartnerships.map(p => (
-                    <div key={p.id}>
-                      {confirmDeletePartner?.type === "manual" && confirmDeletePartner.id === p.id ? (
-                        <div className="flex items-center gap-2 py-1.5">
-                          <span className="text-xs text-slate-500 flex-1 italic">Delete &ldquo;{p.name}&rdquo;?</span>
-                          <button onMouseDown={() => { deleteManualPartnership(p.id); setConfirmDeletePartner(null); }} className="text-xs text-red-600 hover:underline font-medium flex-shrink-0">Yes</button>
-                          <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-xs text-slate-400 hover:underline flex-shrink-0">No</button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setExpandedPartner(expandedPartner === p.id ? null : p.id)}
-                          className="w-full flex items-center gap-2 py-1.5 px-1 text-left hover:bg-slate-50 rounded transition-colors"
-                        >
-                          <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.name}</span>
-                          {p.date && <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(p.date)}</span>}
-                          {p.status && <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>}
-                          <ChevronRight size={11} className={cn("text-slate-300 flex-shrink-0 transition-transform", expandedPartner === p.id && "rotate-90")} />
-                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "manual", id: p.id }); }} className="text-slate-300 hover:text-red-400 flex-shrink-0 cursor-pointer"><X size={11} /></span>
-                        </button>
-                      )}
-                      {expandedPartner === p.id && (
-                        <div className="px-2 pb-2 text-xs text-slate-500 space-y-0.5">
-                          {p.note && <p>{p.note}</p>}
-                          {p.date && <p><span className="font-medium text-slate-600">Date:</span> {formatDate(p.date)}</p>}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            </div>
-
-            {/* ── Contacts (left 50%) | Interaction Timeline (right 50%) ── */}
-            {/* Row 1: headers share the same grid row → guaranteed same y-position */}
+            {/* ── Row A: Contacts (50%) | Interaction Timeline (50%) ── */}
             <div className="grid grid-cols-2 gap-x-6">
 
               {/* Header: Contacts */}
@@ -1789,52 +1732,70 @@ export function PipelineClient({ initialCompanies }: Props) {
 
               {/* Content: Contacts list */}
               <div className="h-[200px] overflow-y-auto space-y-2 pr-1">
-                  {loadingDetail ? (
-                    <div className="h-12 bg-slate-50 rounded-lg animate-pulse" />
-                  ) : contacts.length === 0 ? (
-                    <div className="text-xs text-slate-300 italic pt-2">No contacts linked yet</div>
-                  ) : contacts.map(c => (
-                    <button
-                      key={c.id}
-                      onClick={async () => {
-                        setContactPanel(c); setContactPanelMode("detail"); setContactEditing(false); setConfirmRemove(false);
-                        const { data } = await supabase.from("interactions").select("type, date").contains("contact_ids", [c.id]).order("date", { ascending: false });
-                        setContactInteractions(data ?? []);
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-lg hover:bg-blue-50 transition-colors text-left"
-                    >
-                      {/* Avatar */}
-                      <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
-                        <User size={13} className="text-violet-600" />
+                {loadingDetail ? (
+                  <div className="h-12 bg-slate-50 rounded-lg animate-pulse" />
+                ) : contacts.length === 0 ? (
+                  <div className="text-xs text-slate-300 italic pt-2">No contacts linked yet</div>
+                ) : (contactOrder.length > 0
+                    ? [...contacts].sort((a, b) => {
+                        const ai = contactOrder.indexOf(a.id);
+                        const bi = contactOrder.indexOf(b.id);
+                        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                      })
+                    : contacts
+                  ).map((c, idx, arr) => (
+                  <div
+                    key={c.id}
+                    draggable
+                    onDragStart={() => { contactDragIdx.current = idx; }}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={() => {
+                      if (contactDragIdx.current === null || contactDragIdx.current === idx) return;
+                      const order = arr.map(x => x.id);
+                      const [moved] = order.splice(contactDragIdx.current, 1);
+                      order.splice(idx, 0, moved);
+                      setContactOrder(order);
+                      contactDragIdx.current = null;
+                    }}
+                    className="cursor-grab active:cursor-grabbing"
+                  >
+                  <button
+                    onClick={async () => {
+                      setContactPanel(c); setContactPanelMode("detail"); setContactEditing(false); setConfirmRemove(false);
+                      const { data } = await supabase.from("interactions").select("type, date").contains("contact_ids", [c.id]).order("date", { ascending: false });
+                      setContactInteractions(data ?? []);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-lg hover:bg-blue-50 transition-colors text-left"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                      <User size={12} className="text-violet-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                        {c.is_primary_contact && <span className="text-[10px] text-blue-600 bg-blue-50 px-1 rounded flex-shrink-0">★</span>}
                       </div>
-                      {/* Name + Title */}
-                      <div className="w-36 min-w-0 flex-shrink-0">
-                        <div className="flex items-center gap-1 min-w-0">
-                          <p className="text-xs font-semibold text-slate-800 truncate">{c.first_name} {c.last_name}</p>
-                          {c.is_primary_contact && <span className="text-[10px] text-blue-600 bg-blue-50 px-1 rounded flex-shrink-0">★</span>}
-                        </div>
+                      <div className="flex items-center justify-between gap-2 mt-0.5">
                         <p className="text-[11px] text-slate-400 truncate">{c.title ?? c.type ?? "—"}</p>
+                        {c.last_contact_date && (
+                          <span className="text-[10px] text-slate-400 flex-shrink-0">{formatDate(c.last_contact_date)}</span>
+                        )}
                       </div>
-                      {/* Last Contact */}
-                      <div className="w-28 flex-shrink-0">
-                        <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Last Contact</p>
-                        <p className="text-xs text-slate-600">{c.last_contact_date ? formatDate(c.last_contact_date) : "—"}</p>
-                      </div>
-                      {/* Location */}
-                      <div className="w-24 flex-shrink-0">
-                        <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Location</p>
-                        <p className="text-xs text-slate-600 truncate">
-                          {[c.location_city, c.location_country].filter(Boolean).join(", ") || "—"}
+                      {(c.location_city || c.location_country) && (
+                        <p className="text-[10px] text-slate-400 flex items-center gap-0.5 mt-0.5">
+                          <MapPin size={9} className="flex-shrink-0" />
+                          {[c.location_city, c.location_country].filter(Boolean).join(", ")}
                         </p>
-                      </div>
-                      {/* Actions — pushed to far right */}
-                      <div className="flex gap-1.5 text-slate-400 flex-shrink-0 ml-auto" onClick={e => e.stopPropagation()}>
-                        {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-600"><Mail size={13} /></a>}
-                        {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600"><ExternalLink size={13} /></a>}
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5 text-slate-400 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                      {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-600"><Mail size={12} /></a>}
+                      {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600"><ExternalLink size={12} /></a>}
+                    </div>
+                  </button>
+                  </div>
+                ))}
+              </div>
 
               {/* Content: Timeline (event form + scroll area) */}
               <div>
@@ -2044,15 +2005,229 @@ export function PipelineClient({ initialCompanies }: Props) {
                 );
               })()}
               </div>{/* end timeline content */}
-            </div>{/* end contacts/timeline grid */}
 
-            {/* ── Documents — Decks, Transcripts & Data Room ── */}
+            </div>{/* end 2-col contacts/timeline grid */}
+
+            {/* ── Row B: Strategic Partnerships (50%) | Portfolio Intelligence (50%) ── */}
+            <div className="grid grid-cols-2 gap-x-6">
+
+              {/* Header: Strategic Partnerships */}
+              <div className="flex items-center justify-between pb-3">
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Strategic Partnerships</h2>
+                <button onClick={() => setShowAddPartnership(v => !v)}
+                  className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  <Plus size={11} /> Add
+                </button>
+              </div>
+
+              {/* Header: Portfolio Intelligence */}
+              <div className="flex items-center justify-between pb-3">
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Portfolio Intelligence</h2>
+                <button
+                  onClick={fetchIntelligence}
+                  disabled={loadingIntelligence}
+                  className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
+                >
+                  {loadingIntelligence ? <><Loader2 size={10} className="animate-spin" /> Loading…</> : <><Sparkles size={10} /> Refresh</>}
+                </button>
+              </div>
+
+              {/* Content: Strategic Partnerships */}
+              <div className="h-[200px] overflow-y-auto pr-1">
+                {showAddPartnership && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input value={partnerSearch}
+                          onChange={e => { setPartnerSearch(e.target.value); setNewPartnerName(e.target.value); setSelectedPartnerId(null); setShowPartnerDropdown(true); }}
+                          onFocus={() => setShowPartnerDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowPartnerDropdown(false), 150)}
+                          placeholder="Partner / Company / Fund name"
+                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                        {showPartnerDropdown && (
+                          <div className="absolute z-20 top-full left-0 right-0 bg-white border border-slate-200 rounded shadow-lg max-h-40 overflow-y-auto mt-0.5">
+                            {partnerCompanies.filter(c => !partnerSearch || c.name.toLowerCase().includes(partnerSearch.toLowerCase())).slice(0, 10).map(c => (
+                              <button key={c.id} onMouseDown={() => { setNewPartnerName(c.name); setPartnerSearch(c.name); setSelectedPartnerId(c.id); setShowPartnerDropdown(false); }}
+                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 flex items-center justify-between gap-2">
+                                <span className="font-medium text-slate-700">{c.name}</span>
+                                <span className="text-[10px] text-slate-400">{(c.types ?? []).includes("strategic partner") ? "Strategic" : (c.types ?? []).includes("limited partner") ? "LP" : "Investor"}</span>
+                              </button>
+                            ))}
+                            {partnerSearch && partnerCompanies.filter(c => c.name.toLowerCase().includes(partnerSearch.toLowerCase())).length === 0 && (
+                              <p className="px-3 py-2 text-xs text-slate-400 italic">No match — will be added as-is</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <select value={newPartnerType} onChange={e => setNewPartnerType(e.target.value)}
+                        className="w-28 flex-shrink-0 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
+                        {["Co-invest", "Introduction", "Pilot", "Diligence", "Customer", "Value-add"].map(t => <option key={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <input value={newPartnerNote} onChange={e => setNewPartnerNote(e.target.value)}
+                      placeholder="Note (optional)"
+                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                    <input type="date" value={newPartnerDate} onChange={e => setNewPartnerDate(e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                    <div className="flex gap-2">
+                      <button onClick={addManualPartnership} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">Add</button>
+                      <button onClick={() => { setShowAddPartnership(false); setPartnerSearch(""); setNewPartnerName(""); setSelectedPartnerId(null); setNewPartnerType("Introduction"); }}
+                        className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
+                    </div>
+                  </div>
+                )}
+                {portcoPartnerships.length === 0 && manualPartnerships.length === 0 && !showAddPartnership && (
+                  <p className="text-xs text-slate-300 italic pt-2">No strategic partnerships yet</p>
+                )}
+                <div className="divide-y divide-slate-100">
+                  {portcoPartnerships.map(p => (
+                    <div key={p.strategicId}>
+                      {confirmDeletePartner?.type === "portco" && confirmDeletePartner.id === p.strategicId ? (
+                        <div className="flex items-center gap-2 py-1.5">
+                          <span className="text-xs text-slate-500 flex-1 italic">Delete &ldquo;{p.strategicName}&rdquo;?</span>
+                          <button onMouseDown={() => { deletePortcoPartnership(p.strategicId); setConfirmDeletePartner(null); }} className="text-xs text-red-600 hover:underline font-medium flex-shrink-0">Yes</button>
+                          <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-xs text-slate-400 hover:underline flex-shrink-0">No</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setExpandedPartner(expandedPartner === p.strategicId ? null : p.strategicId)}
+                          className="w-full flex items-center gap-2 py-1.5 px-1 text-left hover:bg-slate-50 rounded transition-colors">
+                          <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.strategicName}</span>
+                          {p.due && <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(p.due)}</span>}
+                          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>
+                          <ChevronRight size={11} className={cn("text-slate-300 flex-shrink-0 transition-transform", expandedPartner === p.strategicId && "rotate-90")} />
+                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "portco", id: p.strategicId }); }} className="text-slate-300 hover:text-red-400 flex-shrink-0 cursor-pointer"><X size={11} /></span>
+                        </button>
+                      )}
+                      {expandedPartner === p.strategicId && (
+                        <div className="px-2 pb-2 text-xs text-slate-500">
+                          <p><span className="font-medium text-slate-600">Status:</span> {p.status}</p>
+                          {p.due && <p><span className="font-medium text-slate-600">Due:</span> {formatDate(p.due)}</p>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {manualPartnerships.map(p => (
+                    <div key={p.id}>
+                      {confirmDeletePartner?.type === "manual" && confirmDeletePartner.id === p.id ? (
+                        <div className="flex items-center gap-2 py-1.5">
+                          <span className="text-xs text-slate-500 flex-1 italic">Delete &ldquo;{p.name}&rdquo;?</span>
+                          <button onMouseDown={() => { deleteManualPartnership(p.id); setConfirmDeletePartner(null); }} className="text-xs text-red-600 hover:underline font-medium flex-shrink-0">Yes</button>
+                          <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-xs text-slate-400 hover:underline flex-shrink-0">No</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setExpandedPartner(expandedPartner === p.id ? null : p.id)}
+                          className="w-full flex items-center gap-2 py-1.5 px-1 text-left hover:bg-slate-50 rounded transition-colors">
+                          <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.name}</span>
+                          {p.date && <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(p.date)}</span>}
+                          {p.status && <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>}
+                          <ChevronRight size={11} className={cn("text-slate-300 flex-shrink-0 transition-transform", expandedPartner === p.id && "rotate-90")} />
+                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "manual", id: p.id }); }} className="text-slate-300 hover:text-red-400 flex-shrink-0 cursor-pointer"><X size={11} /></span>
+                        </button>
+                      )}
+                      {expandedPartner === p.id && (
+                        <div className="px-2 pb-2 text-xs text-slate-500 space-y-0.5">
+                          {p.note && <p>{p.note}</p>}
+                          {p.date && <p><span className="font-medium text-slate-600">Date:</span> {formatDate(p.date)}</p>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>{/* end strategic partnerships content */}
+
+              {/* Content: Portfolio Intelligence */}
+              <div className="h-[200px] overflow-y-auto pr-1">
+                {loadingIntelligence ? (
+                  <div className="space-y-2">
+                    {[1,2,3].map(i => <div key={i} className="h-10 bg-slate-50 rounded-lg animate-pulse" />)}
+                  </div>
+                ) : intelligenceError ? (
+                  <p className="text-xs text-red-400 italic pt-2">{intelligenceError}</p>
+                ) : intelligence.length === 0 ? (
+                  <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl">
+                    <Sparkles size={20} className="mx-auto mb-2 text-slate-300" />
+                    <p className="text-xs text-slate-400 mb-1">No intelligence loaded</p>
+                    <p className="text-[11px] text-slate-300">Click Refresh to fetch latest signals</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {intelligence.map((item, i) => (
+                      <div key={i} className="border border-slate-200 rounded-lg p-2.5 bg-white hover:bg-slate-50 transition-colors">
+                        <p className="text-xs font-medium text-slate-800 leading-snug mb-1">{item.headline}</p>
+                        {item.summary && <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">{item.summary}</p>}
+                        <div className="flex items-center justify-between mt-1.5 gap-2">
+                          <span className="text-[10px] text-slate-400">{item.source} · {item.date}</span>
+                          {item.url && (
+                            <a href={item.url} target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] text-blue-500 hover:underline flex items-center gap-0.5 flex-shrink-0">
+                              <ExternalLink size={9} /> View
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>{/* end portfolio intelligence content */}
+
+            </div>{/* end 2-col strategic/intelligence grid */}
+
+            {/* ── Documents — Pitch Decks & Transcripts (50/50) ── */}
             <section>
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Documents</h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Documents</h2>
+                {/* Compact Data Room row */}
+                <div className="flex items-center gap-3">
+                  {selected.drive_folder_url ? (
+                    <a href={selected.drive_folder_url} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline flex items-center gap-1 flex-shrink-0">
+                      <Link2 size={11} className="flex-shrink-0" /> Data Room
+                    </a>
+                  ) : (
+                    <button
+                      onClick={() => setEditField("drive_folder_url")}
+                      className="text-xs text-slate-400 hover:text-blue-500 flex items-center gap-1 flex-shrink-0"
+                      title="Link a Google Drive folder"
+                    >
+                      <Link2 size={11} /> Link Data Room
+                    </button>
+                  )}
+                  {editField === "drive_folder_url" && (
+                    <div className="flex gap-1 items-center">
+                      <input
+                        autoFocus
+                        className="text-xs border border-blue-300 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-blue-400 w-52"
+                        defaultValue={selected.drive_folder_url ?? ""}
+                        placeholder="Paste Drive URL…"
+                        onKeyDown={async e => {
+                          if (e.key === "Enter") {
+                            const val = e.currentTarget.value.trim() || null;
+                            if (val) {
+                              setDriveLinking(true);
+                              try {
+                                const res = await fetch(`/api/companies/${selected.id}/drive`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ folderUrl: val }),
+                                });
+                                if (res.ok) setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, drive_folder_url: val } : c));
+                              } finally { setDriveLinking(false); }
+                            }
+                            setEditField(null);
+                          }
+                          if (e.key === "Escape") setEditField(null);
+                        }}
+                        onBlur={() => setEditField(null)}
+                      />
+                      {driveLinking && <Loader2 size={11} className="animate-spin text-slate-400" />}
+                    </div>
+                  )}
+                </div>
+              </div>
 
               <div className="flex gap-4 items-start">
-              {/* ── Pitch Decks (40%) ── */}
-              <div style={{flex: '0 0 40%', minWidth: 0}}>
+              {/* ── Pitch Decks (50%) ── */}
+              <div style={{flex: '0 0 50%', minWidth: 0}}>
                 <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                   <FileText size={12} /> Pitch Decks
                   {documents.filter(d => d.type === "deck" && !d.google_drive_url).length > 0 && (
@@ -2117,8 +2292,8 @@ export function PipelineClient({ initialCompanies }: Props) {
                 })()}
               </div>
 
-              {/* ── Transcripts (40%) ── */}
-              <div style={{flex: '0 0 40%', minWidth: 0}}>
+              {/* ── Transcripts (50%) ── */}
+              <div style={{flex: '0 0 50%', minWidth: 0}}>
                 <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                   <Paperclip size={12} /> Meeting Transcripts
                   {documents.filter(d => d.type === "transcript" && !d.google_drive_url).length > 0 && (
@@ -2181,86 +2356,69 @@ export function PipelineClient({ initialCompanies }: Props) {
                 })()}
               </div>
 
-              {/* ── Data Room (20%) ── */}
-              <div style={{flex: '0 0 20%', minWidth: 0}}>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
-                    <Link2 size={12} /> Data Room
-                  </p>
-                  {selected.drive_folder_url && (
-                    <button
-                      onClick={() => { setDriveChanging(true); setDriveInput(""); }}
-                      className="text-[10px] text-slate-400 hover:text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-50"
-                    >
-                      Change
-                    </button>
-                  )}
-                </div>
+              </div>{/* end documents flex */}
+            </section>
 
-              <div className="h-24 overflow-y-auto">
-              {!selected.drive_folder_url || driveChanging ? (
-                /* ── Link state ── */
-                <div className="border-2 border-dashed border-slate-200 rounded-xl p-3 space-y-2">
-                  <input
-                    type="url"
-                    value={driveInput}
-                    onChange={e => setDriveInput(e.target.value)}
-                    placeholder="Paste Drive URL…"
-                    className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-300 bg-white"
-                  />
-                  <button
-                    disabled={!driveInput || driveLinking}
-                    onClick={async () => {
-                      if (!driveInput) return;
-                      setDriveLinking(true);
-                      try {
-                        const res = await fetch(`/api/companies/${selected.id}/drive`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ folderUrl: driveInput }),
-                        });
-                        if (res.ok) {
-                          setCompanies(prev => prev.map(c =>
-                            c.id === selected.id ? { ...c, drive_folder_url: driveInput } : c
-                          ));
-                          setDriveInput("");
-                          setDriveChanging(false);
-                        }
-                      } finally {
-                        setDriveLinking(false);
-                      }
-                    }}
-                    className="w-full text-xs px-2.5 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
-                  >
-                    {driveLinking ? <Loader2 size={11} className="animate-spin" /> : <Link2 size={11} />}
-                    Link Folder
-                  </button>
-                </div>
-              ) : (
-                /* ── Linked state ── */
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-1">
-                    <a
-                      href={selected.drive_folder_url ?? "#"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs text-blue-600 hover:underline truncate"
-                    >
-                      <ExternalLink size={10} className="flex-shrink-0" />
-                      <span className="truncate">Open Drive Folder</span>
-                    </a>
-                    {/* Persistent sync status badge */}
+            {/* ── Drive Sync Tools (shown when Drive folder is linked) ── */}
+            {selected.drive_folder_url && (
+              <section>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Link2 size={12} /> Drive Sync
+                  </h2>
+                  <div className="flex items-center gap-2">
                     {(() => {
                       const n = documents.filter(d => !!d.google_drive_url).length;
                       return n > 0 ? (
-                        <span className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-1.5 py-0.5">
+                        <span className="flex items-center gap-0.5 text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5">
                           <Check size={8} /> {n} synced
                         </span>
                       ) : null;
                     })()}
+                    <button
+                      onClick={() => { setDriveChanging(true); setDriveInput(""); }}
+                      className="text-[10px] text-slate-400 hover:text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-50"
+                    >
+                      Change URL
+                    </button>
                   </div>
-
-                  {/* Sync to AI button */}
+                </div>
+                {driveChanging && (
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="url"
+                      value={driveInput}
+                      onChange={e => setDriveInput(e.target.value)}
+                      placeholder="Paste new Drive URL…"
+                      className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-300 bg-white"
+                    />
+                    <button
+                      disabled={!driveInput || driveLinking}
+                      onClick={async () => {
+                        if (!driveInput) return;
+                        setDriveLinking(true);
+                        try {
+                          const res = await fetch(`/api/companies/${selected.id}/drive`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ folderUrl: driveInput }),
+                          });
+                          if (res.ok) {
+                            setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, drive_folder_url: driveInput } : c));
+                            setDriveInput("");
+                            setDriveChanging(false);
+                          }
+                        } finally { setDriveLinking(false); }
+                      }}
+                      className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1.5"
+                    >
+                      {driveLinking ? <Loader2 size={11} className="animate-spin" /> : <Link2 size={11} />}
+                      Update
+                    </button>
+                    <button onClick={() => setDriveChanging(false)} className="text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">Cancel</button>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
                   <button
                     disabled={driveSyncing}
                     onClick={async () => {
@@ -2274,7 +2432,6 @@ export function PipelineClient({ initialCompanies }: Props) {
                         });
                         const json = await res.json() as DriveSyncResult;
                         setDriveSyncResult(json);
-                        // Refresh documents so the sync badge updates immediately
                         if (!json.error) {
                           const { data: freshDocs } = await supabase.from("documents")
                             .select("id,name,type,storage_path,google_drive_url,created_at")
@@ -2284,103 +2441,87 @@ export function PipelineClient({ initialCompanies }: Props) {
                         }
                       } finally { setDriveSyncing(false); }
                     }}
-                    className="w-full text-xs px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                    className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5"
                   >
                     {driveSyncing ? <Loader2 size={11} className="animate-spin" /> : <Bot size={11} />}
-                    {driveSyncing ? "Syncing files…" : "Sync to AI"}
+                    {driveSyncing ? "Syncing…" : "Sync to AI"}
                   </button>
-
-                  {/* Sync result */}
-                  {driveSyncResult && (
-                    <div className={`rounded-lg px-2.5 py-2 text-[10px] leading-relaxed ${driveSyncResult.error ? "bg-red-50 border border-red-200 text-red-700" : "bg-emerald-50 border border-emerald-200 text-emerald-800"}`}>
-                      {driveSyncResult.setup_required ? (
-                        <span>⚠️ Google Drive not configured. Add <code className="bg-red-100 px-1 rounded">GOOGLE_SERVICE_ACCOUNT_EMAIL</code> and <code className="bg-red-100 px-1 rounded">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</code> to environment variables.</span>
-                      ) : driveSyncResult.error?.includes("shared") || driveSyncResult.error?.includes("Cannot access") ? (
-                        <span>⚠️ Share this Drive folder with: <br /><code className="font-mono bg-emerald-100 px-1 rounded break-all">{driveSyncResult.share_with}</code></span>
-                      ) : driveSyncResult.error ? (
-                        <span>Error: {driveSyncResult.error}</span>
-                      ) : (
-                        <span>
-                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                          {(() => { const n = driveSyncResult.saved ?? driveSyncResult.synced ?? 0; return <>✓ {n} file{n!==1?"s":""} indexed{driveSyncResult.skipped>0?`, ${driveSyncResult.skipped} already saved`:""}{n>0&&<><br/><span className="text-amber-700 font-medium">Now click &quot;Extract All Documents&quot; to make files readable by AI.</span></>}</>; })()}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Re-extract uploaded docs button */}
                   <button
-                    disabled={driveReextracting}
+                    disabled={driveAnalyzing || driveReextracting}
                     onClick={async () => {
+                      setDriveAnalyzing(true);
                       setDriveReextracting(true);
+                      setDriveAnalysis(null);
+                      setDriveAnalysisOpen(false);
                       setDriveReextractResult(null);
+                      setExtractStep("extracting");
                       try {
-                        const res = await fetch("/api/drive/reextract", {
+                        // Step 1: Extract raw text from all documents
+                        const extractRes = await fetch("/api/drive/reextract", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ company_id: selected.id }),
                         });
-                        const json = await res.json() as { success: number; failed: number; processed: number; message?: string };
-                        setDriveReextractResult(json);
-                      } finally { setDriveReextracting(false); }
-                    }}
-                    className="w-full text-xs px-2.5 py-1.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
-                  >
-                    {driveReextracting ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
-                    {driveReextracting ? "Extracting…" : "Extract All Documents"}
-                  </button>
-                  {driveReextractResult && !driveReextracting && (
-                    <div className={`rounded-lg px-2.5 py-2 text-[10px] ${driveReextractResult.processed === 0 ? "bg-slate-50 border border-slate-200 text-slate-500" : "bg-slate-50 border border-slate-200 text-slate-700"}`}>
-                      {driveReextractResult.message
-                        ? <span>✓ {driveReextractResult.message}</span>
-                        : <span>✓ {driveReextractResult.success} doc{driveReextractResult.success !== 1 ? "s" : ""} extracted{driveReextractResult.failed > 0 ? ` · ${driveReextractResult.failed} failed` : ""}{driveReextractResult.has_more ? " · more remaining, click again" : ""}</span>
-                      }
-                    </div>
-                  )}
+                        const extractJson = await extractRes.json() as { success: number; failed: number; processed: number; has_more?: boolean; message?: string };
+                        setDriveReextractResult(extractJson);
+                        setDriveReextracting(false);
 
-                  {/* AI Analyze button */}
-                  <button
-                    disabled={driveAnalyzing}
-                    onClick={async () => {
-                      setDriveAnalyzing(true);
-                      setDriveAnalysis(null);
-                      setDriveAnalysisOpen(false);
-                      try {
-                        const res = await fetch(`/api/companies/${selected.id}/drive-analyze`, {
+                        // Step 2: AI analysis using extracted text
+                        setExtractStep("analyzing");
+                        const analyzeRes = await fetch(`/api/companies/${selected.id}/drive-analyze`, {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ folderUrl: selected.drive_folder_url }),
                         });
-                        const json = await res.json() as { analysis?: string; error?: string; docs_analyzed?: number };
-                        if (json.error) { setDriveAnalysis(`Error: ${json.error}`); setDriveAnalysisOpen(true); }
-                        else if (json.analysis) { setDriveAnalysis(json.analysis); setDriveAnalysisOpen(true); }
-                      } finally { setDriveAnalyzing(false); }
+                        const analyzeJson = await analyzeRes.json() as { analysis?: string; error?: string; docs_analyzed?: number };
+                        if (analyzeJson.error) { setDriveAnalysis(`Error: ${analyzeJson.error}`); setDriveAnalysisOpen(true); }
+                        else if (analyzeJson.analysis) { setDriveAnalysis(analyzeJson.analysis); setDriveAnalysisOpen(true); }
+                      } finally { setDriveAnalyzing(false); setDriveReextracting(false); setExtractStep(null); }
                     }}
-                    className="w-full text-xs px-2.5 py-1.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                    className="text-xs px-3 py-1.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"
                   >
                     {driveAnalyzing ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                    {driveAnalyzing ? "Extracting…" : "Extract with AI"}
+                    {driveAnalyzing
+                      ? (extractStep === "extracting" ? "Extracting docs…" : "Analyzing with AI…")
+                      : "Extract & Analyze with AI"}
                   </button>
-                  {driveAnalysis && (
-                    <div className="border border-violet-200 bg-violet-50 rounded-xl overflow-hidden">
-                      <button onClick={() => setDriveAnalysisOpen(o => !o)}
-                        className="w-full flex items-center justify-between px-3 py-2 text-left">
-                        <span className="text-[10px] font-semibold text-violet-700 flex items-center gap-1">
-                          <Sparkles size={10} /> AI Analysis
-                        </span>
-                        <ChevronRight size={11} className={cn("text-violet-400 transition-transform", driveAnalysisOpen && "rotate-90")} />
-                      </button>
-                      {driveAnalysisOpen && (
-                        <div className="px-3 pb-3 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{driveAnalysis}</div>
-                      )}
-                    </div>
-                  )}
                 </div>
-              )}
-              </div>
-              </div>{/* end data room column */}
-              </div>{/* end 3-col flex */}
-            </section>
+                {driveSyncResult && (
+                  <div className={`mt-2 rounded-lg px-2.5 py-2 text-[10px] leading-relaxed ${driveSyncResult.error ? "bg-red-50 border border-red-200 text-red-700" : "bg-emerald-50 border border-emerald-200 text-emerald-800"}`}>
+                    {driveSyncResult.setup_required ? (
+                      <span>⚠️ Google Drive not configured. Add <code className="bg-red-100 px-1 rounded">GOOGLE_SERVICE_ACCOUNT_EMAIL</code> and <code className="bg-red-100 px-1 rounded">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</code> to environment variables.</span>
+                    ) : driveSyncResult.error?.includes("shared") || driveSyncResult.error?.includes("Cannot access") ? (
+                      <span>⚠️ Share this Drive folder with: <br /><code className="font-mono bg-emerald-100 px-1 rounded break-all">{driveSyncResult.share_with}</code></span>
+                    ) : driveSyncResult.error ? (
+                      <span>Error: {driveSyncResult.error}</span>
+                    ) : (
+                      <span>{(() => { const n = driveSyncResult.saved ?? driveSyncResult.synced ?? 0; return <>✓ {n} file{n!==1?"s":""} indexed{driveSyncResult.skipped>0?`, ${driveSyncResult.skipped} already saved`:""}{n>0&&<><br/><span className="text-amber-700 font-medium">Now click &quot;Extract &amp; Analyze with AI&quot; to read and analyze your documents.</span></>}</>; })()}</span>
+                    )}
+                  </div>
+                )}
+                {driveReextractResult && !driveReextracting && (
+                  <div className="mt-2 rounded-lg px-2.5 py-2 text-[10px] bg-slate-50 border border-slate-200 text-slate-700">
+                    {driveReextractResult.message
+                      ? <span>✓ {driveReextractResult.message}</span>
+                      : <span>✓ {driveReextractResult.success} doc{driveReextractResult.success !== 1 ? "s" : ""} extracted{driveReextractResult.failed > 0 ? ` · ${driveReextractResult.failed} failed` : ""}{driveReextractResult.has_more ? " · more remaining, click again" : ""}</span>
+                    }
+                  </div>
+                )}
+                {driveAnalysis && (
+                  <div className="mt-2 border border-violet-200 bg-violet-50 rounded-xl overflow-hidden">
+                    <button onClick={() => setDriveAnalysisOpen(o => !o)}
+                      className="w-full flex items-center justify-between px-3 py-2 text-left">
+                      <span className="text-[10px] font-semibold text-violet-700 flex items-center gap-1">
+                        <Sparkles size={10} /> AI Analysis
+                      </span>
+                      <ChevronRight size={11} className={cn("text-violet-400 transition-transform", driveAnalysisOpen && "rotate-90")} />
+                    </button>
+                    {driveAnalysisOpen && (
+                      <div className="px-3 pb-3 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{driveAnalysis}</div>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
 
             {/* ── IC Memo ── */}
             <section>

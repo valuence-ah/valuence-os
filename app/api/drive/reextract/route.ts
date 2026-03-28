@@ -17,15 +17,36 @@ export const maxDuration = 300;
 async function extractFromBuffer(buffer: Buffer, mimeType: string, fileName: string): Promise<string> {
   const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
 
-  // PDF — use pdf-parse (pure JS with optional native canvas fallback)
+  // PDF — use pdf-parse (reliable in Node.js serverless)
   if (mimeType === "application/pdf" || ext === "pdf") {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse/lib/pdf-parse");
+      const pdfParse = require("pdf-parse");
       const result = await pdfParse(buffer);
       return (result.text ?? "").slice(0, 100000);
     } catch {
-      return "";
+      // Fallback: try pdfjs-dist if pdf-parse fails
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+        const pdf = await loadingTask.promise;
+        const parts: string[] = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = (content.items as { str?: string }[])
+            .map((item: { str?: string }) => item.str ?? "")
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (pageText) parts.push(pageText);
+        }
+        return parts.join("\n\n").slice(0, 100000);
+      } catch {
+        return "";
+      }
     }
   }
 
@@ -98,7 +119,7 @@ export async function POST(req: Request) {
     // Find docs without extracted text — both Storage and Drive-synced
     let query = supabase
       .from("documents")
-      .select("id, name, storage_path, mime_type, google_drive_url")
+      .select("id, name, type, storage_path, mime_type, google_drive_url")
       .is("extracted_text", null);
 
     if (companyId) query = query.eq("company_id", companyId);
@@ -120,11 +141,12 @@ export async function POST(req: Request) {
         let effectiveMime = doc.mime_type ?? "application/pdf";
 
         if (doc.storage_path) {
-          // Manually uploaded — download from Supabase Storage
+          // Manually uploaded — download from the correct bucket based on doc type
+          const bucket = doc.type === "transcript" ? "transcripts" : "decks";
           const { data: fileData, error: dlErr } = await supabase.storage
-            .from("decks")
+            .from(bucket)
             .download(doc.storage_path);
-          if (dlErr || !fileData) throw new Error(dlErr?.message ?? "Storage download failed");
+          if (dlErr || !fileData) throw new Error(dlErr?.message ?? `Storage download failed from '${bucket}' bucket`);
           buffer = Buffer.from(await fileData.arrayBuffer());
 
         } else if (doc.google_drive_url) {
