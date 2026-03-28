@@ -621,8 +621,6 @@ export function PipelineClient({ initialCompanies }: Props) {
   useEffect(() => {
     if (selectedId) {
       setEmailEvents([]);
-      setDriveAnalysis(null);
-      setDriveAnalysisOpen(false);
       setDriveInput("");
       setDriveChanging(false);
       setEditField(null);

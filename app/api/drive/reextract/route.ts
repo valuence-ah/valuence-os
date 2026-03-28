@@ -25,28 +25,7 @@ async function extractFromBuffer(buffer: Buffer, mimeType: string, fileName: str
       const result = await pdfParse(buffer);
       return (result.text ?? "").slice(0, 100000);
     } catch {
-      // Fallback: try pdfjs-dist if pdf-parse fails
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
-        pdfjsLib.GlobalWorkerOptions.workerSrc = "";
-        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
-        const pdf = await loadingTask.promise;
-        const parts: string[] = [];
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          const pageText = (content.items as { str?: string }[])
-            .map((item: { str?: string }) => item.str ?? "")
-            .join(" ")
-            .replace(/\s+/g, " ")
-            .trim();
-          if (pageText) parts.push(pageText);
-        }
-        return parts.join("\n\n").slice(0, 100000);
-      } catch {
-        return "";
-      }
+      return "";
     }
   }
 
