@@ -1663,12 +1663,15 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
     // 2. Panel filters
     const panelFiltered = filtered.filter((row) => {
       const filters = companyFilters;
-      if (filters.type && !row.type?.toLowerCase().includes(filters.type.toLowerCase())) return false;
-      if (filters.deal_status && !row.deal_status?.toLowerCase().includes(filters.deal_status.toLowerCase())) return false;
-      if (filters.stage && !(row.stage?.toLowerCase().includes(filters.stage.toLowerCase()) || row.lp_stage?.toLowerCase().includes(filters.stage.toLowerCase()))) return false;
-      if (filters.sectors && !(row.sectors ?? []).some((s: string) => s.toLowerCase().includes(filters.sectors.toLowerCase()))) return false;
-      if (filters.location_country && !row.location_country?.toLowerCase().includes(filters.location_country.toLowerCase())) return false;
-      if (filters.source && !row.source?.toLowerCase().includes(filters.source.toLowerCase())) return false;
+      // Type: check both singular type field AND types array (null-safe)
+      if (filters.type &&
+          !(row.type?.toLowerCase() ?? "").includes(filters.type.toLowerCase()) &&
+          !(row.types ?? []).some((t: string) => (t?.toLowerCase() ?? "").includes(filters.type.toLowerCase()))) return false;
+      if (filters.deal_status && !(row.deal_status?.toLowerCase() ?? "").includes(filters.deal_status.toLowerCase())) return false;
+      if (filters.stage && !((row.stage?.toLowerCase() ?? "").includes(filters.stage.toLowerCase()) || (row.lp_stage?.toLowerCase() ?? "").includes(filters.stage.toLowerCase()))) return false;
+      if (filters.sectors && !(row.sectors ?? []).some((s: string) => (s?.toLowerCase() ?? "").includes(filters.sectors.toLowerCase()))) return false;
+      if (filters.location_country && !(row.location_country?.toLowerCase() ?? "").includes(filters.location_country.toLowerCase())) return false;
+      if (filters.source && !(row.source?.toLowerCase() ?? "").includes(filters.source.toLowerCase())) return false;
       return true;
     });
 
@@ -1684,6 +1687,27 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       return 0;
     });
   }, [companies, search, companyFilters, companySortColumns]);
+
+  // Pre-compute which values actually exist in the data for each filterable field
+  const companyFilterAvailable = useMemo(() => {
+    const types = new Set<string>();
+    const dealStatuses = new Set<string>();
+    const stages = new Set<string>();
+    const sectors = new Set<string>();
+    const countries = new Set<string>();
+    const sources = new Set<string>();
+    companies.forEach((c) => {
+      if (c.type) types.add(c.type.toLowerCase());
+      ((c.types as string[] | null) ?? []).forEach((t: string) => { if (t) types.add(t.toLowerCase()); });
+      if (c.deal_status) dealStatuses.add(c.deal_status.toLowerCase());
+      if (c.stage) stages.add(c.stage.toLowerCase());
+      if ((c as unknown as Record<string, string>).lp_stage) stages.add((c as unknown as Record<string, string>).lp_stage.toLowerCase());
+      ((c.sectors as string[] | null) ?? []).forEach((s: string) => { if (s) sectors.add(s.toLowerCase()); });
+      if (c.location_country) countries.add(c.location_country.toLowerCase());
+      if (c.source) sources.add(c.source.toLowerCase());
+    });
+    return { types, dealStatuses, stages, sectors, countries, sources };
+  }, [companies]);
 
   const filteredContacts = useMemo(() => {
     // 1. Global search filter
@@ -1985,19 +2009,46 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       outline: "none",
       boxSizing: "border-box" as const,
     };
+
+    // For company tab with dropdown options, only show options that exist in the data
+    let visibleOptions = options;
+    if (isCompanyTab && options) {
+      const available =
+        filterKey === "type"        ? companyFilterAvailable.types :
+        filterKey === "deal_status" ? companyFilterAvailable.dealStatuses :
+        filterKey === "stage"       ? companyFilterAvailable.stages :
+        filterKey === "sectors"     ? companyFilterAvailable.sectors :
+        null;
+      if (available) {
+        visibleOptions = options.filter((o) => available.has(o.toLowerCase()));
+      }
+    }
+
+    // For text fields, hide if there are no values at all in the data
+    if (isCompanyTab && !options) {
+      const available =
+        filterKey === "location_country" ? companyFilterAvailable.countries :
+        filterKey === "source"           ? companyFilterAvailable.sources :
+        null;
+      if (available && available.size === 0) return null;
+    }
+
+    // Hide dropdown entirely if no options have data
+    if (isCompanyTab && options && visibleOptions?.length === 0) return null;
+
     return (
       <div style={{ marginBottom: "10px" }}>
         <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#64748b", textTransform: "uppercase", marginBottom: "3px" }}>
           {label}
         </label>
-        {options ? (
+        {visibleOptions ? (
           <select
             value={filters[filterKey] ?? ""}
             onChange={(e) => setFilters((prev) => ({ ...prev, [filterKey]: e.target.value }))}
             style={sharedStyle}
           >
             <option value="">All</option>
-            {options.map((o) => <option key={o} value={o}>{o}</option>)}
+            {visibleOptions.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         ) : (
           <input
@@ -2140,10 +2191,10 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
 
               {isCompanies ? (
                 <>
-                  <FilterField label="Type" filterKey="types" isCompanyTab={true} options={["startup","limited partner","investor","strategic partner","ecosystem_partner","other"]} />
-                  <FilterField label="Deal Status" filterKey="deal_status" isCompanyTab={true} options={["sourced","monitoring","active_deal","portfolio","passed","exited"]} />
-                  <FilterField label="Stage / LP Stage" filterKey="stage" isCompanyTab={true} options={["pre-seed","seed","series_a","series_b","Lead","Initial Meeting","Discussion in Process","Due Diligence","Committed","Passed"]} />
-                  <FilterField label="Sector" filterKey="sectors" isCompanyTab={true} options={["cleantech","techbio","advanced materials","energy storage","carbon capture","climate tech","synthetic biology","industrial biotech","agtech","water tech","circular economy","deep tech","hardware","other"]} />
+                  <FilterField label="Type" filterKey="type" isCompanyTab={true} options={["startup","limited partner","investor","strategic partner","fund","ecosystem_partner","corporate","government","other"]} />
+                  <FilterField label="Deal Status" filterKey="deal_status" isCompanyTab={true} options={["identified_introduced","first_meeting","discussion_in_process","due_diligence","passed","portfolio","tracking_hold","exited"]} />
+                  <FilterField label="Stage / LP Stage" filterKey="stage" isCompanyTab={true} options={["Pre-Seed","Pre-A","Seed","Seed Extension","Series A","Series B","Series C","Growth","Lead","Initial Meeting","Discussion in Process","Due Diligence","Committed","Passed"]} />
+                  <FilterField label="Sector" filterKey="sectors" isCompanyTab={true} options={["Biotech","Cleantech","Other"]} />
                   <FilterField label="Location Country" filterKey="location_country" isCompanyTab={true} />
                   <FilterField label="Source" filterKey="source" isCompanyTab={true} />
                 </>
