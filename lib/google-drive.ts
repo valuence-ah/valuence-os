@@ -136,8 +136,10 @@ export async function listFolderFiles(
 // Binary files (PDF, DOCX, TXT, etc.) are downloaded directly.
 
 const GOOGLE_EXPORT_MIME: Record<string, string> = {
-  "application/vnd.google-apps.document":     "application/pdf",
-  "application/vnd.google-apps.spreadsheet":  "application/pdf",
+  // Export as plain text — no PDF parsing needed, works reliably in serverless
+  "application/vnd.google-apps.document":     "text/plain",
+  "application/vnd.google-apps.spreadsheet":  "text/csv",
+  // Slides/Drawings still exported as PDF (no plain-text export available)
   "application/vnd.google-apps.presentation": "application/pdf",
   "application/vnd.google-apps.drawing":      "application/pdf",
 };

@@ -472,15 +472,11 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [driveInput, setDriveInput]           = useState("");
   const [driveChanging, setDriveChanging]     = useState(false);
   const [driveLinking, setDriveLinking]       = useState(false);
-  const [driveAnalyzing, setDriveAnalyzing]   = useState(false);
-  const [driveAnalysis, setDriveAnalysis]     = useState<string | null>(null);
   const [driveSyncing, setDriveSyncing]       = useState(false);
   type DriveSyncResult = { saved?: number; synced?: number; skipped: number; total: number; not_ingestible?: number; files_found?: number; files: { name: string; status: string; chars?: number }[]; error?: string; share_with?: string; setup_required?: boolean };
   const [driveSyncResult, setDriveSyncResult] = useState<DriveSyncResult | null>(null);
   const [driveReextracting, setDriveReextracting] = useState(false);
   const [driveReextractResult, setDriveReextractResult] = useState<{ success: number; failed: number; processed: number; has_more?: boolean; message?: string } | null>(null);
-  const [extractStep, setExtractStep] = useState<"extracting" | "analyzing" | null>(null);
-  const [driveAnalysisOpen, setDriveAnalysisOpen] = useState(false);
 
   // Inline tag editing (quick-edit outside full edit mode)
   const [editTagsValue, setEditTagsValue] = useState<string[]>([]);
@@ -2447,42 +2443,24 @@ export function PipelineClient({ initialCompanies }: Props) {
                     {driveSyncing ? "Syncing…" : "Sync to AI"}
                   </button>
                   <button
-                    disabled={driveAnalyzing || driveReextracting}
+                    disabled={driveReextracting}
                     onClick={async () => {
-                      setDriveAnalyzing(true);
                       setDriveReextracting(true);
-                      setDriveAnalysis(null);
-                      setDriveAnalysisOpen(false);
                       setDriveReextractResult(null);
-                      setExtractStep("extracting");
                       try {
-                        // Step 1: Extract raw text from all documents
-                        const extractRes = await fetch("/api/drive/reextract", {
+                        const res = await fetch("/api/drive/reextract", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ company_id: selected.id }),
                         });
-                        const extractJson = await extractRes.json() as { success: number; failed: number; processed: number; has_more?: boolean; message?: string };
-                        setDriveReextractResult(extractJson);
-                        setDriveReextracting(false);
-
-                        // Step 2: AI analysis using extracted text
-                        setExtractStep("analyzing");
-                        const analyzeRes = await fetch(`/api/companies/${selected.id}/drive-analyze`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                        });
-                        const analyzeJson = await analyzeRes.json() as { analysis?: string; error?: string; docs_analyzed?: number };
-                        if (analyzeJson.error) { setDriveAnalysis(`Error: ${analyzeJson.error}`); setDriveAnalysisOpen(true); }
-                        else if (analyzeJson.analysis) { setDriveAnalysis(analyzeJson.analysis); setDriveAnalysisOpen(true); }
-                      } finally { setDriveAnalyzing(false); setDriveReextracting(false); setExtractStep(null); }
+                        const json = await res.json() as { success: number; failed: number; processed: number; has_more?: boolean; message?: string };
+                        setDriveReextractResult(json);
+                      } finally { setDriveReextracting(false); }
                     }}
-                    className="text-xs px-3 py-1.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"
+                    className="text-xs px-3 py-1.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-40 flex items-center gap-1.5"
                   >
-                    {driveAnalyzing ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                    {driveAnalyzing
-                      ? (extractStep === "extracting" ? "Extracting docs…" : "Analyzing with AI…")
-                      : "Extract & Analyze with AI"}
+                    {driveReextracting ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
+                    {driveReextracting ? "Extracting…" : "Extract Documents"}
                   </button>
                 </div>
                 {driveSyncResult && (
@@ -2494,7 +2472,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     ) : driveSyncResult.error ? (
                       <span>Error: {driveSyncResult.error}</span>
                     ) : (
-                      <span>{(() => { const n = driveSyncResult.saved ?? driveSyncResult.synced ?? 0; return <>✓ {n} file{n!==1?"s":""} indexed{driveSyncResult.skipped>0?`, ${driveSyncResult.skipped} already saved`:""}{n>0&&<><br/><span className="text-amber-700 font-medium">Now click &quot;Extract &amp; Analyze with AI&quot; to read and analyze your documents.</span></>}</>; })()}</span>
+                      <span>{(() => { const n = driveSyncResult.saved ?? driveSyncResult.synced ?? 0; return <>✓ {n} file{n!==1?"s":""} indexed{driveSyncResult.skipped>0?`, ${driveSyncResult.skipped} already saved`:""}{n>0&&<><br/><span className="text-amber-700 font-medium">Now click &quot;Extract Documents&quot; to make files readable by AI.</span></>}</>; })()}</span>
                     )}
                   </div>
                 )}
@@ -2504,20 +2482,6 @@ export function PipelineClient({ initialCompanies }: Props) {
                       ? <span>✓ {driveReextractResult.message}</span>
                       : <span>✓ {driveReextractResult.success} doc{driveReextractResult.success !== 1 ? "s" : ""} extracted{driveReextractResult.failed > 0 ? ` · ${driveReextractResult.failed} failed` : ""}{driveReextractResult.has_more ? " · more remaining, click again" : ""}</span>
                     }
-                  </div>
-                )}
-                {driveAnalysis && (
-                  <div className="mt-2 border border-violet-200 bg-violet-50 rounded-xl overflow-hidden">
-                    <button onClick={() => setDriveAnalysisOpen(o => !o)}
-                      className="w-full flex items-center justify-between px-3 py-2 text-left">
-                      <span className="text-[10px] font-semibold text-violet-700 flex items-center gap-1">
-                        <Sparkles size={10} /> AI Analysis
-                      </span>
-                      <ChevronRight size={11} className={cn("text-violet-400 transition-transform", driveAnalysisOpen && "rotate-90")} />
-                    </button>
-                    {driveAnalysisOpen && (
-                      <div className="px-3 pb-3 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{driveAnalysis}</div>
-                    )}
                   </div>
                 )}
               </section>
