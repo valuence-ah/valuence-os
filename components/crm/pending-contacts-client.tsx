@@ -1,19 +1,21 @@
 "use client";
-// ─── New Contacts Client ───────────────────────────────────────────────────────
-// Displays contacts missing Contact Type OR Location (Country).
-// Smart company dropdown: searchable, domain-based top matches, inline expand.
+// ─── New Contacts — compact single-row review queue ───────────────────────────
+// One row per contact. Domain-matched company suggestions + inline create.
+// Each row is its own memo'd component to prevent cross-row re-renders.
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Contact, ContactType, CompanyType, Company } from "@/lib/types";
-import { getInitials, formatDate, formatCurrency, cn } from "@/lib/utils";
+import type { Contact, CompanyType, Company } from "@/lib/types";
+import { getInitials, formatDate, cn } from "@/lib/utils";
 import {
-  Check, X, Mail, Phone, ExternalLink, Building2, UserPlus,
-  ChevronRight, MapPin, Globe, Linkedin, Users, Tag,
-  Maximize2, Loader2, Calendar, Search, ChevronDown, Sparkles,
+  Check, X, Mail, ExternalLink, UserPlus, Maximize2, Loader2,
+  Search, ChevronDown, Sparkles, Plus, MapPin, Globe, Users,
+  Tag, Phone, ChevronRight, Calendar, Linkedin,
 } from "lucide-react";
 
-type CompanyStub = { id: string; name: string; type: string };
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+type CompanyStub = { id: string; name: string; type: string; website?: string | null };
 type PendingContact = Contact & { company?: CompanyStub | null };
 
 interface Props {
@@ -21,24 +23,30 @@ interface Props {
   companies: CompanyStub[];
 }
 
-const CONTACT_TYPE_OPTIONS: { value: ContactType; label: string }[] = [
-  { value: "founder",           label: "Founder / Management" },
-  { value: "lp",                label: "Limited Partner" },
-  { value: "fund_manager",      label: "Fund Manager / VC" },
-  { value: "corporate",         label: "Corporate / Strategic" },
-  { value: "ecosystem_partner", label: "Ecosystem Partner" },
-  { value: "government",        label: "Government / Academic" },
-  { value: "advisor",           label: "Advisor / KOL" },
-  { value: "other",             label: "Other" },
-];
+// ── Constants — matching Admin → Contacts → Type exactly ──────────────────────
 
-const CONTACT_TO_COMPANY_TYPE: Partial<Record<ContactType, CompanyType>> = {
-  founder:           "startup",
-  lp:                "lp",
-  fund_manager:      "fund",
-  corporate:         "corporate",
-  ecosystem_partner: "ecosystem_partner",
-  government:        "government",
+const CONTACT_TYPE_OPTIONS = [
+  "Advisor / KOL",
+  "Ecosystem",
+  "Employee",
+  "Founder / Mgmt",
+  "Government/Academic",
+  "Investor",
+  "Lawyer",
+  "Limited Partner",
+  "Other",
+  "Strategic",
+] as const;
+
+type ContactTypeStr = (typeof CONTACT_TYPE_OPTIONS)[number];
+
+const CONTACT_TO_COMPANY_TYPE: Partial<Record<ContactTypeStr, CompanyType>> = {
+  "Founder / Mgmt":      "startup",
+  "Limited Partner":     "lp",
+  "Investor":            "fund",
+  "Strategic":           "corporate",
+  "Ecosystem":           "ecosystem_partner",
+  "Government/Academic": "government",
 };
 
 const TYPE_BADGE: Record<string, string> = {
@@ -52,249 +60,338 @@ const TYPE_BADGE: Record<string, string> = {
 };
 const TYPE_LABEL: Record<string, string> = {
   startup: "Startup", lp: "LP", fund: "Fund",
-  ecosystem_partner: "Eco Partner", corporate: "Corporate",
-  government: "Government", other: "Other",
+  ecosystem_partner: "Eco", corporate: "Corp",
+  government: "Gov", other: "Other",
 };
 
-// ── Domain-based top-match scoring ─────────────────────────────────────────────
-// Extracts the root domain from an email or website, then scores companies.
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-function extractDomain(emailOrUrl: string): string {
-  return emailOrUrl
+function extractRootDomain(s: string): string {
+  return s
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
-    .split(/[/?#@]/)[0]   // handles both email (after @) and url
+    .split(/[/?#@]/)[0]
     .toLowerCase();
 }
 
 function getEmailDomain(email: string | null): string | null {
-  if (!email || !email.includes("@")) return null;
-  return extractDomain(email.split("@")[1]);
+  if (!email?.includes("@")) return null;
+  return extractRootDomain(email.split("@")[1]);
 }
 
-// ── Smart Company Dropdown ──────────────────────────────────────────────────────
-
-interface CompanyDropdownProps {
-  contactEmail: string | null;
-  allCompanies: CompanyStub[];
-  value: string;              // selected company id
-  placeholder: string;
-  onChange: (id: string) => void;
-  onExpand: (id: string) => void;
-}
-
-function CompanyDropdown({
-  contactEmail, allCompanies, value, placeholder, onChange, onExpand,
-}: CompanyDropdownProps) {
-  const [open, setOpen]           = useState(false);
-  const [search, setSearch]       = useState("");
-  const wrapRef   = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-
-  // Close when clicking outside
-  useEffect(() => {
-    function onDown(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+/** Score companies against email domain. Cached outside component tree. */
+function scoreCompanies(
+  companies: CompanyStub[],
+  emailDomain: string | null
+): (CompanyStub & { score: number })[] {
+  if (!emailDomain) return companies.map(co => ({ ...co, score: 0 }));
+  const domainRoot = emailDomain.split(".")[0]; // e.g. "yacapital"
+  return companies.map(co => {
+    // Best: website domain matches email domain exactly
+    if (co.website != null) {
+      const siteDomain = extractRootDomain(co.website);
+      if (
+        siteDomain === emailDomain ||
+        siteDomain.endsWith("." + emailDomain) ||
+        emailDomain.endsWith("." + siteDomain)
+      ) return { ...co, score: 3 };
     }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, []);
-
-  // Focus search input when opening
-  useEffect(() => {
-    if (open) setTimeout(() => searchRef.current?.focus(), 50);
-  }, [open]);
-
-  const emailDomain = getEmailDomain(contactEmail);
-  const selected    = allCompanies.find(c => c.id === value);
-
-  // Score companies: 2 = domain match on website, 1 = name similarity, 0 = normal
-  const scored = allCompanies.map(co => {
-    let score = 0;
-    if (emailDomain) {
-      // Check if company website domain matches email domain
-      // We don't have website here (stub only has id/name/type) so score on name
-      const nameLower = co.name.toLowerCase();
-      const domainParts = emailDomain.split(".")[0]; // e.g. "yacapital" from "yacapital.com"
-      if (nameLower.includes(domainParts) || domainParts.includes(nameLower.replace(/\s/g, ""))) {
-        score = 2;
-      }
+    // Good: email domain root appears in company name (or vice-versa)
+    const nameLower = co.name.toLowerCase().replace(/\s+/g, "");
+    if (nameLower.includes(domainRoot) || domainRoot.includes(nameLower.slice(0, 5))) {
+      return { ...co, score: 2 };
     }
-    return { ...co, score };
+    return { ...co, score: 0 };
   });
-
-  const topMatches = scored.filter(c => c.score >= 2);
-
-  // Filter by search query
-  const q = search.toLowerCase();
-  const filteredAll = scored
-    .filter(c => !q || c.name.toLowerCase().includes(q))
-    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
-
-  const showTopMatches = topMatches.length > 0 && !q;
-
-  function select(id: string) {
-    onChange(id);
-    setOpen(false);
-    setSearch("");
-  }
-
-  return (
-    <div ref={wrapRef} className="relative">
-      {/* Trigger button */}
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className={cn(
-          "w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs rounded-lg border bg-white transition-colors text-left",
-          open ? "border-blue-400 ring-1 ring-blue-400" : "border-slate-300 hover:border-slate-400"
-        )}
-      >
-        <span className={cn("flex-1 truncate", selected ? "text-slate-800 font-medium" : "text-slate-400")}>
-          {selected ? selected.name : placeholder}
-        </span>
-        {selected && (
-          <span className={cn("text-[9px] px-1 py-0.5 rounded border font-medium flex-shrink-0", TYPE_BADGE[selected.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
-            {TYPE_LABEL[selected.type] ?? selected.type}
-          </span>
-        )}
-        <ChevronDown size={12} className={cn("text-slate-400 flex-shrink-0 transition-transform", open && "rotate-180")} />
-      </button>
-
-      {/* Dropdown panel */}
-      {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-72 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
-          {/* Search */}
-          <div className="p-2 border-b border-slate-100">
-            <div className="relative">
-              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                ref={searchRef}
-                type="text"
-                className="w-full pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-slate-50"
-                placeholder="Search companies…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="max-h-64 overflow-y-auto">
-            {/* Clear selection */}
-            {value && (
-              <button
-                type="button"
-                onClick={() => select("")}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-400 hover:bg-slate-50 border-b border-slate-100"
-              >
-                <X size={11} /> Clear selection
-              </button>
-            )}
-
-            {/* Top matches section */}
-            {showTopMatches && (
-              <>
-                <div className="px-3 py-1.5 flex items-center gap-1.5">
-                  <Sparkles size={10} className="text-amber-500" />
-                  <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Top matches</span>
-                </div>
-                {topMatches.map(co => (
-                  <CompanyRow
-                    key={co.id}
-                    company={co}
-                    selected={value === co.id}
-                    onSelect={() => select(co.id)}
-                    onExpand={() => { onExpand(co.id); setOpen(false); }}
-                  />
-                ))}
-                {filteredAll.filter(c => c.score < 2).length > 0 && (
-                  <div className="mx-3 my-1 border-t border-slate-100" />
-                )}
-              </>
-            )}
-
-            {/* All / filtered results */}
-            {filteredAll
-              .filter(c => showTopMatches ? c.score < 2 : true)
-              .map(co => (
-                <CompanyRow
-                  key={co.id}
-                  company={co}
-                  selected={value === co.id}
-                  onSelect={() => select(co.id)}
-                  onExpand={() => { onExpand(co.id); setOpen(false); }}
-                />
-              ))}
-
-            {filteredAll.length === 0 && (
-              <p className="px-3 py-4 text-xs text-slate-400 text-center">No companies found</p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
-// Single row in the dropdown
-function CompanyRow({
+/** Map legacy ContactType enum values → Admin display strings */
+function mapTypeToAdmin(raw: string | null): string {
+  const map: Record<string, string> = {
+    founder:           "Founder / Mgmt",
+    lp:                "Limited Partner",
+    fund_manager:      "Investor",
+    corporate:         "Strategic",
+    ecosystem_partner: "Ecosystem",
+    government:        "Government/Academic",
+    advisor:           "Advisor / KOL",
+    other:             "Other",
+  };
+  if (!raw) return "Other";
+  // If already one of the admin values, return as-is
+  if ((CONTACT_TYPE_OPTIONS as readonly string[]).includes(raw)) return raw;
+  return map[raw] ?? "Other";
+}
+
+// ── CompanyRow — memoized dropdown item ───────────────────────────────────────
+
+const CompanyRow = memo(function CompanyRow({
   company, selected, onSelect, onExpand,
 }: {
-  company: CompanyStub;
+  company: CompanyStub & { score: number };
   selected: boolean;
   onSelect: () => void;
   onExpand: () => void;
 }) {
   return (
     <div className={cn(
-      "flex items-center gap-2 px-3 py-2 hover:bg-slate-50 group/row",
+      "flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer",
       selected && "bg-blue-50"
     )}>
-      {/* Checkbox */}
       <div
         className={cn(
-          "w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center cursor-pointer transition-colors",
+          "w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center",
           selected ? "bg-blue-600 border-blue-600" : "border-slate-300 hover:border-blue-400"
         )}
         onClick={onSelect}
       >
-        {selected && <Check size={10} className="text-white" />}
+        {selected && <Check size={9} className="text-white" />}
       </div>
-
-      {/* Name + type badge */}
-      <button type="button" onClick={onSelect} className="flex-1 flex items-center gap-2 text-left min-w-0">
-        <span className={cn("text-xs truncate flex-1", selected ? "text-blue-800 font-semibold" : "text-slate-700")}>
+      <button type="button" onClick={onSelect} className="flex-1 flex items-center gap-1.5 text-left min-w-0">
+        <span className={cn("text-xs truncate flex-1",
+          selected ? "text-blue-800 font-semibold" : "text-slate-700")}>
           {company.name}
         </span>
-        <span className={cn("text-[9px] px-1 py-0.5 rounded border font-medium flex-shrink-0 opacity-60 group-hover/row:opacity-100",
+        <span className={cn("text-[9px] px-1 py-0.5 rounded border font-medium flex-shrink-0",
           TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
           {TYPE_LABEL[company.type] ?? company.type}
         </span>
       </button>
-
-      {/* Expand button */}
+      {/* Expand always visible (not hidden behind hover) */}
       <button
         type="button"
         onClick={e => { e.stopPropagation(); onExpand(); }}
-        title="Expand company info"
-        className="opacity-0 group-hover/row:opacity-100 flex items-center gap-0.5 text-[10px] text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded px-1.5 py-0.5 font-medium transition-all flex-shrink-0"
+        title="Expand company"
+        className="flex items-center gap-0.5 text-[9px] text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded px-1 py-0.5 font-medium flex-shrink-0"
       >
-        <Maximize2 size={9} /> Expand
+        <Maximize2 size={8} />
       </button>
+    </div>
+  );
+});
+
+// ── CompanyDropdown ───────────────────────────────────────────────────────────
+
+interface CompanyDropdownProps {
+  contactEmail: string | null;
+  allCompanies: CompanyStub[];
+  value: string;
+  placeholder: string;
+  onChange: (id: string) => void;
+  onExpand: (id: string) => void;
+  onCreateNew: (name: string, type: string) => Promise<string | null>;
+}
+
+function CompanyDropdown({
+  contactEmail, allCompanies, value, placeholder,
+  onChange, onExpand, onCreateNew,
+}: CompanyDropdownProps) {
+  const [open, setOpen]         = useState(false);
+  const [search, setSearch]     = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName]   = useState("");
+  const [newType, setNewType]   = useState("startup");
+  const [saving, setSaving]     = useState(false);
+  const wrapRef   = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setCreating(false);
+      }
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+
+  // Auto-focus search
+  useEffect(() => {
+    if (open && !creating) setTimeout(() => searchRef.current?.focus(), 40);
+  }, [open, creating]);
+
+  const emailDomain = useMemo(() => getEmailDomain(contactEmail), [contactEmail]);
+  const selected    = useMemo(() => allCompanies.find(c => c.id === value), [allCompanies, value]);
+
+  // Score all companies once per email-domain change
+  const scored = useMemo(
+    () => scoreCompanies(allCompanies, emailDomain),
+    [allCompanies, emailDomain]
+  );
+
+  // Filter + sort by search query (re-runs only when scored list or query changes)
+  const q = search.toLowerCase();
+  const filtered = useMemo(() =>
+    scored
+      .filter(c => !q || c.name.toLowerCase().includes(q))
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)),
+    [scored, q]
+  );
+
+  const topMatches = useMemo(() => filtered.filter(c => c.score >= 2), [filtered]);
+  const showTop    = topMatches.length > 0 && !q;
+
+  function pick(id: string) {
+    onChange(id);
+    setOpen(false);
+    setSearch("");
+  }
+
+  async function handleCreate() {
+    if (!newName.trim()) return;
+    setSaving(true);
+    const id = await onCreateNew(newName.trim(), newType);
+    if (id) {
+      pick(id);
+      setCreating(false);
+      setNewName("");
+    }
+    setSaving(false);
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={cn(
+          "w-full flex items-center justify-between gap-1 px-2 py-1 text-xs rounded border bg-white text-left transition-colors",
+          open ? "border-blue-400 ring-1 ring-blue-100" : "border-slate-300 hover:border-slate-400"
+        )}
+      >
+        <span className={cn("flex-1 truncate min-w-0",
+          selected ? "text-slate-800 font-medium" : "text-slate-400 italic text-[11px]")}>
+          {selected ? selected.name : placeholder}
+        </span>
+        {selected && (
+          <span className={cn("text-[9px] px-1 py-0.5 rounded border font-medium flex-shrink-0",
+            TYPE_BADGE[selected.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
+            {TYPE_LABEL[selected.type] ?? selected.type}
+          </span>
+        )}
+        <ChevronDown size={10} className={cn("text-slate-400 flex-shrink-0 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div className="absolute z-[200] top-full mt-0.5 left-0 w-72 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden">
+          {!creating ? (
+            <>
+              {/* Search */}
+              <div className="p-1.5 border-b border-slate-100">
+                <div className="relative">
+                  <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    ref={searchRef}
+                    type="text"
+                    className="w-full pl-6 pr-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-slate-50"
+                    placeholder="Search companies…"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="max-h-52 overflow-y-auto">
+                {/* Clear */}
+                {value && (
+                  <button type="button" onClick={() => pick("")}
+                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-50 border-b border-slate-100">
+                    <X size={10} /> Clear selection
+                  </button>
+                )}
+
+                {/* Suggested (domain-matched) */}
+                {showTop && (
+                  <>
+                    <div className="px-3 py-1 flex items-center gap-1">
+                      <Sparkles size={9} className="text-amber-500" />
+                      <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Suggested</span>
+                    </div>
+                    {topMatches.map(co => (
+                      <CompanyRow key={co.id} company={co} selected={value === co.id}
+                        onSelect={() => pick(co.id)}
+                        onExpand={() => { onExpand(co.id); setOpen(false); }} />
+                    ))}
+                    {filtered.filter(c => c.score < 2).length > 0 && (
+                      <div className="mx-3 my-0.5 border-t border-slate-100" />
+                    )}
+                  </>
+                )}
+
+                {/* All results */}
+                {filtered
+                  .filter(c => showTop ? c.score < 2 : true)
+                  .map(co => (
+                    <CompanyRow key={co.id} company={co} selected={value === co.id}
+                      onSelect={() => pick(co.id)}
+                      onExpand={() => { onExpand(co.id); setOpen(false); }} />
+                  ))}
+
+                {filtered.length === 0 && (
+                  <p className="px-3 py-4 text-xs text-slate-400 text-center">No companies found</p>
+                )}
+              </div>
+
+              {/* Create new footer */}
+              <div className="border-t border-slate-100 p-1.5">
+                <button type="button"
+                  onClick={() => { setCreating(true); setNewName(search); }}
+                  className="w-full flex items-center justify-center gap-1 py-1.5 text-xs text-emerald-600 hover:bg-emerald-50 rounded-lg font-medium transition-colors">
+                  <Plus size={11} /> Create new company{search ? ` "${search}"` : ""}
+                </button>
+              </div>
+            </>
+          ) : (
+            /* Inline create form */
+            <div className="p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-slate-700">New Company</p>
+                <button onClick={() => setCreating(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={12} />
+                </button>
+              </div>
+              <input
+                autoFocus
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleCreate()}
+                placeholder="Company name *"
+                className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              <select value={newType} onChange={e => setNewType(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                <option value="startup">Startup</option>
+                <option value="fund">Fund / VC</option>
+                <option value="lp">Limited Partner</option>
+                <option value="corporate">Corporate / Strategic</option>
+                <option value="ecosystem_partner">Ecosystem Partner</option>
+                <option value="government">Government / Academic</option>
+                <option value="other">Other</option>
+              </select>
+              <div className="flex gap-1.5">
+                <button onClick={() => setCreating(false)}
+                  className="flex-1 py-1.5 border border-slate-200 rounded text-xs text-slate-600 hover:bg-slate-50">
+                  Cancel
+                </button>
+                <button onClick={handleCreate} disabled={saving || !newName.trim()}
+                  className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium rounded flex items-center justify-center gap-1">
+                  {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                  {saving ? "Saving…" : "Create"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Company Expand Panel ────────────────────────────────────────────────────────
+// ── Company Expand Panel ───────────────────────────────────────────────────────
 
-interface CompanyPanelProps {
-  companyId: string;
-  onClose: () => void;
-}
-
-function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
+function CompanyExpandPanel({ companyId, onClose }: { companyId: string; onClose: () => void }) {
   const supabase = createClient();
   const [company, setCompany]   = useState<Company | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -302,6 +399,7 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
   const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       setLoading(true);
       setImgError(false);
@@ -310,12 +408,15 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
         supabase.from("contacts").select("*").eq("company_id", companyId)
           .order("is_primary_contact", { ascending: false }).limit(5),
       ]);
-      setCompany(co as Company | null);
-      setContacts((ctcts as Contact[]) ?? []);
-      setLoading(false);
+      if (!cancelled) {
+        setCompany(co as Company | null);
+        setContacts((ctcts as Contact[]) ?? []);
+        setLoading(false);
+      }
     }
     load();
-  }, [companyId]);
+    return () => { cancelled = true; };
+  }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const domain = company?.website
     ? company.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
@@ -326,22 +427,15 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
     <>
       <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
       <div className="fixed top-0 right-0 h-full w-[420px] bg-white shadow-2xl z-50 flex flex-col">
-
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
           <div className="flex items-center gap-2">
             {clearbitUrl && !imgError ? (
-              <img
-                src={clearbitUrl}
-                alt={company?.name ?? ""}
-                onError={() => setImgError(true)}
-                className="w-8 h-8 rounded-lg object-contain bg-white border border-slate-200 p-0.5"
-              />
+              <img src={clearbitUrl} alt={company?.name ?? ""} onError={() => setImgError(true)}
+                className="w-8 h-8 rounded-lg object-contain bg-white border border-slate-200 p-0.5" />
             ) : (
               <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-xs font-bold">
-                  {company ? getInitials(company.name) : "…"}
-                </span>
+                <span className="text-white text-xs font-bold">{company ? getInitials(company.name) : "…"}</span>
               </div>
             )}
             <div>
@@ -349,7 +443,8 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
                 {loading ? "Loading…" : company?.name ?? "Company"}
               </h3>
               {company && (
-                <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium", TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
+                <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium",
+                  TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
                   {TYPE_LABEL[company.type] ?? company.type}
                 </span>
               )}
@@ -357,18 +452,12 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
           </div>
           <div className="flex items-center gap-1.5">
             {company && (
-              <a
-                href={`/crm/companies/${company.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-              >
+              <a href={`/crm/companies/${company.id}`} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
                 <Maximize2 size={12} /> Full profile
               </a>
             )}
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
-              <X size={18} />
-            </button>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1"><X size={18} /></button>
           </div>
         </div>
 
@@ -378,13 +467,9 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
             <Loader2 size={24} className="text-slate-300 animate-spin" />
           </div>
         ) : !company ? (
-          <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
-            Company not found.
-          </div>
+          <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Company not found.</div>
         ) : (
           <div className="flex-1 overflow-y-auto">
-
-            {/* General Info */}
             <div className="px-5 py-4 border-b border-slate-100 space-y-3">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">General Information</p>
               <div className="grid grid-cols-2 gap-3">
@@ -394,13 +479,14 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
                 </div>
                 <div>
                   <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Type</p>
-                  <span className={cn("inline-flex text-xs px-1.5 py-0.5 rounded border font-medium", TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
+                  <span className={cn("inline-flex text-xs px-1.5 py-0.5 rounded border font-medium",
+                    TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
                     {TYPE_LABEL[company.type] ?? company.type}
                   </span>
                 </div>
                 {company.website && (
                   <div>
-                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Domain</p>
+                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Website</p>
                     <a href={company.website} target="_blank" rel="noopener noreferrer"
                       className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                       <Globe size={11} />
@@ -429,79 +515,6 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
               </div>
             </div>
 
-            {/* Type-specific info */}
-            {(company.type === "startup" || company.type === "lp" || company.type === "fund") && (
-              <div className="px-5 py-4 border-b border-slate-100 space-y-3">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  {company.type === "startup" ? "Startup Information" : company.type === "lp" ? "LP Information" : "Fund Information"}
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  {company.type === "startup" && <>
-                    {company.sectors && company.sectors.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Sector</p>
-                        <p className="text-sm text-slate-700 capitalize">{company.sectors[0]}</p>
-                      </div>
-                    )}
-                    {company.sub_type && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Sub-sector</p>
-                        <p className="text-sm text-slate-700">{company.sub_type}</p>
-                      </div>
-                    )}
-                    {company.stage && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Stage</p>
-                        <p className="text-sm text-slate-700 capitalize">{company.stage.replace(/_/g, " ")}</p>
-                      </div>
-                    )}
-                    {company.deal_status && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Deal Status</p>
-                        <p className="text-sm text-slate-700 capitalize">{company.deal_status.replace(/_/g, " ")}</p>
-                      </div>
-                    )}
-                    {company.funding_raised != null && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Total Raised</p>
-                        <p className="text-sm text-slate-700">{formatCurrency(company.funding_raised)}</p>
-                      </div>
-                    )}
-                  </>}
-                  {(company.type === "lp" || company.type === "fund") && <>
-                    {company.aum != null && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-slate-400 mb-0.5">AUM</p>
-                        <p className="text-sm text-slate-700">{formatCurrency(company.aum)}</p>
-                      </div>
-                    )}
-                    {company.lp_type && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-slate-400 mb-0.5">LP Type</p>
-                        <p className="text-sm text-slate-700 capitalize">{company.lp_type.replace(/_/g, " ")}</p>
-                      </div>
-                    )}
-                    {company.fund_focus && (
-                      <div className="col-span-2">
-                        <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Fund Focus</p>
-                        <p className="text-sm text-slate-700">{company.fund_focus}</p>
-                      </div>
-                    )}
-                  </>}
-                  {company.last_contact_date && (
-                    <div>
-                      <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Last Contact</p>
-                      <p className="text-sm text-slate-700 flex items-center gap-1">
-                        <Calendar size={11} className="text-slate-400" />
-                        {formatDate(company.last_contact_date)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Description */}
             {company.description && (
               <div className="px-5 py-4 border-b border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Description</p>
@@ -509,7 +522,6 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
               </div>
             )}
 
-            {/* Tags */}
             {company.tags && company.tags.length > 0 && (
               <div className="px-5 py-4 border-b border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
@@ -523,7 +535,6 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
               </div>
             )}
 
-            {/* Linked Contacts */}
             <div className="px-5 py-4">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1">
                 <Users size={10} /> Contacts ({contacts.length})
@@ -536,7 +547,7 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
                     <div key={c.id} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-lg">
                       <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
                         <span className="text-violet-600 text-[10px] font-bold">
-                          {getInitials(`${c.first_name} ${c.last_name}`)}
+                          {getInitials(`${c.first_name} ${c.last_name ?? ""}`)}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
@@ -550,14 +561,10 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
                       </div>
                       <div className="flex gap-1.5 text-slate-300">
                         {c.email && (
-                          <a href={`mailto:${c.email}`} className="hover:text-blue-600 transition-colors">
-                            <Mail size={12} />
-                          </a>
+                          <a href={`mailto:${c.email}`} className="hover:text-blue-600 transition-colors"><Mail size={12} /></a>
                         )}
                         {c.linkedin_url && (
-                          <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 transition-colors">
-                            <ExternalLink size={12} />
-                          </a>
+                          <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 transition-colors"><ExternalLink size={12} /></a>
                         )}
                       </div>
                     </div>
@@ -574,13 +581,10 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
           </div>
         )}
 
-        {/* Footer */}
         {company && (
           <div className="px-5 py-4 border-t border-slate-200">
-            <a
-              href={`/crm/companies/${company.id}`}
-              className="flex items-center justify-center gap-2 w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
-            >
+            <a href={`/crm/companies/${company.id}`}
+              className="flex items-center justify-center gap-2 w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
               Open Full Profile <ChevronRight size={14} />
             </a>
           </div>
@@ -590,84 +594,210 @@ function CompanyExpandPanel({ companyId, onClose }: CompanyPanelProps) {
   );
 }
 
-// ── Edit state per contact ─────────────────────────────────────────────────────
+// ── ContactRow — memoized; manages its own edit state ─────────────────────────
 
-interface EditState {
-  type: ContactType;
-  title: string;
-  location_city: string;
-  location_country: string;
-  company_id: string;
-}
+const ContactRow = memo(function ContactRow({
+  contact,
+  allCompanies,
+  onConfirmed,
+  onDiscarded,
+  onExpand,
+}: {
+  contact: PendingContact;
+  allCompanies: CompanyStub[];
+  onConfirmed: (id: string) => void;
+  onDiscarded: (id: string) => void;
+  onExpand: (id: string) => void;
+}) {
+  const supabase = createClient();
+
+  const [type, setType]                     = useState<string>(() => mapTypeToAdmin(contact.type));
+  const [title, setTitle]                   = useState(contact.title ?? "");
+  const [companyId, setCompanyId]           = useState(contact.company_id ?? "");
+  const [city, setCity]                     = useState(contact.location_city ?? "");
+  const [country, setCountry]               = useState(contact.location_country ?? "");
+  const [busy, setBusy]                     = useState(false);
+  // Extra companies created inline for this row
+  const [extraCompanies, setExtraCompanies] = useState<CompanyStub[]>([]);
+
+  const mergedCompanies = useMemo(
+    () => (extraCompanies.length ? [...extraCompanies, ...allCompanies] : allCompanies),
+    [extraCompanies, allCompanies]
+  );
+
+  const handleCreateCompany = useCallback(async (name: string, coType: string): Promise<string | null> => {
+    const { data, error } = await supabase
+      .from("companies")
+      .insert({ name, type: coType, status: "active" })
+      .select("id, name, type")
+      .single();
+    if (error || !data) return null;
+    const stub: CompanyStub = { id: data.id as string, name: data.name as string, type: data.type as string };
+    setExtraCompanies(prev => [stub, ...prev]);
+    setCompanyId(data.id as string);
+    return data.id as string;
+  }, [supabase]);
+
+  async function confirm() {
+    setBusy(true);
+    const resolvedCompanyId = companyId || contact.company_id || null;
+
+    const { error } = await supabase.from("contacts").update({
+      status:           "active",
+      type,
+      title:            title.trim() || contact.title || null,
+      company_id:       resolvedCompanyId,
+      location_city:    city.trim()    || null,
+      location_country: country.trim() || null,
+    }).eq("id", contact.id);
+
+    if (error) { alert(error.message); setBusy(false); return; }
+
+    // Auto-route company type if it's still "other"
+    const targetType = CONTACT_TO_COMPANY_TYPE[type as ContactTypeStr];
+    if (resolvedCompanyId && targetType) {
+      const co = mergedCompanies.find(c => c.id === resolvedCompanyId);
+      if (co && (!co.type || co.type === "other")) {
+        await supabase.from("companies").update({ type: targetType }).eq("id", resolvedCompanyId);
+      }
+    }
+
+    onConfirmed(contact.id);
+    setBusy(false);
+  }
+
+  async function discard() {
+    setBusy(true);
+    const { error } = await supabase.from("contacts").delete().eq("id", contact.id);
+    if (error) { alert(error.message); setBusy(false); return; }
+    onDiscarded(contact.id);
+    setBusy(false);
+  }
+
+  return (
+    <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 min-w-0 hover:border-slate-300 transition-colors">
+
+      {/* Avatar */}
+      <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+        <span className="text-violet-600 text-[9px] font-bold">
+          {getInitials(`${contact.first_name} ${contact.last_name ?? ""}`)}
+        </span>
+      </div>
+
+      {/* Name + email */}
+      <div className="w-40 flex-shrink-0 min-w-0">
+        <p className="text-xs font-semibold text-slate-800 truncate leading-tight">
+          {contact.first_name} {contact.last_name}
+        </p>
+        <div className="flex items-center gap-1 mt-0.5">
+          {contact.email ? (
+            <a href={`mailto:${contact.email}`} title={contact.email}
+              className="text-[10px] text-blue-500 hover:underline truncate block leading-tight">
+              {contact.email}
+            </a>
+          ) : (
+            <span className="text-[10px] text-slate-300 italic">no email</span>
+          )}
+          {contact.linkedin_url && (
+            <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer"
+              className="text-slate-300 hover:text-blue-500 flex-shrink-0">
+              <ExternalLink size={9} />
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* Type */}
+      <select
+        value={type}
+        onChange={e => setType(e.target.value)}
+        className="w-36 flex-shrink-0 text-xs border border-slate-300 rounded px-1.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700"
+      >
+        {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+
+      {/* Title */}
+      <input
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        placeholder={contact.title || "Job title"}
+        className="w-28 flex-shrink-0 text-xs border border-slate-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-300"
+      />
+
+      {/* Company dropdown */}
+      <div className="w-48 flex-shrink-0">
+        <CompanyDropdown
+          contactEmail={contact.email}
+          allCompanies={mergedCompanies}
+          value={companyId}
+          placeholder={contact.company?.name || "Select company…"}
+          onChange={setCompanyId}
+          onExpand={onExpand}
+          onCreateNew={handleCreateCompany}
+        />
+      </div>
+
+      {/* City */}
+      <input
+        value={city}
+        onChange={e => setCity(e.target.value)}
+        placeholder="City"
+        className="w-20 flex-shrink-0 text-xs border border-slate-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-300"
+      />
+
+      {/* Country */}
+      <input
+        value={country}
+        onChange={e => setCountry(e.target.value)}
+        placeholder="Country *"
+        className="w-20 flex-shrink-0 text-xs border border-slate-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-300"
+      />
+
+      {/* Added date */}
+      <span className="text-[10px] text-slate-400 flex-shrink-0 w-16 truncate text-right">
+        {formatDate(contact.created_at)}
+      </span>
+
+      {/* Actions */}
+      <div className="flex gap-1 flex-shrink-0 ml-auto">
+        <button
+          onClick={confirm}
+          disabled={busy}
+          className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium rounded transition-colors"
+        >
+          {busy ? <Loader2 size={10} className="animate-spin" /> : <Check size={11} />}
+          Confirm
+        </button>
+        <button
+          onClick={discard}
+          disabled={busy}
+          title="Discard"
+          className="flex items-center justify-center w-7 h-7 border border-red-200 hover:bg-red-50 disabled:opacity-50 text-red-400 rounded transition-colors"
+        >
+          <X size={12} />
+        </button>
+      </div>
+    </div>
+  );
+});
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export function PendingContactsClient({ initialContacts, companies }: Props) {
-  const supabase = createClient();
-  const [contacts, setContacts] = useState<PendingContact[]>(initialContacts);
-  const [edits, setEdits]       = useState<Record<string, EditState>>(() => {
-    const init: Record<string, EditState> = {};
-    initialContacts.forEach(c => {
-      init[c.id] = {
-        type:             c.type as ContactType,
-        title:            c.title ?? "",
-        location_city:    c.location_city ?? "",
-        location_country: c.location_country ?? "",
-        company_id:       c.company_id ?? "",
-      };
-    });
-    return init;
-  });
-  const [processing, setProcessing]       = useState<Set<string>>(new Set());
+  const [contacts, setContacts]                   = useState<PendingContact[]>(initialContacts);
   const [expandedCompanyId, setExpandedCompanyId] = useState<string | null>(null);
 
-  function setEdit(id: string, field: keyof EditState, value: string) {
-    setEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
-  }
+  const handleConfirmed = useCallback((id: string) => {
+    setContacts(prev => prev.filter(c => c.id !== id));
+  }, []);
 
-  async function confirm(contact: PendingContact) {
-    setProcessing(prev => new Set(prev).add(contact.id));
-    const edit = edits[contact.id];
-    const resolvedCompanyId = edit.company_id || contact.company_id || null;
+  const handleDiscarded = useCallback((id: string) => {
+    setContacts(prev => prev.filter(c => c.id !== id));
+  }, []);
 
-    const { error: contactErr } = await supabase
-      .from("contacts")
-      .update({
-        status:           "active",
-        type:             edit.type,
-        title:            edit.title || contact.title || null,
-        company_id:       resolvedCompanyId,
-        location_city:    edit.location_city    || null,
-        location_country: edit.location_country || null,
-      })
-      .eq("id", contact.id);
-
-    if (contactErr) {
-      setProcessing(prev => { const s = new Set(prev); s.delete(contact.id); return s; });
-      alert(contactErr.message);
-      return;
-    }
-
-    // Auto-route: update company type if still 'other'
-    const targetCompanyType = CONTACT_TO_COMPANY_TYPE[edit.type];
-    if (resolvedCompanyId && targetCompanyType) {
-      const linkedCompany = companies.find(co => co.id === resolvedCompanyId) ?? contact.company;
-      if (linkedCompany && linkedCompany.type === "other") {
-        await supabase.from("companies").update({ type: targetCompanyType }).eq("id", resolvedCompanyId);
-      }
-    }
-
-    setProcessing(prev => { const s = new Set(prev); s.delete(contact.id); return s; });
-    setContacts(prev => prev.filter(c => c.id !== contact.id));
-  }
-
-  async function discard(id: string) {
-    setProcessing(prev => new Set(prev).add(id));
-    const { error } = await supabase.from("contacts").delete().eq("id", id);
-    setProcessing(prev => { const s = new Set(prev); s.delete(id); return s; });
-    if (!error) setContacts(prev => prev.filter(c => c.id !== id));
-    else alert(error.message);
-  }
+  const handleExpand = useCallback((id: string) => {
+    setExpandedCompanyId(id);
+  }, []);
 
   if (contacts.length === 0) {
     return (
@@ -682,141 +812,37 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
   }
 
   return (
-    <div className="flex-1 overflow-auto p-6">
-      <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700">
-        <strong>{contacts.length} contact{contacts.length !== 1 ? "s" : ""}</strong> need enrichment.
-        Fill in the type, title, and location, then click <strong>Confirm</strong> to add to your CRM.
-        The linked company will be auto-routed to the correct section.
+    <div className="flex-1 overflow-auto p-4">
+      {/* Banner */}
+      <div className="mb-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700 flex items-center gap-2">
+        <span className="font-semibold">{contacts.length} contact{contacts.length !== 1 ? "s" : ""}</span>
+        <span>need enrichment. Fill in the fields then click <strong>Confirm</strong> to add to your CRM.</span>
       </div>
 
-      <div className="space-y-3">
-        {contacts.map(c => {
-          const edit = edits[c.id] ?? { type: "other" as ContactType, title: "", location_city: "", location_country: "", company_id: "" };
-          const busy = processing.has(c.id);
+      {/* Column headers */}
+      <div className="flex items-center gap-2 px-3 mb-1">
+        <div className="w-7 flex-shrink-0" />
+        <div className="w-40 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Contact</div>
+        <div className="w-36 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Type *</div>
+        <div className="w-28 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Title</div>
+        <div className="w-48 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Company</div>
+        <div className="w-20 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">City</div>
+        <div className="w-20 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Country *</div>
+        <div className="w-16 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Added</div>
+      </div>
 
-          return (
-            <div key={c.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <div className="flex items-start gap-4">
-
-                {/* Avatar */}
-                <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
-                  <span className="text-violet-600 text-xs font-bold">
-                    {getInitials(`${c.first_name} ${c.last_name}`)}
-                  </span>
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 flex-wrap mb-2">
-                    <p className="font-semibold text-slate-900">{c.first_name} {c.last_name}</p>
-                    <span className="text-xs text-slate-400">Added {formatDate(c.created_at)}</span>
-                  </div>
-
-                  {/* Links */}
-                  <div className="flex gap-3 text-xs text-slate-500 mb-4">
-                    {c.email && (
-                      <a href={`mailto:${c.email}`} className="flex items-center gap-1 hover:text-blue-600">
-                        <Mail size={12} /> {c.email}
-                      </a>
-                    )}
-                    {c.phone && (
-                      <a href={`tel:${c.phone}`} className="flex items-center gap-1 hover:text-blue-600">
-                        <Phone size={12} /> {c.phone}
-                      </a>
-                    )}
-                    {c.linkedin_url && (
-                      <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-blue-600">
-                        <ExternalLink size={12} /> LinkedIn
-                      </a>
-                    )}
-                  </div>
-
-                  {/* Editable fields */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-
-                    {/* Type */}
-                    <div>
-                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Type *</label>
-                      <select
-                        className="select text-xs"
-                        value={edit.type}
-                        onChange={e => setEdit(c.id, "type", e.target.value)}
-                      >
-                        {CONTACT_TYPE_OPTIONS.map(o => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Job Title */}
-                    <div>
-                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Job Title</label>
-                      <input
-                        className="input text-xs"
-                        placeholder={c.title || "e.g. CEO"}
-                        value={edit.title}
-                        onChange={e => setEdit(c.id, "title", e.target.value)}
-                      />
-                    </div>
-
-                    {/* Company — smart dropdown */}
-                    <div>
-                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Company</label>
-                      <CompanyDropdown
-                        contactEmail={c.email}
-                        allCompanies={companies}
-                        value={edit.company_id}
-                        placeholder={c.company?.name || "— Select —"}
-                        onChange={id => setEdit(c.id, "company_id", id)}
-                        onExpand={id => setExpandedCompanyId(id)}
-                      />
-                    </div>
-
-                    {/* City */}
-                    <div>
-                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">City</label>
-                      <input
-                        className="input text-xs"
-                        placeholder="e.g. Singapore"
-                        value={edit.location_city}
-                        onChange={e => setEdit(c.id, "location_city", e.target.value)}
-                      />
-                    </div>
-
-                    {/* Country */}
-                    <div>
-                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Country *</label>
-                      <input
-                        className="input text-xs"
-                        placeholder="e.g. Singapore"
-                        value={edit.location_country}
-                        onChange={e => setEdit(c.id, "location_country", e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => confirm(c)}
-                    disabled={busy}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
-                  >
-                    <Check size={13} /> Confirm
-                  </button>
-                  <button
-                    onClick={() => discard(c.id)}
-                    disabled={busy}
-                    className="flex items-center gap-1.5 px-3 py-2 border border-red-200 hover:bg-red-50 disabled:opacity-50 text-red-500 text-xs font-medium rounded-lg transition-colors"
-                  >
-                    <X size={13} /> Discard
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      {/* Rows */}
+      <div className="space-y-1">
+        {contacts.map(c => (
+          <ContactRow
+            key={c.id}
+            contact={c}
+            allCompanies={companies}
+            onConfirmed={handleConfirmed}
+            onDiscarded={handleDiscarded}
+            onExpand={handleExpand}
+          />
+        ))}
       </div>
 
       {/* Company expand panel */}
