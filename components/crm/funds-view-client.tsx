@@ -294,6 +294,14 @@ export function FundsViewClient({ initialCompanies }: Props) {
     [initialCompanies, fundExtMap]
   );
 
+  // Ref so the selectedId useEffect always reads the latest fundList (avoids stale closure)
+  const fundListRef = useRef<FundData[]>(fundList);
+  useEffect(() => { fundListRef.current = fundList; }, [fundList]);
+
+  // Ref so the selectedId useEffect always reads the latest fundOverrides
+  const fundOverridesRef = useRef<Record<string, Partial<FundData>>>(fundOverrides);
+  useEffect(() => { fundOverridesRef.current = fundOverrides; }, [fundOverrides]);
+
   // Derived stats
   const stats = useMemo(() => ({
     total:          fundList.length,
@@ -358,10 +366,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
         })();
       }
 
-      // Auto-generate description if missing
-      const fund = fundList.find(f => f.id === selectedId);
-      const hasDesc = fund?.desc && fund.desc.trim().length > 0;
-      const alreadyOverridden = !!fundOverrides[selectedId]?.desc;
+      // Auto-generate description if missing (use refs to avoid stale closure)
+      const fund = fundListRef.current.find(f => f.id === selectedId);
+      const hasDesc = !!(fund?.desc && fund.desc.trim().length > 0);
+      const alreadyOverridden = !!fundOverridesRef.current[selectedId]?.desc;
       if (!hasDesc && !alreadyOverridden) {
         setDescGenerating(true);
         (async () => {
