@@ -36,7 +36,7 @@ interface FundData {
   portfolioOverlap: { initials: string; name: string; role: string }[];
   scores: { label: string; value: number; colorClass: string }[];
   recentInvest: { name: string; round: string; sector: string; date: string }[];
-  intel: { headline: string; meta: string }[];
+  intel: { headline: string; meta: string; url?: string }[];
   timeline: { icon: string; title: string; date: string; colorClass: string }[];
   introPath: string[];
   keyContacts: string[];
@@ -46,383 +46,55 @@ interface FundData {
   strategic: boolean;
 }
 
-// ── Hardcoded Fund Intelligence ────────────────────────────────────────────────
+// ── localStorage key for user-editable overrides per fund ─────────────────────
 
-const FUND_INTELLIGENCE: FundData[] = [
-  {
-    id: "Third Derivative", co: "Third Derivative", initials: "TD",
-    desc: "Climate tech accelerator / fund, RMI-backed",
-    type: "Climate VC", loc: "San Francisco, USA",
-    stages: ["Pre-seed", "Seed"], checkSize: "$500K–$2M",
-    cleantech: 92, techbio: 30, overallAlign: 85,
-    coInvest: "active", coInvestLabel: "Active co-investor",
-    relHealth: 88, owner: "Andrew",
-    lastContact: "Mar 10, 2026", overdue: false,
-    nextAction: "Share Ferrum Tech GGBS thesis — request co-lead intro",
-    dealFlow: "bidirectional", dealFlowLabel: "Bidirectional",
-    portfolioOverlap: [{ initials: "FM", name: "Ferrum Tech", role: "Co-investor" }],
-    scores: [
-      { label: "Cleantech thesis fit", value: 92, colorClass: "text-green-600" },
-      { label: "TechBio thesis fit", value: 30, colorClass: "text-violet-600" },
-      { label: "Stage overlap", value: 88, colorClass: "text-blue-600" },
-      { label: "Check size fit", value: 75, colorClass: "text-amber-600" },
-      { label: "Relationship depth", value: 88, colorClass: "text-slate-600" },
-    ],
-    recentInvest: [
-      { name: "CarbonCapture Inc.", round: "Seed · $3M", sector: "Carbon removal", date: "Jan 2026" },
-      { name: "Niron Magnetics", round: "Series A · $8M", sector: "Clean materials", date: "Nov 2025" },
-      { name: "Rondo Energy", round: "Seed · $2M", sector: "Thermal storage", date: "Sep 2025" },
-    ],
-    intel: [
-      { headline: "Third Derivative Fund III close — $250M AUM expansion", meta: "Feb 2026 · Larger co-invest capacity" },
-      { headline: "New partner hire: ex-Breakthrough Energy Ventures", meta: "Jan 2026 · Thesis alignment strengthened" },
-    ],
-    timeline: [
-      { icon: "●", title: "Co-invest discussion — Ferrum Tech", date: "Mar 10, 2026", colorClass: "bg-amber-100 text-amber-700" },
-      { icon: "✉", title: "Q1 deal flow exchange", date: "Feb 5, 2026", colorClass: "bg-blue-100 text-blue-700" },
-      { icon: "●", title: "Intro meeting via RMI network", date: "Oct 2025", colorClass: "bg-amber-100 text-amber-700" },
-    ],
-    introPath: ["Valuence", "RMI Network", "Third Derivative"],
-    keyContacts: ["Sarah Kearney (MD)", "Adam Schultz (Partner)"],
-    aum: "$250M", fundNum: "Fund III", leadCapable: true, strategic: true,
-  },
-  {
-    id: "Breakthrough Energy Ventures", co: "Breakthrough Energy Ventures", initials: "BEV",
-    desc: "Bill Gates-backed climate tech fund, deep science focus",
-    type: "Climate / Deep Science", loc: "Kirkland, USA",
-    stages: ["Seed", "Series A", "Series B"], checkSize: "$5M–$50M",
-    cleantech: 95, techbio: 45, overallAlign: 88,
-    coInvest: "active", coInvestLabel: "Active co-investor",
-    relHealth: 75, owner: "Andrew",
-    lastContact: "Feb 20, 2026", overdue: false,
-    nextAction: "Co-invest alignment call — Ferrum & YPlasma",
-    dealFlow: "inbound", dealFlowLabel: "Inbound referrals",
-    portfolioOverlap: [{ initials: "FM", name: "Ferrum Tech", role: "Lead investor" }],
-    scores: [
-      { label: "Cleantech thesis fit", value: 95, colorClass: "text-green-600" },
-      { label: "TechBio thesis fit", value: 45, colorClass: "text-violet-600" },
-      { label: "Stage overlap", value: 70, colorClass: "text-blue-600" },
-      { label: "Check size fit", value: 50, colorClass: "text-amber-600" },
-      { label: "Relationship depth", value: 75, colorClass: "text-slate-600" },
-    ],
-    recentInvest: [
-      { name: "Form Energy", round: "Series D · $450M", sector: "Long-duration storage", date: "Dec 2025" },
-      { name: "Verdagy", round: "Series B · $40M", sector: "Green hydrogen", date: "Oct 2025" },
-    ],
-    intel: [
-      { headline: "BEV launches emerging markets climate program", meta: "Mar 2026 · New geography mandate" },
-      { headline: "BEV publishes deep-tech diligence framework", meta: "Jan 2026 · Science-first validation lens" },
-    ],
-    timeline: [
-      { icon: "●", title: "Ferrum co-invest update call", date: "Feb 20, 2026", colorClass: "bg-amber-100 text-amber-700" },
-      { icon: "✉", title: "YPlasma deck shared for review", date: "Jan 15, 2026", colorClass: "bg-blue-100 text-blue-700" },
-    ],
-    introPath: ["Valuence", "Ferrum Tech", "BEV"],
-    keyContacts: ["Carmichael Roberts (Partner)", "Lisa Carley (Principal)"],
-    aum: "$2B+", fundNum: "Fund II", leadCapable: true, strategic: true,
-  },
-  {
-    id: "SOSV / IndieBio", co: "SOSV / IndieBio", initials: "SV",
-    desc: "Global accelerator fund — biology, hardware, climate",
-    type: "Accelerator / Multi-stage", loc: "New York, USA",
-    stages: ["Pre-seed", "Seed"], checkSize: "$250K–$1M",
-    cleantech: 60, techbio: 88, overallAlign: 78,
-    coInvest: "active", coInvestLabel: "Active co-investor",
-    relHealth: 82, owner: "Andrew",
-    lastContact: "Mar 15, 2026", overdue: false,
-    nextAction: "Giraffe Bio co-invest follow-on discussion",
-    dealFlow: "bidirectional", dealFlowLabel: "Bidirectional",
-    portfolioOverlap: [
-      { initials: "GB", name: "Giraffe Bio", role: "Lead investor" },
-      { initials: "YP", name: "YPlasma", role: "Co-investor" },
-    ],
-    scores: [
-      { label: "Cleantech thesis fit", value: 60, colorClass: "text-green-600" },
-      { label: "TechBio thesis fit", value: 88, colorClass: "text-violet-600" },
-      { label: "Stage overlap", value: 90, colorClass: "text-blue-600" },
-      { label: "Check size fit", value: 80, colorClass: "text-amber-600" },
-      { label: "Relationship depth", value: 82, colorClass: "text-slate-600" },
-    ],
-    recentInvest: [
-      { name: "Giraffe Bio", round: "Pre-seed · $500K", sector: "Cell-free biomolecules", date: "Oct 2025" },
-      { name: "YPlasma", round: "Pre-seed · $400K", sector: "Plasma cooling", date: "Sep 2025" },
-    ],
-    intel: [
-      { headline: "IndieBio NY cohort 10 announced — 12 companies", meta: "Feb 2026 · First look deal flow opportunity" },
-      { headline: "SOSV raises $165M for HAX hardware accelerator", meta: "Jan 2026 · Hardware + climate thesis expansion" },
-    ],
-    timeline: [
-      { icon: "●", title: "Giraffe Bio follow-on discussion", date: "Mar 15, 2026", colorClass: "bg-amber-100 text-amber-700" },
-      { icon: "✉", title: "IndieBio cohort 10 preview shared", date: "Feb 28, 2026", colorClass: "bg-blue-100 text-blue-700" },
-    ],
-    introPath: ["Valuence", "Giraffe Bio", "SOSV"],
-    keyContacts: ["Po Bronson (Partner)", "Jun Axup (CSO)"],
-    aum: "$1.1B", fundNum: "Fund V", leadCapable: true, strategic: true,
-  },
-  {
-    id: "HAX / SOSV", co: "HAX / SOSV", initials: "HX",
-    desc: "Hardware and deep tech accelerator — industrial, climate hardware",
-    type: "Accelerator / Hardware", loc: "San Francisco, USA",
-    stages: ["Pre-seed", "Seed"], checkSize: "$250K–$750K",
-    cleantech: 72, techbio: 50, overallAlign: 72,
-    coInvest: "active", coInvestLabel: "Active co-investor",
-    relHealth: 78, owner: "Andrew",
-    lastContact: "Mar 8, 2026", overdue: false,
-    nextAction: "YPlasma Series A co-invest conversation",
-    dealFlow: "bidirectional", dealFlowLabel: "Bidirectional",
-    portfolioOverlap: [{ initials: "YP", name: "YPlasma", role: "Lead investor" }],
-    scores: [
-      { label: "Cleantech thesis fit", value: 72, colorClass: "text-green-600" },
-      { label: "TechBio thesis fit", value: 50, colorClass: "text-violet-600" },
-      { label: "Stage overlap", value: 85, colorClass: "text-blue-600" },
-      { label: "Check size fit", value: 70, colorClass: "text-amber-600" },
-      { label: "Relationship depth", value: 78, colorClass: "text-slate-600" },
-    ],
-    recentInvest: [
-      { name: "YPlasma", round: "Pre-seed · $400K", sector: "DBD plasma cooling", date: "Aug 2025" },
-      { name: "Seismic", round: "Seed · $600K", sector: "Wearable robotics", date: "Jul 2025" },
-    ],
-    intel: [
-      { headline: "HAX cohort 18 kicks off — focus on climate hardware", meta: "Mar 2026 · Portfolio sourcing opportunity" },
-    ],
-    timeline: [
-      { icon: "●", title: "YPlasma co-invest alignment", date: "Mar 8, 2026", colorClass: "bg-amber-100 text-amber-700" },
-    ],
-    introPath: ["Valuence", "YPlasma", "HAX"],
-    keyContacts: ["Cyril Ebersweiler (Partner)"],
-    aum: "$1.1B", fundNum: "SOSV V", leadCapable: false, strategic: true,
-  },
-  {
-    id: "Andreessen Horowitz (a16z)", co: "Andreessen Horowitz (a16z)", initials: "AH",
-    desc: "Multi-stage tech fund — bio, climate, infra",
-    type: "Multi-stage VC", loc: "Menlo Park, USA",
-    stages: ["Seed", "Series A", "Series B+"], checkSize: "$5M–$100M",
-    cleantech: 55, techbio: 70, overallAlign: 58,
-    coInvest: "potential", coInvestLabel: "Potential — bio fund",
-    relHealth: 42, owner: "Gene",
-    lastContact: "Oct 23, 2025", overdue: true,
-    nextAction: "Re-engage a16z Bio team — Giraffe Bio angle",
-    dealFlow: "none", dealFlowLabel: "No active flow",
-    portfolioOverlap: [],
-    scores: [
-      { label: "Cleantech thesis fit", value: 55, colorClass: "text-green-600" },
-      { label: "TechBio thesis fit", value: 70, colorClass: "text-violet-600" },
-      { label: "Stage overlap", value: 45, colorClass: "text-blue-600" },
-      { label: "Check size fit", value: 35, colorClass: "text-amber-600" },
-      { label: "Relationship depth", value: 42, colorClass: "text-slate-600" },
-    ],
-    recentInvest: [
-      { name: "Eikon Therapeutics", round: "Series C · $148M", sector: "Drug discovery / bio", date: "Jan 2026" },
-      { name: "Arcadia Biosciences", round: "Series A · $30M", sector: "AgBio", date: "Nov 2025" },
-    ],
-    intel: [
-      { headline: "a16z Bio launches $750M dedicated fund III", meta: "Feb 2026 · Expanded techbio mandate" },
-      { headline: "Zak Doric promoted to General Partner — Bio team", meta: "Jan 2026 · Key contact upgrade" },
-    ],
-    timeline: [
-      { icon: "✉", title: "Initial contact via conference", date: "Oct 23, 2025", colorClass: "bg-blue-100 text-blue-700" },
-    ],
-    introPath: ["Valuence", "Gil Kim (Applied Ventures)", "a16z"],
-    keyContacts: ["Zak Doric (GP — Bio)", "Jorge Conde (GP — Bio)"],
-    aum: "$35B", fundNum: "Bio Fund III", leadCapable: true, strategic: false,
-  },
-  {
-    id: "Altos Ventures", co: "Altos Ventures", initials: "AV",
-    desc: "Korean-American early stage VC — deep tech, enterprise",
-    type: "Early-stage VC", loc: "Menlo Park, USA",
-    stages: ["Seed", "Series A"], checkSize: "$1M–$5M",
-    cleantech: 45, techbio: 60, overallAlign: 55,
-    coInvest: "potential", coInvestLabel: "Potential — Korea overlap",
-    relHealth: 55, owner: "Andrew",
-    lastContact: "Jan 15, 2026", overdue: false,
-    nextAction: "Leverage Korea network — DexMat intro potential",
-    dealFlow: "inbound", dealFlowLabel: "Inbound referrals",
-    portfolioOverlap: [],
-    scores: [
-      { label: "Cleantech thesis fit", value: 45, colorClass: "text-green-600" },
-      { label: "TechBio thesis fit", value: 60, colorClass: "text-violet-600" },
-      { label: "Stage overlap", value: 75, colorClass: "text-blue-600" },
-      { label: "Check size fit", value: 65, colorClass: "text-amber-600" },
-      { label: "Relationship depth", value: 55, colorClass: "text-slate-600" },
-    ],
-    recentInvest: [
-      { name: "Kakao Labs", round: "Series A · $12M", sector: "AI / enterprise", date: "Dec 2025" },
-    ],
-    intel: [
-      { headline: "Altos Ventures expands Korean deeptech focus", meta: "Jan 2026 · Potential thesis overlap" },
-    ],
-    timeline: [
-      { icon: "✉", title: "Intro via Korean LP network", date: "Jan 15, 2026", colorClass: "bg-blue-100 text-blue-700" },
-    ],
-    introPath: ["Valuence", "Seoul LP Summit", "Altos Ventures"],
-    keyContacts: ["Cathy Shin (Partner)"],
-    aum: "$3B", fundNum: "Fund VII", leadCapable: true, strategic: false,
-  },
-  {
-    id: "Applied Ventures", co: "Applied Ventures", initials: "APV",
-    desc: "Applied Materials' CVC — semiconductor, materials, energy",
-    type: "Corporate VC", loc: "Santa Clara, USA",
-    stages: ["Seed", "Series A", "Series B"], checkSize: "$2M–$15M",
-    cleantech: 78, techbio: 40, overallAlign: 75,
-    coInvest: "potential", coInvestLabel: "Potential — materials",
-    relHealth: 60, owner: "Gene",
-    lastContact: "Dec 10, 2025", overdue: false,
-    nextAction: "Mater-AI materials platform intro — strong fit",
-    dealFlow: "outbound", dealFlowLabel: "Outbound sharing",
-    portfolioOverlap: [],
-    scores: [
-      { label: "Cleantech thesis fit", value: 78, colorClass: "text-green-600" },
-      { label: "TechBio thesis fit", value: 40, colorClass: "text-violet-600" },
-      { label: "Stage overlap", value: 68, colorClass: "text-blue-600" },
-      { label: "Check size fit", value: 70, colorClass: "text-amber-600" },
-      { label: "Relationship depth", value: 60, colorClass: "text-slate-600" },
-    ],
-    recentInvest: [
-      { name: "Rinnai Innovation", round: "Series A · $8M", sector: "Advanced materials", date: "Feb 2026" },
-      { name: "6K Energy", round: "Series B · $40M", sector: "Battery materials", date: "Nov 2025" },
-    ],
-    intel: [
-      { headline: "Applied Ventures increases CVC budget 40% for 2026", meta: "Mar 2026 · More capital to deploy" },
-      { headline: "Gil Kim named VP — strategic deeptech mandate", meta: "Feb 2026 · Key contact promotion" },
-    ],
-    timeline: [
-      { icon: "●", title: "Materials thesis alignment call", date: "Dec 10, 2025", colorClass: "bg-amber-100 text-amber-700" },
-    ],
-    introPath: ["Valuence", "NVIDIA connection", "Applied Ventures"],
-    keyContacts: ["Gil Kim (VP Investments)"],
-    aum: "$500M", fundNum: "Fund IV", leadCapable: true, strategic: true,
-  },
-  {
-    id: "500 Global", co: "500 Global", initials: "5G",
-    desc: "Global micro-VC and accelerator — broad tech, emerging markets",
-    type: "Accelerator / Global VC", loc: "San Francisco, USA",
-    stages: ["Pre-seed", "Seed"], checkSize: "$150K–$500K",
-    cleantech: 35, techbio: 35, overallAlign: 30,
-    coInvest: "none", coInvestLabel: "No active mandate",
-    relHealth: 28, owner: "Gene",
-    lastContact: "—", overdue: true,
-    nextAction: "Qualify thesis fit — low priority",
-    dealFlow: "none", dealFlowLabel: "No active flow",
-    portfolioOverlap: [],
-    scores: [
-      { label: "Cleantech thesis fit", value: 35, colorClass: "text-green-600" },
-      { label: "TechBio thesis fit", value: 35, colorClass: "text-violet-600" },
-      { label: "Stage overlap", value: 45, colorClass: "text-blue-600" },
-      { label: "Check size fit", value: 55, colorClass: "text-amber-600" },
-      { label: "Relationship depth", value: 28, colorClass: "text-slate-600" },
-    ],
-    recentInvest: [
-      { name: "Various SEA startups", round: "Pre-seed", sector: "Broad tech", date: "Q4 2025" },
-    ],
-    intel: [
-      { headline: "500 Global focuses Southeast Asia cleantech push", meta: "Feb 2026 · Geographic relevance" },
-    ],
-    timeline: [
-      { icon: "✉", title: "Added to CRM — conference contact", date: "Sep 2024", colorClass: "bg-blue-100 text-blue-700" },
-    ],
-    introPath: ["Valuence", "Khalee Ng (contact)", "500 Global"],
-    keyContacts: ["Khalee Ng (Partner)"],
-    aum: "$2.7B", fundNum: "Fund VI", leadCapable: false, strategic: false,
-  },
-  {
-    id: "Alsop Louie Partners", co: "Alsop Louie Partners", initials: "AL",
-    desc: "Early-stage VC — enterprise, deep tech, national security tech",
-    type: "Early-stage VC", loc: "San Francisco, USA",
-    stages: ["Seed", "Series A"], checkSize: "$500K–$3M",
-    cleantech: 40, techbio: 55, overallAlign: 42,
-    coInvest: "potential", coInvestLabel: "Potential",
-    relHealth: 38, owner: "Gene",
-    lastContact: "Aug 2025", overdue: true,
-    nextAction: "Re-engage — explore bio co-invest angle",
-    dealFlow: "none", dealFlowLabel: "No active flow",
-    portfolioOverlap: [],
-    scores: [
-      { label: "Cleantech thesis fit", value: 40, colorClass: "text-green-600" },
-      { label: "TechBio thesis fit", value: 55, colorClass: "text-violet-600" },
-      { label: "Stage overlap", value: 68, colorClass: "text-blue-600" },
-      { label: "Check size fit", value: 60, colorClass: "text-amber-600" },
-      { label: "Relationship depth", value: 38, colorClass: "text-slate-600" },
-    ],
-    recentInvest: [
-      { name: "Tezro", round: "Seed · $2M", sector: "Blockchain / security", date: "Nov 2025" },
-    ],
-    intel: [],
-    timeline: [
-      { icon: "✉", title: "Initial contact via Zak Doric referral", date: "Aug 2025", colorClass: "bg-blue-100 text-blue-700" },
-    ],
-    introPath: ["Valuence", "Zak Doric (a16z)", "Alsop Louie"],
-    keyContacts: ["Jason Preston (GP)"],
-    aum: "$350M", fundNum: "Fund IV", leadCapable: true, strategic: false,
-  },
-  {
-    id: "Big Idea Ventures", co: "Big Idea Ventures", initials: "BIV",
-    desc: "Food tech and agri-bio VC — alternative proteins, fermentation",
-    type: "Sector VC", loc: "New York, USA",
-    stages: ["Pre-seed", "Seed"], checkSize: "$250K–$1.5M",
-    cleantech: 50, techbio: 82, overallAlign: 70,
-    coInvest: "potential", coInvestLabel: "Potential — bio overlap",
-    relHealth: 45, owner: "Andrew",
-    lastContact: "Nov 2025", overdue: false,
-    nextAction: "Giraffe Bio cell-free — explore food bio angle",
-    dealFlow: "outbound", dealFlowLabel: "Outbound sharing",
+const LS_KEY = "funds_ext_map";
+
+function companyToFundData(c: Company): FundData {
+  const loc = [
+    (c as unknown as Record<string, string>).location_city,
+    c.location_country,
+  ].filter(Boolean).join(", ");
+  return {
+    id: c.id,
+    co: c.name ?? "",
+    initials: (c.name ?? "?").split(/\s+/).map((w: string) => w[0] ?? "").join("").slice(0, 2).toUpperCase(),
+    desc: c.description ?? "",
+    type: c.type ?? ((c.sectors as string[] | null)?.[0] ?? ""),
+    loc,
+    stages: [c.stage].filter(Boolean) as string[],
+    checkSize: "",
+    cleantech: 50,
+    techbio: 50,
+    overallAlign: 50,
+    coInvest: "none",
+    coInvestLabel: "No co-invest",
+    relHealth: 50,
+    owner: "",
+    lastContact: "",
+    overdue: false,
+    nextAction: "",
+    dealFlow: "none",
+    dealFlowLabel: "None",
     portfolioOverlap: [],
     scores: [
       { label: "Cleantech thesis fit", value: 50, colorClass: "text-green-600" },
-      { label: "TechBio thesis fit", value: 82, colorClass: "text-violet-600" },
-      { label: "Stage overlap", value: 78, colorClass: "text-blue-600" },
-      { label: "Check size fit", value: 72, colorClass: "text-amber-600" },
-      { label: "Relationship depth", value: 45, colorClass: "text-slate-600" },
-    ],
-    recentInvest: [
-      { name: "Moolec Science", round: "Seed · $1.2M", sector: "Molecular farming", date: "Jan 2026" },
-      { name: "TurtleTree", round: "Seed · $1M", sector: "Cell-based dairy", date: "Oct 2025" },
-    ],
-    intel: [
-      { headline: "Big Idea Ventures launches Asia bio cohort 5", meta: "Feb 2026 · Singapore hub — geographic overlap" },
-    ],
-    timeline: [
-      { icon: "●", title: "TechBio thesis exchange — NYC event", date: "Nov 2025", colorClass: "bg-amber-100 text-amber-700" },
-    ],
-    introPath: ["Valuence", "IndieBio network", "Big Idea Ventures"],
-    keyContacts: ["Karin del Rey (Partner)"],
-    aum: "$100M", fundNum: "Fund III", leadCapable: false, strategic: false,
-  },
-  {
-    id: "BASF Venture Capital", co: "BASF Venture Capital", initials: "BVC",
-    desc: "BASF's CVC — advanced materials, chemistry, ag-tech, energy",
-    type: "Corporate VC", loc: "Ludwigshafen, Germany",
-    stages: ["Seed", "Series A", "Series B"], checkSize: "$2M–$20M",
-    cleantech: 82, techbio: 55, overallAlign: 80,
-    coInvest: "potential", coInvestLabel: "Potential — materials",
-    relHealth: 50, owner: "Andrew",
-    lastContact: "Jan 8, 2026", overdue: false,
-    nextAction: "DexMat CNT + Mater-AI — strong portfolio fit intro",
-    dealFlow: "outbound", dealFlowLabel: "Outbound sharing",
-    portfolioOverlap: [],
-    scores: [
-      { label: "Cleantech thesis fit", value: 82, colorClass: "text-green-600" },
-      { label: "TechBio thesis fit", value: 55, colorClass: "text-violet-600" },
-      { label: "Stage overlap", value: 65, colorClass: "text-blue-600" },
-      { label: "Check size fit", value: 68, colorClass: "text-amber-600" },
+      { label: "TechBio thesis fit", value: 50, colorClass: "text-violet-600" },
+      { label: "Stage overlap", value: 50, colorClass: "text-blue-600" },
+      { label: "Check size fit", value: 50, colorClass: "text-amber-600" },
       { label: "Relationship depth", value: 50, colorClass: "text-slate-600" },
     ],
-    recentInvest: [
-      { name: "Evonik Ventures spin-in", round: "Series A · $12M", sector: "Specialty chemicals", date: "Dec 2025" },
-      { name: "Mycocycle", round: "Seed · $3M", sector: "Mycelium materials", date: "Oct 2025" },
-    ],
-    intel: [
-      { headline: "BASF VC commits €100M to advanced materials startups", meta: "Mar 2026 · Direct Mater-AI / DexMat fit" },
-      { headline: "New investment director — Dr. Irene Yang promoted", meta: "Jan 2026 · Key contact relationship" },
-    ],
-    timeline: [
-      { icon: "✆", title: "Materials thesis alignment call", date: "Jan 8, 2026", colorClass: "bg-green-100 text-green-700" },
-      { icon: "✉", title: "Mater-AI deck shared", date: "Dec 2025", colorClass: "bg-blue-100 text-blue-700" },
-    ],
-    introPath: ["Valuence", "SK Group intro", "BASF Venture Capital"],
-    keyContacts: ["Irene Yang (Investment Director)"],
-    aum: "€300M", fundNum: "Fund IV", leadCapable: true, strategic: true,
-  },
-];
+    recentInvest: [],
+    intel: [],
+    timeline: [],
+    introPath: [],
+    keyContacts: [],
+    aum: "",
+    fundNum: "",
+    leadCapable: false,
+    strategic: false,
+  };
+}
 
 // ── Filter pills ───────────────────────────────────────────────────────────────
 
@@ -543,7 +215,7 @@ interface Props {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) {
+export function FundsViewClient({ initialCompanies }: Props) {
   const supabase = createClient();
 
   const [search, setSearch]             = useState("");
@@ -554,7 +226,7 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
   const [visible, setVisible] = useState(false);
 
   // Panel tab
-  const [fundTab, setFundTab] = useState<"overview" | "opportunities">("overview");
+  const [fundTab, setFundTab] = useState<"overview" | "opportunities" | "intelligence">("overview");
 
   // Live contacts from Supabase — keyed by fund id
   const [fundContacts, setFundContacts] = useState<Record<string, Contact[]>>({});
@@ -596,20 +268,36 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
   const [fundOppDesc, setFundOppDesc]     = useState("");
   const [fundOppDue, setFundOppDue]       = useState("");
 
+  // Per-fund user-editable overrides (loaded from localStorage on mount)
+  const [fundExtMap, setFundExtMap] = useState<Record<string, Partial<FundData>>>({});
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) setFundExtMap(JSON.parse(raw) as Record<string, Partial<FundData>>);
+    } catch {}
+  }, []);
+
+  // Map DB companies → FundData, applying any user overrides from localStorage
+  const fundList = useMemo<FundData[]>(
+    () => initialCompanies.map(c => ({ ...companyToFundData(c), ...(fundExtMap[c.id] ?? {}) })),
+    [initialCompanies, fundExtMap]
+  );
+
   // Derived stats
   const stats = useMemo(() => ({
-    total:          FUND_INTELLIGENCE.length,
-    activeCoInvest: FUND_INTELLIGENCE.filter(f => f.coInvest === "active").length,
-    thesisAligned:  FUND_INTELLIGENCE.filter(f => f.overallAlign >= 70).length,
-    coInvestReady:  FUND_INTELLIGENCE.filter(f => f.leadCapable && f.coInvest !== "none").length,
-    warmRel:        FUND_INTELLIGENCE.filter(f => f.relHealth >= 60).length,
-    sourcingActive: FUND_INTELLIGENCE.filter(f => f.dealFlow !== "none").length,
-    overdue:        FUND_INTELLIGENCE.filter(f => f.overdue).length,
-  }), []);
+    total:          fundList.length,
+    activeCoInvest: fundList.filter(f => f.coInvest === "active").length,
+    thesisAligned:  fundList.filter(f => f.overallAlign >= 70).length,
+    coInvestReady:  fundList.filter(f => f.leadCapable && f.coInvest !== "none").length,
+    warmRel:        fundList.filter(f => f.relHealth >= 60).length,
+    sourcingActive: fundList.filter(f => f.dealFlow !== "none").length,
+    overdue:        fundList.filter(f => f.overdue).length,
+  }), [fundList]);
 
   // Filtered list
   const filtered = useMemo(() => {
-    let list = FUND_INTELLIGENCE;
+    let list = fundList;
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(f =>
@@ -627,7 +315,7 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
     if (activeFilter === "warm")      list = list.filter(f => f.relHealth >= 60);
     if (activeFilter === "overdue")   list = list.filter(f => f.overdue);
     return list;
-  }, [search, activeFilter]);
+  }, [search, activeFilter, fundList]);
 
   // When selectedId changes, animate panel, reset tab, and fetch live contacts
   useEffect(() => {
@@ -646,58 +334,16 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
       // Skip if already fetched
       if (fundContacts[selectedId]) return;
 
-      // Fetch contacts: 1) by fund company name, 2) by hardcoded key contact names
-      const fund = FUND_INTELLIGENCE.find(f => f.id === selectedId);
-      if (!fund) return;
-
-      // Extract plain names from "Name (Role)" strings
-      const keyNames = fund.keyContacts.map(s => s.replace(/\s*\([^)]*\)$/, "").trim());
-
+      // selectedId is a real UUID — query contacts directly by company_id
       (async () => {
         try {
-          // First: find the company in Supabase by fund name
-          const { data: coData } = await supabase
-            .from("companies")
-            .select("id")
-            .ilike("name", fund.co)
-            .limit(1)
-            .single();
-
-          let contacts: Contact[] = [];
-
-          if (coData?.id) {
-            // Pull contacts linked to this company
-            const { data: byCompany } = await supabase
-              .from("contacts")
-              .select("*")
-              .eq("company_id", coData.id)
-              .limit(20);
-            contacts = (byCompany as Contact[]) ?? [];
-          }
-
-          // Also match by key contact names (first + last name)
-          if (keyNames.length > 0) {
-            const { data: byName } = await supabase
-              .from("contacts")
-              .select("*")
-              .or(keyNames.map(n => {
-                const parts = n.split(" ");
-                const first = parts[0] ?? "";
-                const last = parts.slice(1).join(" ");
-                return `and(first_name.ilike.${first},last_name.ilike.${last})`;
-              }).join(","))
-              .limit(20);
-
-            // Merge, deduplicate by id
-            const existing = new Set(contacts.map(c => c.id));
-            for (const c of (byName as Contact[]) ?? []) {
-              if (!existing.has(c.id)) contacts.push(c);
-            }
-          }
-
-          setFundContacts(prev => ({ ...prev, [selectedId]: contacts }));
+          const { data: byCompany } = await supabase
+            .from("contacts")
+            .select("*")
+            .eq("company_id", selectedId)
+            .limit(20);
+          setFundContacts(prev => ({ ...prev, [selectedId]: (byCompany as Contact[]) ?? [] }));
         } catch {
-          // Silently fail — fall back to hardcoded display
           setFundContacts(prev => ({ ...prev, [selectedId]: [] }));
         }
       })();
@@ -707,7 +353,7 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
   }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const baseSelected = selectedId
-    ? FUND_INTELLIGENCE.find(f => f.id === selectedId) ?? null
+    ? fundList.find(f => f.id === selectedId) ?? null
     : null;
 
   // Merge with overrides
@@ -721,6 +367,12 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
       ...prev,
       [selectedId]: { ...(prev[selectedId] ?? {}), [field]: value },
     }));
+    // Also persist to localStorage so the override survives page refresh
+    setFundExtMap(prev => {
+      const next = { ...prev, [selectedId]: { ...(prev[selectedId] ?? {}), [field]: value } };
+      try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
   }
 
   // Get current portfolio overlap (overrides or base)
@@ -1207,7 +859,7 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
 
               {/* Tabs */}
               <div className="flex border-b border-slate-200 flex-shrink-0">
-                {(["overview", "opportunities"] as const).map(tab => (
+                {(["overview", "opportunities", "intelligence"] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setFundTab(tab)}
@@ -1216,7 +868,7 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
                       fundTab === tab ? "text-blue-600 border-b-2 border-blue-600" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
-                    {tab === "overview" ? "Overview" : "Opportunities / Tasks"}
+                    {tab === "overview" ? "Overview" : tab === "opportunities" ? "Opportunities / Tasks" : "Intelligence"}
                   </button>
                 ))}
               </div>
@@ -1407,16 +1059,30 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
                       )}
                     </div>
 
-                    {/* 5. Intelligence Feed */}
+                    {/* 5. Intelligence Feed — compact preview in Overview */}
                     {selected.intel.length > 0 && (
                       <div className="px-4 py-3">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Intelligence Feed</p>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Intelligence Feed</p>
+                          <button onClick={() => setFundTab("intelligence")} className="text-[10px] text-blue-500 hover:underline">See all</button>
+                        </div>
                         <div className="flex flex-col gap-1.5">
-                          {selected.intel.map((item, i) => (
-                            <div key={i} className="rounded-lg border border-slate-200 px-2.5 py-2">
-                              <p className="text-xs font-medium text-slate-800">{item.headline}</p>
-                              <p className="text-[10px] text-slate-400 mt-0.5">{item.meta}</p>
-                            </div>
+                          {selected.intel.slice(0, 3).map((item, i) => (
+                            item.url ? (
+                              <a key={i} href={item.url} target="_blank" rel="noopener noreferrer"
+                                className="rounded-lg border border-slate-200 px-2.5 py-2 hover:border-blue-300 hover:bg-blue-50 transition-colors block">
+                                <p className="text-xs font-medium text-slate-800 flex items-center gap-1">
+                                  {item.headline}
+                                  <ExternalLink size={9} className="text-blue-400 flex-shrink-0" />
+                                </p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">{item.meta}</p>
+                              </a>
+                            ) : (
+                              <div key={i} className="rounded-lg border border-slate-200 px-2.5 py-2">
+                                <p className="text-xs font-medium text-slate-800">{item.headline}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">{item.meta}</p>
+                              </div>
+                            )
                           ))}
                         </div>
                       </div>
@@ -1474,8 +1140,11 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
                                       {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
+                                      {(c.location_city || c.location_country) && (
+                                        <p className="text-[10px] text-slate-400 truncate">{[c.location_city, c.location_country].filter(Boolean).join(", ")}</p>
+                                      )}
                                     </div>
-                                    <ChevronRight size={12} className="text-slate-300 flex-shrink-0" />
+                                    <ChevronRight size={12} className={cn("text-slate-300 flex-shrink-0 transition-transform", selectedContact === c.id && "rotate-90")} />
                                   </button>
                                 ));
                               })()
@@ -1735,6 +1404,36 @@ export function FundsViewClient({ initialCompanies: _initialCompanies }: Props) 
                         );
                       } catch { return null; }
                     })()}
+                  </div>
+                )}
+
+                {/* ── INTELLIGENCE TAB ─────────────────────────────────────── */}
+                {fundTab === "intelligence" && (
+                  <div className="px-4 py-3">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Intelligence Feed</p>
+                    {selected.intel.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">No intelligence items yet</p>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {selected.intel.map((item, i) => (
+                          item.url ? (
+                            <a key={i} href={item.url} target="_blank" rel="noopener noreferrer"
+                              className="rounded-xl border border-slate-200 px-3 py-2.5 hover:border-blue-300 hover:bg-blue-50 transition-colors block">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-xs font-medium text-slate-800">{item.headline}</p>
+                                <ExternalLink size={10} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-0.5">{item.meta}</p>
+                            </a>
+                          ) : (
+                            <div key={i} className="rounded-xl border border-slate-200 px-3 py-2.5">
+                              <p className="text-xs font-medium text-slate-800">{item.headline}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">{item.meta}</p>
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
