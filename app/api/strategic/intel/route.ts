@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       const combined = results.slice(0, 6).map((r, i) => `[${i}] ${r.title}\n${r.text?.slice(0, 300)}\nURL: ${r.url}\nDate: ${r.publishedDate}`).join("\n\n---\n\n");
       try {
         const msg = await anthropic.messages.create({
-          model: "claude-haiku-4-5", max_tokens: 800,
+          model: "claude-haiku-4-5-20251001", max_tokens: 800,
           messages: [{ role: "user", content: `You are a VC analyst. For each article below about ${name} (a strategic partner for a cleantech/techbio fund), determine if it is a relevant signal (new investment mandate, partnership, leadership change, R&D announcement, market expansion). Return a JSON array: [{"index": 0, "headline": "concise headline under 15 words", "summary": "1 sentence relevance to a VC fund", "is_signal": true/false}]. Only include articles that are genuinely about ${name}.\n\nArticles:\n${combined}\n\nReturn only the JSON array.` }],
         });
         const raw = msg.content[0].type === "text" ? msg.content[0].text : "[]";
