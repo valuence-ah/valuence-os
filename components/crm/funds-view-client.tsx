@@ -7,7 +7,7 @@ import type { Company, Contact } from "@/lib/types";
 import { cn, formatDate, timeAgo } from "@/lib/utils";
 import {
   Search, X, Building2, TrendingUp, Users, AlertCircle,
-  CheckCircle2, Zap, ChevronRight, ExternalLink, MapPin, Plus, Check,
+  CheckCircle2, Zap, ChevronRight, ExternalLink, MapPin, Plus, Check, Sparkles,
 } from "lucide-react";
 
 // ── Fund Intelligence Types ────────────────────────────────────────────────────
@@ -245,6 +245,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [addFundLoc, setAddFundLoc]     = useState("");
   const [addFundDesc, setAddFundDesc]   = useState("");
 
+  // Generate-all-descriptions state
+  const [genDescLoading, setGenDescLoading]   = useState(false);
+  const [genDescStatus, setGenDescStatus]     = useState<string | null>(null);
+
   // Double-click field editing in overview
   const [editingFundField, setEditingFundField] = useState<string | null>(null);
   const [fundOverrides, setFundOverrides] = useState<Record<string, Partial<FundData>>>({});
@@ -479,6 +483,26 @@ export function FundsViewClient({ initialCompanies }: Props) {
     setShowFundOppForm(false);
   }
 
+  // ── Generate descriptions for all funds via Claude Haiku ──────────────────
+  async function generateAllDescriptions() {
+    setGenDescLoading(true);
+    setGenDescStatus("Generating… this takes ~30s");
+    try {
+      const res = await fetch("/api/funds/generate-descriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true }),
+      });
+      const data = await res.json() as { success: number; failed: number; processed: number };
+      setGenDescStatus(`Done — ${data.success ?? 0} generated${data.failed ? `, ${data.failed} failed` : ""}`);
+    } catch {
+      setGenDescStatus("Error — please try again");
+    }
+    setGenDescLoading(false);
+    // Reload so new descriptions appear in list
+    setTimeout(() => { window.location.reload(); }, 1500);
+  }
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-50">
 
@@ -572,6 +596,16 @@ export function FundsViewClient({ initialCompanies }: Props) {
         <span className="text-xs text-slate-400 ml-auto">
           {filtered.length} fund{filtered.length !== 1 ? "s" : ""}
         </span>
+        {/* Generate all descriptions */}
+        <button
+          onClick={generateAllDescriptions}
+          disabled={genDescLoading}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-600 hover:border-violet-400 hover:text-violet-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Generate AI descriptions for all funds"
+        >
+          <Sparkles size={13} className={genDescLoading ? "animate-spin" : ""} />
+          {genDescLoading ? (genDescStatus ?? "Generating…") : "Generate Descriptions"}
+        </button>
         <button
           onClick={() => setShowAddFund(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
