@@ -50,6 +50,13 @@ interface FundData {
 
 const LS_KEY = "funds_ext_map";
 
+// Match admin TypeCell: read from `types` array first, fall back to `type` field
+function effectiveType(c: Company): string {
+  const arr = (c.types as string[] | null) ?? [];
+  if (arr.length > 0) return arr[0];
+  return c.type ?? "";
+}
+
 function companyToFundData(c: Company): FundData {
   const loc = [
     (c as unknown as Record<string, string>).location_city,
@@ -60,7 +67,7 @@ function companyToFundData(c: Company): FundData {
     co: c.name ?? "",
     initials: (c.name ?? "?").split(/\s+/).map((w: string) => w[0] ?? "").join("").slice(0, 2).toUpperCase(),
     desc: c.description ?? "",
-    type: c.type ?? ((c.sectors as string[] | null)?.[0] ?? ""),
+    type: effectiveType(c),
     loc,
     stages: [c.stage].filter(Boolean) as string[],
     checkSize: "",
