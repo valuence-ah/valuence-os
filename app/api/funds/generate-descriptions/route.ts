@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
   const toProcess = force ? rows : rows.filter((c) => !(c.description as string | null)?.trim());
   const skipped = rows.length - toProcess.length;
 
-  const results: { name: string; status: "ok" | "error" | "skipped"; description?: string; reason?: string }[] = [];
+  const results: { id: string; name: string; status: "ok" | "error" | "skipped"; description?: string; reason?: string }[] = [];
   let success = 0;
   let failed = 0;
 
@@ -103,13 +103,13 @@ export async function POST(req: NextRequest) {
       const description = words.slice(0, 30).join(" ").replace(/['"]+/g, "");
 
       await supabase.from("companies").update({ description }).eq("id", c.id as string);
-      results.push({ name, status: "ok", description });
+      results.push({ id: c.id as string, name, status: "ok", description });
       success++;
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       const name = (c.name as string) ?? "?";
       console.error(`generate-descriptions error for ${name}:`, reason);
-      results.push({ name, status: "error", reason });
+      results.push({ id: c.id as string, name, status: "error", reason });
       failed++;
     }
   }
