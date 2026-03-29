@@ -40,6 +40,23 @@ const CONTACT_TYPE_OPTIONS = [
 
 type ContactTypeStr = (typeof CONTACT_TYPE_OPTIONS)[number];
 
+/** Country options — same list as Admin → Contacts → Country makeComboEditor. Free text always allowed. */
+const COUNTRY_OPTIONS = [
+  "USA", "UK", "Canada", "Singapore", "South Korea", "Japan",
+  "Germany", "France", "Australia", "Israel", "India", "China",
+  "Thailand", "Malaysia", "Brunei", "Other",
+] as const;
+
+/** Title suggestions — mirrors common VC/startup titles; free text still allowed. */
+const TITLE_SUGGESTIONS = [
+  "CEO", "CTO", "CFO", "COO", "Founder", "Co-Founder",
+  "General Partner", "Managing Partner", "Partner", "Venture Partner", "Operating Partner",
+  "Principal", "Associate", "Analyst", "Senior Associate",
+  "Managing Director", "Director", "Vice President", "Senior Vice President",
+  "President", "Head of Investments", "Head of Portfolio", "Investment Manager",
+  "Portfolio Manager", "Chief of Staff", "Advisor", "Board Member",
+] as const;
+
 const CONTACT_TO_COMPANY_TYPE: Partial<Record<ContactTypeStr, CompanyType>> = {
   "Founder / Mgmt":      "startup",
   "Limited Partner":     "lp",
@@ -611,6 +628,8 @@ const ContactRow = memo(function ContactRow({
 }) {
   const supabase = createClient();
 
+  const [firstName, setFirstName]           = useState(contact.first_name ?? "");
+  const [lastName, setLastName]             = useState(contact.last_name ?? "");
   const [type, setType]                     = useState<string>(() => mapTypeToAdmin(contact.type));
   const [title, setTitle]                   = useState(contact.title ?? "");
   const [companyId, setCompanyId]           = useState(contact.company_id ?? "");
@@ -644,6 +663,8 @@ const ContactRow = memo(function ContactRow({
 
     const { error } = await supabase.from("contacts").update({
       status:           "active",
+      first_name:       firstName.trim() || contact.first_name,
+      last_name:        lastName.trim()  || null,
       type,
       title:            title.trim() || contact.title || null,
       company_id:       resolvedCompanyId,
@@ -677,19 +698,30 @@ const ContactRow = memo(function ContactRow({
   return (
     <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 min-w-0 hover:border-slate-300 transition-colors">
 
-      {/* Avatar */}
+      {/* Avatar — updates as name changes */}
       <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
         <span className="text-violet-600 text-[9px] font-bold">
-          {getInitials(`${contact.first_name} ${contact.last_name ?? ""}`)}
+          {getInitials(`${firstName} ${lastName}`) || "?"}
         </span>
       </div>
 
-      {/* Name + email */}
-      <div className="w-40 flex-shrink-0 min-w-0">
-        <p className="text-xs font-semibold text-slate-800 truncate leading-tight">
-          {contact.first_name} {contact.last_name}
-        </p>
-        <div className="flex items-center gap-1 mt-0.5">
+      {/* Name (editable) + email */}
+      <div className="w-44 flex-shrink-0 min-w-0">
+        <div className="flex gap-1 mb-0.5">
+          <input
+            value={firstName}
+            onChange={e => setFirstName(e.target.value)}
+            placeholder="First"
+            className="w-[52%] text-xs font-semibold border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-800 placeholder:text-slate-300 placeholder:font-normal"
+          />
+          <input
+            value={lastName}
+            onChange={e => setLastName(e.target.value)}
+            placeholder="Last"
+            className="w-[48%] text-xs font-semibold border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-800 placeholder:text-slate-300 placeholder:font-normal"
+          />
+        </div>
+        <div className="flex items-center gap-1">
           {contact.email ? (
             <a href={`mailto:${contact.email}`} title={contact.email}
               className="text-[10px] text-blue-500 hover:underline truncate block leading-tight">
@@ -716,13 +748,17 @@ const ContactRow = memo(function ContactRow({
         {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
 
-      {/* Title */}
+      {/* Title — combobox with suggestions, free text allowed */}
       <input
+        list={`title-list-${contact.id}`}
         value={title}
         onChange={e => setTitle(e.target.value)}
         placeholder={contact.title || "Job title"}
         className="w-28 flex-shrink-0 text-xs border border-slate-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-300"
       />
+      <datalist id={`title-list-${contact.id}`}>
+        {TITLE_SUGGESTIONS.map(t => <option key={t} value={t} />)}
+      </datalist>
 
       {/* Company dropdown */}
       <div className="w-48 flex-shrink-0">
@@ -745,13 +781,17 @@ const ContactRow = memo(function ContactRow({
         className="w-20 flex-shrink-0 text-xs border border-slate-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-300"
       />
 
-      {/* Country */}
+      {/* Country — combobox matching Admin list; free text always allowed */}
       <input
+        list={`country-list-${contact.id}`}
         value={country}
         onChange={e => setCountry(e.target.value)}
         placeholder="Country *"
         className="w-20 flex-shrink-0 text-xs border border-slate-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-300"
       />
+      <datalist id={`country-list-${contact.id}`}>
+        {COUNTRY_OPTIONS.map(c => <option key={c} value={c} />)}
+      </datalist>
 
       {/* Added date */}
       <span className="text-[10px] text-slate-400 flex-shrink-0 w-16 truncate text-right">
@@ -822,7 +862,7 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
       {/* Column headers */}
       <div className="flex items-center gap-2 px-3 mb-1">
         <div className="w-7 flex-shrink-0" />
-        <div className="w-40 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Contact</div>
+        <div className="w-44 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Name / Contact</div>
         <div className="w-36 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Type *</div>
         <div className="w-28 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Title</div>
         <div className="w-48 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Company</div>
