@@ -886,6 +886,39 @@ export function FundsViewClient({ initialCompanies }: Props) {
                 {/* ── OVERVIEW TAB ───────────────────────────────────────────── */}
                 {fundTab === "overview" && (
                   <>
+                    {/* 0. Description — 30-40 word fund summary */}
+                    <div className="px-4 py-3 border-b border-slate-100">
+                      {editingFundField === "desc" ? (
+                        <textarea
+                          autoFocus
+                          defaultValue={selected.desc}
+                          rows={3}
+                          placeholder="Write a 30–40 word description of this fund…"
+                          onBlur={async (e) => {
+                            const val = e.target.value.trim();
+                            setFundFieldOverride("desc", val);
+                            if (selectedId) {
+                              await supabase.from("companies").update({ description: val }).eq("id", selectedId);
+                            }
+                            setEditingFundField(null);
+                          }}
+                          onKeyDown={e => { if (e.key === "Escape") { setEditingFundField(null); } }}
+                          className="text-xs text-slate-700 leading-relaxed w-full border border-blue-300 rounded-md p-2 focus:outline-none resize-none"
+                        />
+                      ) : (
+                        <p
+                          className={cn(
+                            "text-xs leading-relaxed cursor-default select-none",
+                            selected.desc ? "text-slate-600" : "text-slate-300 italic"
+                          )}
+                          onDoubleClick={() => setEditingFundField("desc")}
+                          title="Double-click to edit description"
+                        >
+                          {selected.desc || "No description — double-click to add, or edit in Admin"}
+                        </p>
+                      )}
+                    </div>
+
                     {/* 1. Overview — editable fields */}
                     <div className="px-4 py-3">
                       <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Overview</p>
