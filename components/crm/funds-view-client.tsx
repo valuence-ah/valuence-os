@@ -245,9 +245,8 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [addFundLoc, setAddFundLoc]     = useState("");
   const [addFundDesc, setAddFundDesc]   = useState("");
 
-  // Generate-all-descriptions state
-  const [genDescLoading, setGenDescLoading]   = useState(false);
-  const [genDescStatus, setGenDescStatus]     = useState<string | null>(null);
+  // Auto-generate description state (set while Haiku is generating for selected fund)
+  const [descGenerating, setDescGenerating] = useState(false);
 
   // Double-click field editing in overview
   const [editingFundField, setEditingFundField] = useState<string | null>(null);
@@ -328,7 +327,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
     return list;
   }, [search, activeFilter, fundList]);
 
-  // When selectedId changes, animate panel, reset tab, and fetch live contacts
+  // When selectedId changes, animate panel, reset tab, fetch contacts, and auto-generate description
   useEffect(() => {
     if (selectedId) {
       setVisible(false);
@@ -341,25 +340,53 @@ export function FundsViewClient({ initialCompanies }: Props) {
       setShowAddOverlap(false);
       setShowAddRelationship(false);
       setShowFundOppForm(false);
+      setDescGenerating(false);
 
-      // Skip if already fetched
-      if (fundContacts[selectedId]) return;
+      // Fetch contacts if not already loaded
+      if (!fundContacts[selectedId]) {
+        (async () => {
+          try {
+            const { data: byCompany } = await supabase
+              .from("contacts")
+              .select("*")
+              .eq("company_id", selectedId)
+              .limit(20);
+            setFundContacts(prev => ({ ...prev, [selectedId]: (byCompany as Contact[]) ?? [] }));
+          } catch {
+            setFundContacts(prev => ({ ...prev, [selectedId]: [] }));
+          }
+        })();
+      }
 
-      // selectedId is a real UUID — query contacts directly by company_id
-      (async () => {
-        try {
-          const { data: byCompany } = await supabase
-            .from("contacts")
-            .select("*")
-            .eq("company_id", selectedId)
-            .limit(20);
-          setFundContacts(prev => ({ ...prev, [selectedId]: (byCompany as Contact[]) ?? [] }));
-        } catch {
-          setFundContacts(prev => ({ ...prev, [selectedId]: [] }));
-        }
-      })();
+      // Auto-generate description if missing
+      const fund = fundList.find(f => f.id === selectedId);
+      const hasDesc = fund?.desc && fund.desc.trim().length > 0;
+      const alreadyOverridden = !!fundOverrides[selectedId]?.desc;
+      if (!hasDesc && !alreadyOverridden) {
+        setDescGenerating(true);
+        (async () => {
+          try {
+            const res = await fetch("/api/funds/generate-descriptions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ company_id: selectedId, force: true }),
+            });
+            const data = await res.json() as { results?: { status: string; description?: string }[] };
+            const desc = data.results?.[0]?.description;
+            if (desc) {
+              // Update local override so it shows immediately
+              setFundOverrides(prev => ({
+                ...prev,
+                [selectedId]: { ...(prev[selectedId] ?? {}), desc },
+              }));
+            }
+          } catch { /* silently fail */ }
+          setDescGenerating(false);
+        })();
+      }
     } else {
       setVisible(false);
+      setDescGenerating(false);
     }
   }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -483,26 +510,6 @@ export function FundsViewClient({ initialCompanies }: Props) {
     setShowFundOppForm(false);
   }
 
-  // ── Generate descriptions for all funds via Claude Haiku ──────────────────
-  async function generateAllDescriptions() {
-    setGenDescLoading(true);
-    setGenDescStatus("Generating… this takes ~30s");
-    try {
-      const res = await fetch("/api/funds/generate-descriptions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: true }),
-      });
-      const data = await res.json() as { success: number; failed: number; processed: number };
-      setGenDescStatus(`Done — ${data.success ?? 0} generated${data.failed ? `, ${data.failed} failed` : ""}`);
-    } catch {
-      setGenDescStatus("Error — please try again");
-    }
-    setGenDescLoading(false);
-    // Reload so new descriptions appear in list
-    setTimeout(() => { window.location.reload(); }, 1500);
-  }
-
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-50">
 
@@ -596,16 +603,6 @@ export function FundsViewClient({ initialCompanies }: Props) {
         <span className="text-xs text-slate-400 ml-auto">
           {filtered.length} fund{filtered.length !== 1 ? "s" : ""}
         </span>
-        {/* Generate all descriptions */}
-        <button
-          onClick={generateAllDescriptions}
-          disabled={genDescLoading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-600 hover:border-violet-400 hover:text-violet-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Generate AI descriptions for all funds"
-        >
-          <Sparkles size={13} className={genDescLoading ? "animate-spin" : ""} />
-          {genDescLoading ? (genDescStatus ?? "Generating…") : "Generate Descriptions"}
-        </button>
         <button
           onClick={() => setShowAddFund(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -920,15 +917,22 @@ export function FundsViewClient({ initialCompanies }: Props) {
                 {/* ── OVERVIEW TAB ───────────────────────────────────────────── */}
                 {fundTab === "overview" && (
                   <>
-                    {/* 0. Description — 30-40 word fund summary */}
+                    {/* 0. Description — auto-generated by Claude Haiku on first open */}
                     <div className="px-4 py-3 border-b border-slate-100">
-                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Description</p>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Description</p>
+                        {descGenerating && (
+                          <span className="flex items-center gap-1 text-[10px] text-violet-500">
+                            <Sparkles size={10} className="animate-pulse" /> Generating…
+                          </span>
+                        )}
+                      </div>
                       {editingFundField === "desc" ? (
                         <textarea
                           autoFocus
                           defaultValue={selected.desc}
                           rows={3}
-                          placeholder="Write a 30–40 word description of this fund…"
+                          placeholder="Write a description of this fund…"
                           onBlur={async (e) => {
                             const val = e.target.value.trim();
                             setFundFieldOverride("desc", val);
@@ -947,9 +951,12 @@ export function FundsViewClient({ initialCompanies }: Props) {
                             selected.desc ? "text-slate-700" : "text-slate-400 italic"
                           )}
                           onDoubleClick={() => setEditingFundField("desc")}
-                          title="Double-click to edit description"
+                          title="Double-click to edit"
                         >
-                          {selected.desc || "No description yet — double-click to add one"}
+                          {descGenerating
+                            ? <span className="text-slate-300 italic">Writing description…</span>
+                            : selected.desc || <span className="italic">No description — double-click to write one</span>
+                          }
                         </p>
                       )}
                     </div>
