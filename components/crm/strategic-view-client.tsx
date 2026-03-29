@@ -299,7 +299,6 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [linkingContact, setLinkingContact]           = useState(false);
 
   // Contacts manage mode
-  const [contactsManaging, setContactsManaging] = useState(false);
   const [showAddContactForm, setShowAddContactForm] = useState(false);
   const [newContactFirst, setNewContactFirst] = useState("");
   const [newContactLast, setNewContactLast]   = useState("");
@@ -1218,107 +1217,97 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     <div className="pt-2 border-t border-slate-100">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Contacts</h3>
-                        <button onClick={() => { setContactsManaging(v => !v); setShowAddContactForm(false); setShowLinkContactForm(false); }}
-                          className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                          {contactsManaging ? "Done" : <>Manage <ChevronRight size={11} /></>}
-                        </button>
                       </div>
-                      <div className="h-[200px] overflow-y-auto space-y-2 pr-1">
+                      <div className="space-y-2 pr-1">
                         {loadingDetail ? (
-                          [1, 2].map(i => <div key={i} className="h-14 bg-slate-50 rounded-lg animate-pulse" />)
-                        ) : contactsManaging ? (<>
-                          {contacts.length === 0 && !showAddContactForm && !showLinkContactForm && <p className="text-xs text-slate-400 italic">No contacts linked yet.</p>}
-                          {(contactOrder.length > 0 ? [...contacts].sort((a, b) => contactOrder.indexOf(a.id) - contactOrder.indexOf(b.id)) : contacts).map((c, idx, arr) => (
-                            <div key={c.id}
-                              draggable
-                              onDragStart={() => { strContactDragIdx.current = idx; }}
-                              onDragOver={e => e.preventDefault()}
-                              onDrop={() => {
-                                if (strContactDragIdx.current === null || strContactDragIdx.current === idx) return;
-                                const order = arr.map(x => x.id);
-                                const [moved] = order.splice(strContactDragIdx.current, 1);
-                                order.splice(idx, 0, moved);
-                                setContactOrder(order);
-                                strContactDragIdx.current = null;
-                              }}
-                              className="flex items-start gap-2 p-2.5 border border-slate-100 rounded-xl cursor-grab">
-                              <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${hashColor(c.first_name + (c.last_name ?? ""))} flex items-center justify-center flex-shrink-0`}>
-                                <span className="text-white text-[9px] font-bold">{getInitials(`${c.first_name} ${c.last_name ?? ""}`)}</span>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
-                                {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
-                              </div>
-                              <button onClick={async () => { if (!confirm(`Remove ${c.first_name}?`)) return; await supabase.from("contacts").delete().eq("id", c.id); setContacts(prev => prev.filter(x => x.id !== c.id)); }}
-                                className="w-5 h-5 flex items-center justify-center rounded border border-slate-200 text-slate-300 hover:border-red-200 hover:text-red-400 flex-shrink-0"><X size={10} /></button>
-                            </div>
-                          ))}
-                          {showAddContactForm ? (
-                            <div className="border border-blue-200 rounded-xl bg-blue-50 p-2.5 space-y-2">
-                              <p className="text-xs font-semibold text-slate-700">New Contact</p>
-                              <div className="grid grid-cols-2 gap-1.5">
-                                <input className="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="First name *" value={newContactFirst} onChange={e => setNewContactFirst(e.target.value)} />
-                                <input className="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Last name" value={newContactLast} onChange={e => setNewContactLast(e.target.value)} />
-                              </div>
-                              <input className="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" type="email" placeholder="Email" value={newContactEmail} onChange={e => setNewContactEmail(e.target.value)} />
-                              <input className="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Title" value={newContactTitle} onChange={e => setNewContactTitle(e.target.value)} />
-                              <div className="flex gap-1.5">
-                                <button onClick={() => { setShowAddContactForm(false); setNewContactFirst(""); setNewContactLast(""); setNewContactEmail(""); setNewContactTitle(""); }} className="flex-1 py-1 border border-slate-200 rounded text-xs text-slate-600 hover:bg-white">Cancel</button>
-                                <button disabled={addingContact || !newContactFirst.trim()} onClick={handleAddContact}
-                                  className="flex-1 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium rounded flex items-center justify-center gap-1">
-                                  {addingContact ? <><Loader2 size={10} className="animate-spin" />Adding…</> : <><Check size={10} />Add</>}
-                                </button>
-                              </div>
-                            </div>
-                          ) : showLinkContactForm ? (
-                            <div className="border border-indigo-200 rounded-xl bg-indigo-50 p-2.5 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <p className="text-xs font-semibold text-slate-700">Link Existing</p>
-                                <button onClick={() => { setShowLinkContactForm(false); setLinkContactSearch(""); setLinkContactSuggestions([]); }}><X size={11} className="text-slate-400" /></button>
-                              </div>
-                              <input className="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                                placeholder="Search by name or email…" value={linkContactSearch}
-                                onChange={e => searchLinkContacts(e.target.value)} autoFocus />
-                              {linkContactSuggestions.length > 0 && (
-                                <div className="max-h-[120px] overflow-y-auto border border-slate-200 rounded bg-white divide-y divide-slate-100">
-                                  {linkContactSuggestions.map(c => (
-                                    <button key={c.id} disabled={linkingContact} onClick={() => linkContactToCompany(c.id)}
-                                      className="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-indigo-50 disabled:opacity-50">
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
-                                        {c.email && <p className="text-[10px] text-slate-400 truncate">{c.email}</p>}
-                                      </div>
-                                      {c.company_id && c.company_id !== selected?.id && <span className="text-[10px] text-amber-600 bg-amber-50 px-1 rounded flex-shrink-0">Linked</span>}
-                                    </button>
-                                  ))}
+                          <>{[1, 2].map(i => <div key={i} className="h-14 bg-slate-50 rounded-lg animate-pulse" />)}</>
+                        ) : (
+                          <>
+                            {/* Contact list — always draggable + deletable */}
+                            <div className="max-h-[200px] overflow-y-auto space-y-2">
+                              {contacts.length === 0 && !showAddContactForm && !showLinkContactForm && (
+                                <p className="text-xs text-slate-400 italic">No contacts linked yet.</p>
+                              )}
+                              {(contactOrder.length > 0 ? [...contacts].sort((a, b) => contactOrder.indexOf(a.id) - contactOrder.indexOf(b.id)) : contacts).map((c, idx, arr) => (
+                                <div key={c.id}
+                                  draggable
+                                  onDragStart={() => { strContactDragIdx.current = idx; }}
+                                  onDragOver={e => e.preventDefault()}
+                                  onDrop={() => {
+                                    if (strContactDragIdx.current === null || strContactDragIdx.current === idx) return;
+                                    const order = arr.map(x => x.id);
+                                    const [moved] = order.splice(strContactDragIdx.current, 1);
+                                    order.splice(idx, 0, moved);
+                                    setContactOrder(order);
+                                    strContactDragIdx.current = null;
+                                  }}
+                                  className="flex items-start gap-2 p-2.5 border border-slate-100 rounded-xl cursor-grab hover:border-slate-200 bg-slate-50 hover:bg-white transition-colors">
+                                  <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${hashColor(c.first_name + (c.last_name ?? ""))} flex items-center justify-center flex-shrink-0`}>
+                                    <span className="text-white text-[9px] font-bold">{getInitials(`${c.first_name} ${c.last_name ?? ""}`)}</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                                    {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
+                                    {c.email && <a href={`mailto:${c.email}`} className="flex items-center gap-1 text-[10px] text-blue-500 hover:underline truncate"><Mail size={9} />{c.email}</a>}
+                                  </div>
+                                  <button onClick={async () => { if (!confirm(`Remove ${c.first_name}?`)) return; await supabase.from("contacts").delete().eq("id", c.id); setContacts(prev => prev.filter(x => x.id !== c.id)); }}
+                                    className="w-5 h-5 flex items-center justify-center rounded border border-slate-200 text-slate-300 hover:border-red-200 hover:text-red-400 flex-shrink-0 mt-0.5"><X size={10} /></button>
                                 </div>
-                              )}
-                              {linkContactSearch.length >= 2 && linkContactSuggestions.length === 0 && <p className="text-[10px] text-slate-400 italic">No contacts found</p>}
+                              ))}
                             </div>
-                          ) : (
-                            <div className="space-y-1.5">
-                              <button onClick={() => setShowAddContactForm(true)} className="w-full flex items-center justify-center gap-1 py-1.5 border-2 border-dashed border-slate-200 rounded-xl text-xs text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors"><Plus size={11} /> Add New Contact</button>
-                              <button onClick={() => setShowLinkContactForm(true)} className="w-full flex items-center justify-center gap-1 py-1.5 border-2 border-dashed border-indigo-200 rounded-xl text-xs text-indigo-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors"><Link2 size={11} /> Link Existing Contact</button>
-                            </div>
-                          )}
-                        </>) : contacts.length === 0 ? (
-                          <p className="text-xs text-slate-400 italic">No contacts on file</p>
-                        ) : contacts.map(c => (
-                          <div key={c.id} className="flex items-start gap-2.5 p-2.5 bg-slate-50 rounded-lg">
-                            <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${hashColor(c.first_name + (c.last_name ?? ""))} flex items-center justify-center flex-shrink-0`}>
-                              <span className="text-white text-[10px] font-bold">{getInitials(`${c.first_name} ${c.last_name ?? ""}`)}</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
-                              {c.title && <p className="text-xs text-slate-400 truncate">{c.title}</p>}
-                              {c.email && (
-                                <a href={`mailto:${c.email}`} className="flex items-center gap-1 text-xs text-blue-500 hover:underline truncate">
-                                  <Mail size={9} /> {c.email}
-                                </a>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+
+                            {/* Add / Link forms */}
+                            {showAddContactForm ? (
+                              <div className="border border-blue-200 rounded-xl bg-blue-50 p-2.5 space-y-2">
+                                <p className="text-xs font-semibold text-slate-700">New Contact</p>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <input className="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="First name *" value={newContactFirst} onChange={e => setNewContactFirst(e.target.value)} />
+                                  <input className="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Last name" value={newContactLast} onChange={e => setNewContactLast(e.target.value)} />
+                                </div>
+                                <input className="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" type="email" placeholder="Email" value={newContactEmail} onChange={e => setNewContactEmail(e.target.value)} />
+                                <input className="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Title" value={newContactTitle} onChange={e => setNewContactTitle(e.target.value)} />
+                                <div className="flex gap-1.5">
+                                  <button onClick={() => { setShowAddContactForm(false); setNewContactFirst(""); setNewContactLast(""); setNewContactEmail(""); setNewContactTitle(""); }} className="flex-1 py-1 border border-slate-200 rounded text-xs text-slate-600 hover:bg-white">Cancel</button>
+                                  <button disabled={addingContact || !newContactFirst.trim()} onClick={handleAddContact}
+                                    className="flex-1 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium rounded flex items-center justify-center gap-1">
+                                    {addingContact ? <><Loader2 size={10} className="animate-spin" />Adding…</> : <><Check size={10} />Add</>}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : showLinkContactForm ? (
+                              <div className="border border-indigo-200 rounded-xl bg-indigo-50 p-2.5 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-semibold text-slate-700">Link Existing</p>
+                                  <button onClick={() => { setShowLinkContactForm(false); setLinkContactSearch(""); setLinkContactSuggestions([]); }}><X size={11} className="text-slate-400" /></button>
+                                </div>
+                                <input className="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                  placeholder="Search by name or email…" value={linkContactSearch}
+                                  onChange={e => searchLinkContacts(e.target.value)} autoFocus />
+                                {linkContactSuggestions.length > 0 && (
+                                  <div className="max-h-[120px] overflow-y-auto border border-slate-200 rounded bg-white divide-y divide-slate-100">
+                                    {linkContactSuggestions.map(c => (
+                                      <button key={c.id} disabled={linkingContact} onClick={() => linkContactToCompany(c.id)}
+                                        className="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-indigo-50 disabled:opacity-50">
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                                          {c.email && <p className="text-[10px] text-slate-400 truncate">{c.email}</p>}
+                                        </div>
+                                        {c.company_id && c.company_id !== selected?.id && <span className="text-[10px] text-amber-600 bg-amber-50 px-1 rounded flex-shrink-0">Linked</span>}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {linkContactSearch.length >= 2 && linkContactSuggestions.length === 0 && <p className="text-[10px] text-slate-400 italic">No contacts found</p>}
+                              </div>
+                            ) : (
+                              /* Always-visible action buttons */
+                              <div className="flex gap-1.5 pt-1">
+                                <button onClick={() => { setShowAddContactForm(true); setShowLinkContactForm(false); }} className="flex-1 flex items-center justify-center gap-1 py-1.5 border-2 border-dashed border-slate-200 rounded-xl text-xs text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors"><Plus size={11} /> Add new</button>
+                                <button onClick={() => { setShowLinkContactForm(true); setShowAddContactForm(false); }} className="flex-1 flex items-center justify-center gap-1 py-1.5 border-2 border-dashed border-indigo-200 rounded-xl text-xs text-indigo-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors"><Link2 size={11} /> Link existing</button>
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
 

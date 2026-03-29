@@ -198,6 +198,18 @@ function overlapAvatarColor(idx: number): string {
   return colors[idx % colors.length];
 }
 
+const STAGE_ORDER = ["Pre-Seed", "Seed", "Series A", "Series B"];
+function sortStages(stages: string[]): string[] {
+  return [...stages].sort((a, b) => {
+    const ai = STAGE_ORDER.indexOf(a);
+    const bi = STAGE_ORDER.indexOf(b);
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+}
+
 function roleBadgeClass(role: string): string {
   if (role === "Lead investor") return "bg-emerald-100 text-emerald-700";
   if (role === "Co-investor")   return "bg-blue-100 text-blue-700";
@@ -383,6 +395,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
   // Co-invest brief modal
   const [showCoInvestBrief, setShowCoInvestBrief] = useState(false);
 
+  // Table quick-filters (stage pill / sector badge click)
+  const [stageFilter, setStageFilter]   = useState<string | null>(null);
+  const [sectorFilter, setSectorFilter] = useState<string | null>(null);
+
   // Per-fund user-editable overrides (loaded from localStorage on mount)
   const [fundExtMap, setFundExtMap] = useState<Record<string, Partial<FundData>>>({});
 
@@ -437,8 +453,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
     if (activeFilter === "dealflow")  list = list.filter(f => f.dealFlow !== "none");
     if (activeFilter === "warm")      list = list.filter(f => f.relHealth >= 60);
     if (activeFilter === "overdue")   list = list.filter(f => f.overdue);
+    if (stageFilter)  list = list.filter(f => f.stages.includes(stageFilter));
+    if (sectorFilter) list = list.filter(f => f.sector.toLowerCase().includes(sectorFilter.toLowerCase()));
     return list;
-  }, [search, activeFilter, fundList]);
+  }, [search, activeFilter, stageFilter, sectorFilter, fundList]);
 
   // On mount: batch-generate descriptions for all funds that don't have one
   useEffect(() => {
@@ -836,9 +854,27 @@ export function FundsViewClient({ initialCompanies }: Props) {
             </button>
           ))}
         </div>
-        <span className="text-xs text-slate-400 ml-auto">
-          {filtered.length} fund{filtered.length !== 1 ? "s" : ""}
-        </span>
+        <div className="flex items-center gap-1.5 ml-auto">
+          {stageFilter && (
+            <button
+              onClick={() => setStageFilter(null)}
+              className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full border border-blue-200 hover:bg-blue-200"
+            >
+              Stage: {stageFilter} <X size={10} />
+            </button>
+          )}
+          {sectorFilter && (
+            <button
+              onClick={() => setSectorFilter(null)}
+              className="flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full border border-emerald-200 hover:bg-emerald-200"
+            >
+              Sector: {sectorFilter} <X size={10} />
+            </button>
+          )}
+          <span className="text-xs text-slate-400">
+            {filtered.length} fund{filtered.length !== 1 ? "s" : ""}
+          </span>
+        </div>
         <button
           onClick={() => setShowAddFund(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -856,8 +892,8 @@ export function FundsViewClient({ initialCompanies }: Props) {
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>
                 {[
-                  "Fund", "Type", "Stage focus", "Thesis alignment",
-                  "Check size", "Co-invest status", "Rel. health",
+                  "Fund", "Type", "Stage focus", "Sector",
+                  "Thesis alignment", "Check size", "Co-invest status", "Rel. health",
                   "Portfolio overlap", "Deal flow", "Owner",
                   "Last contact", "Next action", "Location",
                 ].map(col => (
@@ -923,17 +959,42 @@ export function FundsViewClient({ initialCompanies }: Props) {
                     </td>
 
                     {/* Stage focus */}
-                    <td className="px-3 py-2.5 min-w-[130px]">
+                    <td className="px-3 py-2.5 min-w-[150px]">
                       <div className="flex flex-wrap gap-0.5">
-                        {fund.stages.map(s => (
-                          <span
+                        {sortStages(fund.stages).map(s => (
+                          <button
                             key={s}
-                            className="text-xs px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium whitespace-nowrap"
+                            onClick={e => { e.stopPropagation(); setStageFilter(stageFilter === s ? null : s); }}
+                            className={cn(
+                              "text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap border transition-colors",
+                              stageFilter === s
+                                ? "bg-blue-600 text-white border-blue-600"
+                                : "bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100 hover:border-blue-300"
+                            )}
                           >
                             {s}
-                          </span>
+                          </button>
                         ))}
                       </div>
+                    </td>
+
+                    {/* Sector */}
+                    <td className="px-3 py-2.5 min-w-[120px]">
+                      {fund.sector ? (
+                        <button
+                          onClick={e => { e.stopPropagation(); setSectorFilter(sectorFilter === fund.sector ? null : fund.sector); }}
+                          className={cn(
+                            "text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap border transition-colors",
+                            sectorFilter === fund.sector
+                              ? "bg-emerald-600 text-white border-emerald-600"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 hover:border-emerald-300"
+                          )}
+                        >
+                          {fund.sector}
+                        </button>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
                     </td>
 
                     {/* Thesis alignment */}
@@ -1064,7 +1125,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="text-center py-16 text-sm text-slate-400">
+                  <td colSpan={14} className="text-center py-16 text-sm text-slate-400">
                     No funds found
                   </td>
                 </tr>
