@@ -452,6 +452,9 @@ export function LpViewClient({ initialCompanies }: Props) {
   // LP Detail tab
   const [lpDetailTab, setLpDetailTab] = useState<"overview" | "intelligence">("overview");
 
+  // Contact pop-out panel
+  const [viewingContact, setViewingContact] = useState<Contact | null>(null);
+
   // LP Intelligence feed
   type LpIntelItem = { headline: string; source: string; date: string; summary?: string; url?: string };
   const [lpIntelligence, setLpIntelligence] = useState<LpIntelItem[]>([]);
@@ -882,6 +885,100 @@ export function LpViewClient({ initialCompanies }: Props) {
             <div className="flex gap-2 justify-end">
               <button onClick={() => setEditingFundTarget(false)} className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">Cancel</button>
               <button onClick={saveFundTarget} className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Contact pop-out panel ──────────────────────────────────────────── */}
+      {viewingContact && (
+        <div
+          className="fixed inset-0 z-50"
+          onClick={() => setViewingContact(null)}
+        >
+          <div
+            className="absolute right-0 top-0 h-full w-80 bg-white shadow-2xl border-l border-slate-200 flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-4 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                  <User size={14} className="text-violet-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">
+                    {viewingContact.first_name} {viewingContact.last_name}
+                  </p>
+                  {viewingContact.is_primary_contact && (
+                    <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium">Primary</span>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => setViewingContact(null)} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+              {/* Title / Role */}
+              {viewingContact.title && (
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Title</p>
+                  <p className="text-sm text-slate-700">{viewingContact.title}</p>
+                </div>
+              )}
+
+              {/* Contact info */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Contact</p>
+                {viewingContact.email && (
+                  <a href={`mailto:${viewingContact.email}`} className="flex items-center gap-2 text-xs text-blue-600 hover:underline">
+                    <Mail size={12} className="flex-shrink-0 text-slate-400" />
+                    {viewingContact.email}
+                  </a>
+                )}
+                {viewingContact.phone && (
+                  <a href={`tel:${viewingContact.phone}`} className="flex items-center gap-2 text-xs text-slate-700 hover:text-green-600">
+                    <Phone size={12} className="flex-shrink-0 text-slate-400" />
+                    {viewingContact.phone}
+                  </a>
+                )}
+                {!viewingContact.email && !viewingContact.phone && (
+                  <p className="text-xs text-slate-400 italic">No contact details</p>
+                )}
+              </div>
+
+              {/* Location */}
+              {(viewingContact.location_city || viewingContact.location_country) && (
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Location</p>
+                  <p className="flex items-center gap-1 text-xs text-slate-600">
+                    <MapPin size={11} className="text-slate-400 flex-shrink-0" />
+                    {[viewingContact.location_city, viewingContact.location_country].filter(Boolean).join(", ")}
+                  </p>
+                </div>
+              )}
+
+              {/* Last contact */}
+              {viewingContact.last_contact_date && (
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Last Contact</p>
+                  <p className="flex items-center gap-1 text-xs text-slate-600">
+                    <Clock size={11} className="text-slate-400 flex-shrink-0" />
+                    {formatDate(viewingContact.last_contact_date)}
+                    <span className="text-slate-400 ml-1">({timeAgo(viewingContact.last_contact_date)})</span>
+                  </p>
+                </div>
+              )}
+
+              {/* View full profile link */}
+              <div className="pt-2 border-t border-slate-100">
+                <a href="/crm/contacts" className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-medium">
+                  <ExternalLink size={11} /> View full contacts database
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -1487,11 +1584,6 @@ export function LpViewClient({ initialCompanies }: Props) {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Commitment Goal</p>
-                      {editGoal && !isNaN(parseFloat(editGoal)) && (
-                        <p className="text-xs font-semibold text-emerald-600 mb-0.5">
-                          {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(parseFloat(editGoal))}
-                        </p>
-                      )}
                       <input type="number" placeholder="e.g. 5000000" value={editGoal}
                         onChange={e => setEditGoal(e.target.value)}
                         onBlur={async () => { const n = parseFloat(editGoal); await saveField(selected.id, { commitment_goal: isNaN(n) ? null : n }); }}
@@ -1682,7 +1774,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                   </>) : contacts.length === 0 ? (
                     <p className="text-xs text-slate-400 italic">No contacts linked yet</p>
                   ) : contacts.map(c => (
-                    <a key={c.id} href={`/crm/contacts`}
+                    <div key={c.id} onClick={() => setViewingContact(c)}
                       className="flex items-start gap-2.5 p-2.5 bg-slate-50 rounded-lg border border-transparent hover:border-blue-200 hover:bg-blue-50 transition-colors cursor-pointer">
                       <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5"><User size={11} className="text-violet-600" /></div>
                       <div className="flex-1 min-w-0">
@@ -1698,9 +1790,9 @@ export function LpViewClient({ initialCompanies }: Props) {
                       <div className="flex gap-1.5 text-slate-400 flex-shrink-0 items-start mt-0.5">
                         {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-500" onClick={e => e.stopPropagation()}><Mail size={11} /></a>}
                         {c.phone && <a href={`tel:${c.phone}`} className="hover:text-green-500" onClick={e => e.stopPropagation()}><Phone size={11} /></a>}
-                        <ExternalLink size={10} className="text-slate-300 mt-0.5" />
+                        <ChevronRight size={10} className="text-slate-300 mt-0.5" />
                       </div>
-                    </a>
+                    </div>
                   ))}
                 </div>
               </div>

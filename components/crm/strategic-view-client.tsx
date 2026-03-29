@@ -351,8 +351,14 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY);
-      if (raw) setExtMap(JSON.parse(raw));
-    } catch {}
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") setExtMap(parsed as Record<string, StrategicExt>);
+      }
+    } catch {
+      // Corrupted localStorage — clear it so the page doesn't keep crashing
+      try { localStorage.removeItem(LS_KEY); } catch {}
+    }
   }, []);
 
   // Load pipeline companies for portco match dropdown
@@ -395,7 +401,22 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   }, [addingActivity]);
 
   function getExt(id: string): StrategicExt {
-    return extMap[id] ?? { ...DEFAULT_EXT, scores: { ...DEFAULT_EXT.scores } };
+    const stored = extMap[id];
+    if (!stored) return { ...DEFAULT_EXT, scores: { ...DEFAULT_EXT.scores } };
+    // Defensively merge with defaults so old/partial localStorage data doesn't crash
+    return {
+      ...DEFAULT_EXT,
+      ...stored,
+      roles:          Array.isArray(stored.roles)           ? stored.roles          : [],
+      portco_matches: Array.isArray(stored.portco_matches)  ? stored.portco_matches : [],
+      opportunities:  Array.isArray(stored.opportunities)   ? stored.opportunities  : [],
+      intel:          Array.isArray(stored.intel)           ? stored.intel          : [],
+      tasks:          Array.isArray(stored.tasks)           ? stored.tasks          : [],
+      scores: {
+        ...DEFAULT_EXT.scores,
+        ...(stored.scores && typeof stored.scores === "object" ? stored.scores : {}),
+      },
+    };
   }
 
   function saveExt(id: string, patch: Partial<StrategicExt>) {
