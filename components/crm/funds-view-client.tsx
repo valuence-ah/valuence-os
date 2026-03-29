@@ -888,6 +888,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
                   <>
                     {/* 0. Description — 30-40 word fund summary */}
                     <div className="px-4 py-3 border-b border-slate-100">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Description</p>
                       {editingFundField === "desc" ? (
                         <textarea
                           autoFocus
@@ -908,13 +909,13 @@ export function FundsViewClient({ initialCompanies }: Props) {
                       ) : (
                         <p
                           className={cn(
-                            "text-xs leading-relaxed cursor-default select-none",
-                            selected.desc ? "text-slate-600" : "text-slate-300 italic"
+                            "text-xs leading-relaxed cursor-pointer select-none",
+                            selected.desc ? "text-slate-700" : "text-slate-400 italic"
                           )}
                           onDoubleClick={() => setEditingFundField("desc")}
                           title="Double-click to edit description"
                         >
-                          {selected.desc || "No description — double-click to add, or edit in Admin"}
+                          {selected.desc || "No description yet — double-click to add one"}
                         </p>
                       )}
                     </div>

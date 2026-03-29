@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/header";
 import { FundsViewClient } from "@/components/crm/funds-view-client";
 import type { Company } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Funds" };
 
 export default async function FundsPage() {
