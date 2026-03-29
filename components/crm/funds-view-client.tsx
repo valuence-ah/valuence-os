@@ -8,6 +8,7 @@ import { cn, formatDate, timeAgo } from "@/lib/utils";
 import {
   Search, X, Building2, TrendingUp, Users, AlertCircle,
   CheckCircle2, Zap, ChevronRight, ExternalLink, MapPin, Plus, Check, Sparkles,
+  Loader2, Link2, Star, User,
 } from "lucide-react";
 
 // ── Fund Intelligence Types ────────────────────────────────────────────────────
@@ -248,6 +249,63 @@ export function FundsViewClient({ initialCompanies }: Props) {
   // Tracks which fund IDs are currently having descriptions generated
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
 
+  // Tracks which fund IDs are currently having overlap / recent investments generated
+  const [generatingOverlapIds, setGeneratingOverlapIds] = useState<Set<string>>(new Set());
+  const [generatingRecentIds,  setGeneratingRecentIds]  = useState<Set<string>>(new Set());
+
+  // Ref to avoid re-generating overlap/recent for funds already attempted this session
+  const generatedDataRef = useRef<Set<string>>(new Set());
+
+  // Fund key-contact add / link
+  const [showFundAddContact, setShowFundAddContact]   = useState(false);
+  const [fundNewContact, setFundNewContact]           = useState({ first_name: "", last_name: "", email: "", title: "" });
+  const [fundAddingContact, setFundAddingContact]     = useState(false);
+  const [showFundLinkContact, setShowFundLinkContact] = useState(false);
+  const [fundLinkSearch, setFundLinkSearch]           = useState("");
+  const [fundLinkSuggestions, setFundLinkSuggestions] = useState<Contact[]>([]);
+  const [fundLinkingContact, setFundLinkingContact]   = useState(false);
+  const fundLinkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fund intelligence per company
+  type FundIntelItem = { headline: string; source: string; date: string; summary?: string; url?: string };
+  const [fundIntelMap, setFundIntelMap]       = useState<Record<string, FundIntelItem[]>>({});
+  const [fundIntelLoading, setFundIntelLoading] = useState(false);
+  const [fundIntelError, setFundIntelError]   = useState<string | null>(null);
+
+  // Fund starred intel — persisted to localStorage
+  const [fundStarredIntel, setFundStarredIntel] = useState<Record<string, string[]>>({});
+  useEffect(() => {
+    try { const s = localStorage.getItem("fund_starred_intel"); if (s) setFundStarredIntel(JSON.parse(s)); } catch {}
+  }, []);
+  function toggleFundStar(companyId: string, headline: string) {
+    setFundStarredIntel(prev => {
+      const current = prev[companyId] ?? [];
+      const next = current.includes(headline) ? current.filter(h => h !== headline) : [...current, headline];
+      const updated = { ...prev, [companyId]: next };
+      try { localStorage.setItem("fund_starred_intel", JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }
+
+  async function fetchFundIntelligence() {
+    if (!selectedId || fundIntelLoading) return;
+    setFundIntelLoading(true);
+    setFundIntelError(null);
+    try {
+      const res = await fetch(`/api/companies/${selectedId}/intelligence`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json() as { items?: FundIntelItem[] };
+        setFundIntelMap(prev => ({ ...prev, [selectedId]: data.items ?? [] }));
+      } else {
+        setFundIntelError("Could not load intelligence");
+      }
+    } catch {
+      setFundIntelError("Network error");
+    } finally {
+      setFundIntelLoading(false);
+    }
+  }
+
   // Double-click field editing in overview
   const [editingFundField, setEditingFundField] = useState<string | null>(null);
   const [fundOverrides, setFundOverrides] = useState<Record<string, Partial<FundData>>>({});
@@ -417,6 +475,56 @@ export function FundsViewClient({ initialCompanies }: Props) {
           setGeneratingIds(prev => { const s = new Set(prev); s.delete(selectedId); return s; });
         })();
       }
+
+      // Portfolio / Pipeline overlap — fetch once per fund per session
+      if (!generatedDataRef.current.has(`overlap:${selectedId}`)) {
+        generatedDataRef.current.add(`overlap:${selectedId}`);
+        setGeneratingOverlapIds(prev => new Set(prev).add(selectedId));
+        (async () => {
+          try {
+            const res = await fetch("/api/funds/generate-overlap", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ company_id: selectedId }),
+            });
+            if (res.ok) {
+              const data = await res.json() as { overlap?: { initials: string; name: string; role: string }[] };
+              if (data.overlap) {
+                setFundOverrides(prev => ({
+                  ...prev,
+                  [selectedId]: { ...(prev[selectedId] ?? {}), portfolioOverlap: data.overlap },
+                }));
+              }
+            }
+          } catch { /* silent */ }
+          setGeneratingOverlapIds(prev => { const s = new Set(prev); s.delete(selectedId); return s; });
+        })();
+      }
+
+      // Recent investments — generate once per fund per session via Claude
+      if (!generatedDataRef.current.has(`recent:${selectedId}`)) {
+        generatedDataRef.current.add(`recent:${selectedId}`);
+        setGeneratingRecentIds(prev => new Set(prev).add(selectedId));
+        (async () => {
+          try {
+            const res = await fetch("/api/funds/generate-recent-investments", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ company_id: selectedId }),
+            });
+            if (res.ok) {
+              const data = await res.json() as { investments?: { name: string; round: string; sector: string; date: string }[] };
+              if (data.investments?.length) {
+                setFundOverrides(prev => ({
+                  ...prev,
+                  [selectedId]: { ...(prev[selectedId] ?? {}), recentInvest: data.investments },
+                }));
+              }
+            }
+          } catch { /* silent */ }
+          setGeneratingRecentIds(prev => { const s = new Set(prev); s.delete(selectedId); return s; });
+        })();
+      }
     } else {
       setVisible(false);
     }
@@ -443,6 +551,55 @@ export function FundsViewClient({ initialCompanies }: Props) {
       try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
+  }
+
+  // Fund contact management
+  async function addFundContact() {
+    if (!selectedId || !fundNewContact.first_name.trim()) return;
+    setFundAddingContact(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: newC } = await supabase.from("contacts").insert({
+      first_name: fundNewContact.first_name.trim(),
+      last_name: fundNewContact.last_name.trim() || null,
+      email: fundNewContact.email.trim() || null,
+      title: fundNewContact.title.trim() || null,
+      company_id: selectedId,
+      type: "fund_manager" as const,
+      status: "active" as const,
+      created_by: user?.id ?? null,
+    }).select().single();
+    if (newC) {
+      setFundContacts(prev => ({ ...prev, [selectedId]: [...(prev[selectedId] ?? []), newC as Contact] }));
+      setFundNewContact({ first_name: "", last_name: "", email: "", title: "" });
+      setShowFundAddContact(false);
+    }
+    setFundAddingContact(false);
+  }
+
+  function searchFundLinkContacts(query: string) {
+    if (fundLinkTimer.current) clearTimeout(fundLinkTimer.current);
+    setFundLinkSearch(query);
+    if (!query.trim() || query.length < 2) { setFundLinkSuggestions([]); return; }
+    fundLinkTimer.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from("contacts")
+        .select("id, first_name, last_name, email, title, company_id")
+        .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(8);
+      setFundLinkSuggestions((data as Contact[]) ?? []);
+    }, 250);
+  }
+
+  async function linkFundContact(contactId: string) {
+    if (!selectedId) return;
+    setFundLinkingContact(true);
+    const { data, error } = await supabase.from("contacts").update({ company_id: selectedId }).eq("id", contactId).select().single();
+    if (!error && data) {
+      setFundContacts(prev => ({ ...prev, [selectedId]: [...(prev[selectedId] ?? []), data as Contact] }));
+      setShowFundLinkContact(false);
+      setFundLinkSearch(""); setFundLinkSuggestions([]);
+    }
+    setFundLinkingContact(false);
   }
 
   // Get current portfolio overlap (overrides or base)
@@ -648,7 +805,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
         {/* Table */}
         <div className={cn("flex-1 overflow-auto", selectedId ? "mr-[480px]" : "")}>
-          <table className="w-full text-xs border-collapse" style={{ minWidth: 1200 }}>
+          <table className="w-full text-sm border-collapse" style={{ minWidth: 1200 }}>
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>
                 {[
@@ -932,12 +1089,18 @@ export function FundsViewClient({ initialCompanies }: Props) {
                 {(["overview", "opportunities", "intelligence"] as const).map(tab => (
                   <button
                     key={tab}
-                    onClick={() => setFundTab(tab)}
+                    onClick={() => {
+                      setFundTab(tab);
+                      if (tab === "intelligence" && selectedId && !fundIntelMap[selectedId]?.length && !fundIntelLoading) {
+                        fetchFundIntelligence();
+                      }
+                    }}
                     className={cn(
-                      "flex-1 text-xs font-medium py-2 transition-colors",
+                      "flex-1 text-xs font-medium py-2 transition-colors flex items-center justify-center gap-1",
                       fundTab === tab ? "text-blue-600 border-b-2 border-blue-600" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
+                    {tab === "intelligence" && <Sparkles size={10} />}
                     {tab === "overview" ? "Overview" : tab === "opportunities" ? "Opportunities / Tasks" : "Intelligence"}
                   </button>
                 ))}
@@ -1004,7 +1167,6 @@ export function FundsViewClient({ initialCompanies }: Props) {
                             { label: "Check size", field: "checkSize" as keyof FundData, value: selected.checkSize },
                             { label: "Stage focus", field: null, value: selected.stages.join(", ") },
                             { label: "Deal flow", field: null, value: selected.dealFlowLabel },
-                            { label: "Owner", field: "owner" as keyof FundData, value: selected.owner },
                             { label: "Last contact", field: "lastContact" as keyof FundData, value: selected.lastContact },
                           ]
                         ).map(({ label, field, value }) => (
@@ -1033,6 +1195,28 @@ export function FundsViewClient({ initialCompanies }: Props) {
                             )}
                           </div>
                         ))}
+
+                        {/* Owner — pill buttons (Andrew / Gene / Lance) */}
+                        <div className="col-span-2">
+                          <p className="text-[10px] text-slate-400 mb-1">Owner</p>
+                          <div className="flex gap-1.5">
+                            {(["Andrew", "Gene", "Lance"] as const).map(o => (
+                              <button
+                                key={o}
+                                onClick={() => setFundFieldOverride("owner", selected.owner === o ? "" : o)}
+                                className={cn(
+                                  "px-2.5 py-0.5 text-xs font-medium rounded-full border transition-colors",
+                                  selected.owner === o
+                                    ? "bg-blue-600 text-white border-blue-600"
+                                    : "bg-white text-slate-600 border-slate-200 hover:border-blue-300"
+                                )}
+                              >
+                                {o}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
                         {/* Rel. health with bar */}
                         <div>
                           <p className="text-[10px] text-slate-400 mb-0.5">Relationship health</p>
@@ -1076,12 +1260,19 @@ export function FundsViewClient({ initialCompanies }: Props) {
                     <div className="px-4 py-3">
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Portfolio / Pipeline Overlap</p>
-                        <button
-                          onClick={() => setShowAddOverlap(v => !v)}
-                          className="text-blue-600 hover:text-blue-700"
-                        >
-                          <Plus size={13} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {selectedId && generatingOverlapIds.has(selectedId) && (
+                            <span className="flex items-center gap-1 text-[10px] text-violet-500 font-medium">
+                              <Sparkles size={10} className="animate-pulse" /> Scanning…
+                            </span>
+                          )}
+                          <button
+                            onClick={() => setShowAddOverlap(v => !v)}
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            <Plus size={13} />
+                          </button>
+                        </div>
                       </div>
 
                       {showAddOverlap && (
@@ -1140,14 +1331,23 @@ export function FundsViewClient({ initialCompanies }: Props) {
                             ))}
                           </div>
                         ) : (
-                          <p className="text-xs text-slate-400">No overlap</p>
+                          <p className="text-xs text-slate-400">
+                            {selectedId && generatingOverlapIds.has(selectedId) ? "Scanning pipeline…" : "No pipeline overlap found"}
+                          </p>
                         );
                       })()}
                     </div>
 
                     {/* 4. Recent Investments */}
                     <div className="px-4 py-3">
-                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Recent Investments</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Recent Investments</p>
+                        {selectedId && generatingRecentIds.has(selectedId) && (
+                          <span className="flex items-center gap-1 text-[10px] text-violet-500 font-medium">
+                            <Sparkles size={10} className="animate-pulse" /> Generating…
+                          </span>
+                        )}
+                      </div>
                       {selected.recentInvest.length > 0 ? (
                         <div className="flex flex-col gap-1.5">
                           {selected.recentInvest.map(inv => (
@@ -1169,7 +1369,9 @@ export function FundsViewClient({ initialCompanies }: Props) {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-400">No recent investments on record</p>
+                        <p className="text-xs text-slate-400">
+                          {selectedId && generatingRecentIds.has(selectedId) ? "Generating…" : "No recent investments on record"}
+                        </p>
                       )}
                     </div>
 
@@ -1337,6 +1539,59 @@ export function FundsViewClient({ initialCompanies }: Props) {
                             }
                             return null;
                           })()}
+
+                          {/* Add / Link contact buttons */}
+                          <div className="mt-2 space-y-1.5">
+                            {showFundAddContact ? (
+                              <div className="border border-blue-200 rounded-xl bg-blue-50 p-3 space-y-2">
+                                <p className="text-xs font-semibold text-slate-700">New Contact</p>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <input className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="First name *" value={fundNewContact.first_name} onChange={e => setFundNewContact(p => ({ ...p, first_name: e.target.value }))} />
+                                  <input className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Last name" value={fundNewContact.last_name} onChange={e => setFundNewContact(p => ({ ...p, last_name: e.target.value }))} />
+                                </div>
+                                <input className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" type="email" placeholder="Email" value={fundNewContact.email} onChange={e => setFundNewContact(p => ({ ...p, email: e.target.value }))} />
+                                <input className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Title / Role" value={fundNewContact.title} onChange={e => setFundNewContact(p => ({ ...p, title: e.target.value }))} />
+                                <div className="flex gap-1.5">
+                                  <button onClick={() => { setShowFundAddContact(false); setFundNewContact({ first_name: "", last_name: "", email: "", title: "" }); }} className="flex-1 py-1 border border-slate-200 rounded text-xs text-slate-600 hover:bg-white">Cancel</button>
+                                  <button disabled={fundAddingContact || !fundNewContact.first_name.trim()} onClick={addFundContact}
+                                    className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1">
+                                    {fundAddingContact ? <><Loader2 size={10} className="animate-spin" />Adding…</> : <><Check size={10} />Add</>}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : showFundLinkContact ? (
+                              <div className="border border-indigo-200 rounded-xl bg-indigo-50 p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-semibold text-slate-700">Link Existing Contact</p>
+                                  <button onClick={() => { setShowFundLinkContact(false); setFundLinkSearch(""); setFundLinkSuggestions([]); }}><X size={12} className="text-slate-400" /></button>
+                                </div>
+                                <input className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                  placeholder="Search name or email…" value={fundLinkSearch}
+                                  onChange={e => searchFundLinkContacts(e.target.value)} autoFocus />
+                                {fundLinkSuggestions.length > 0 && (
+                                  <div className="max-h-[140px] overflow-y-auto border border-slate-200 rounded-lg bg-white divide-y divide-slate-100">
+                                    {fundLinkSuggestions.map(c => (
+                                      <button key={c.id} disabled={fundLinkingContact} onClick={() => linkFundContact(c.id)}
+                                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-indigo-50 disabled:opacity-50">
+                                        <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0"><User size={10} className="text-indigo-600" /></div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                                          {c.email && <p className="text-[10px] text-slate-400 truncate">{c.email}</p>}
+                                        </div>
+                                        {c.company_id && c.company_id !== selectedId && <span className="text-[10px] text-amber-600 bg-amber-50 px-1 rounded flex-shrink-0">Linked</span>}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {fundLinkSearch.length >= 2 && fundLinkSuggestions.length === 0 && <p className="text-[10px] text-slate-400 italic">No contacts found</p>}
+                              </div>
+                            ) : (
+                              <div className="flex gap-1.5">
+                                <button onClick={() => setShowFundAddContact(true)} className="flex-1 flex items-center justify-center gap-1 py-1.5 border-2 border-dashed border-slate-200 rounded-xl text-xs text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors"><Plus size={11} /> Add New</button>
+                                <button onClick={() => setShowFundLinkContact(true)} className="flex-1 flex items-center justify-center gap-1 py-1.5 border-2 border-dashed border-indigo-200 rounded-xl text-xs text-indigo-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors"><Link2 size={11} /> Link Existing</button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })()}
@@ -1523,31 +1778,87 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
                 {/* ── INTELLIGENCE TAB ─────────────────────────────────────── */}
                 {fundTab === "intelligence" && (
-                  <div className="px-4 py-3">
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Intelligence Feed</p>
-                    {selected.intel.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic">No intelligence items yet</p>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        {selected.intel.map((item, i) => (
-                          item.url ? (
-                            <a key={i} href={item.url} target="_blank" rel="noopener noreferrer"
-                              className="rounded-xl border border-slate-200 px-3 py-2.5 hover:border-blue-300 hover:bg-blue-50 transition-colors block">
-                              <div className="flex items-start justify-between gap-2">
-                                <p className="text-xs font-medium text-slate-800">{item.headline}</p>
-                                <ExternalLink size={10} className="text-blue-400 flex-shrink-0 mt-0.5" />
-                              </div>
-                              <p className="text-[10px] text-slate-400 mt-0.5">{item.meta}</p>
-                            </a>
-                          ) : (
-                            <div key={i} className="rounded-xl border border-slate-200 px-3 py-2.5">
-                              <p className="text-xs font-medium text-slate-800">{item.headline}</p>
-                              <p className="text-[10px] text-slate-400 mt-0.5">{item.meta}</p>
-                            </div>
-                          )
-                        ))}
+                  <div className="px-4 py-4 space-y-4 flex-1 overflow-y-auto">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Key Updates · Past 180 Days</p>
+                      <button
+                        onClick={fetchFundIntelligence}
+                        disabled={fundIntelLoading}
+                        className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {fundIntelLoading ? <><Loader2 size={10} className="animate-spin" />Loading…</> : <><Sparkles size={10} />Refresh</>}
+                      </button>
+                    </div>
+
+                    {fundIntelLoading ? (
+                      <div className="space-y-2">
+                        {[1,2,3,4].map(i => <div key={i} className="h-16 bg-slate-50 rounded-lg animate-pulse" />)}
                       </div>
-                    )}
+                    ) : fundIntelError ? (
+                      <p className="text-xs text-red-400 italic">{fundIntelError}</p>
+                    ) : !(fundIntelMap[selectedId ?? ""]?.length) ? (
+                      <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl">
+                        <Sparkles size={24} className="mx-auto mb-2 text-slate-300" />
+                        <p className="text-xs text-slate-400 mb-1">No intelligence loaded</p>
+                        <p className="text-[11px] text-slate-300">Click Refresh to fetch latest signals</p>
+                      </div>
+                    ) : (() => {
+                      const items = fundIntelMap[selectedId ?? ""] ?? [];
+                      const cutoff = new Date(Date.now() - 180 * 86_400_000);
+                      const recent = items.filter(i => !i.date || new Date(i.date) >= cutoff)
+                                       .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+                      const starred = (fundStarredIntel[selectedId ?? ""] ?? []);
+                      const starredItems = items.filter(i => starred.includes(i.headline));
+
+                      function FundIntelCard({ item }: { item: FundIntelItem }) {
+                        const isStarred = starred.includes(item.headline);
+                        const inner = (
+                          <div className="border border-slate-200 rounded-xl p-3 bg-white hover:bg-slate-50 transition-colors">
+                            <div className="flex items-start gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-slate-800 leading-snug mb-1">{item.headline}</p>
+                                {item.summary && <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-3">{item.summary}</p>}
+                              </div>
+                              <button
+                                onClick={e => { e.preventDefault(); e.stopPropagation(); selectedId && toggleFundStar(selectedId, item.headline); }}
+                                className={cn("flex-shrink-0 mt-0.5 transition-colors", isStarred ? "text-amber-400" : "text-slate-200 hover:text-amber-300")}
+                              >
+                                <Star size={13} fill={isStarred ? "currentColor" : "none"} />
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between mt-2 gap-2">
+                              <span className="text-[10px] text-slate-400">{item.source} · {item.date}</span>
+                              {item.url && <ExternalLink size={9} className="text-blue-400 flex-shrink-0" />}
+                            </div>
+                          </div>
+                        );
+                        return item.url ? (
+                          <a href={item.url} target="_blank" rel="noopener noreferrer" className="block">{inner}</a>
+                        ) : inner;
+                      }
+
+                      return (
+                        <>
+                          <div className="space-y-2.5">
+                            {(recent.length > 0 ? recent : items).map((item, i) => (
+                              <FundIntelCard key={i} item={item} />
+                            ))}
+                          </div>
+                          {starredItems.length > 0 && (
+                            <div className="pt-3 border-t border-slate-100">
+                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                <Star size={9} fill="currentColor" className="text-amber-400" /> Saved
+                              </p>
+                              <div className="space-y-2.5">
+                                {starredItems.map((item, i) => (
+                                  <FundIntelCard key={i} item={item} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
 

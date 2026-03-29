@@ -10,7 +10,8 @@ import {
   Download, Plus, Target, TrendingUp, DollarSign,
   BarChart2, AlertCircle, CheckSquare, Video,
   ChevronDown, ChevronUp, ChevronsUpDown, MoreHorizontal, Loader2, ArrowUpRight, FileText,
-  Pencil, Check, LayoutGrid, List, Globe, Wand2, Send, Copy, RefreshCw, Link2,
+  Pencil, Check, LayoutGrid, List, Globe, Wand2, Send, Copy, RefreshCw, Link2, Sparkles,
+  Clock, Star,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -448,6 +449,30 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [activityNote, setActivityNote]     = useState("");
   const [savingActivity, setSavingActivity] = useState(false);
 
+  // LP Detail tab
+  const [lpDetailTab, setLpDetailTab] = useState<"overview" | "intelligence">("overview");
+
+  // LP Intelligence feed
+  type LpIntelItem = { headline: string; source: string; date: string; summary?: string; url?: string };
+  const [lpIntelligence, setLpIntelligence] = useState<LpIntelItem[]>([]);
+  const [lpIntelLoading, setLpIntelLoading] = useState(false);
+  const [lpIntelError, setLpIntelError]     = useState<string | null>(null);
+
+  // LP Starred intel — persisted to localStorage
+  const [lpStarredIntel, setLpStarredIntel] = useState<Record<string, string[]>>({});
+  useEffect(() => {
+    try { const s = localStorage.getItem("lp_starred_intel"); if (s) setLpStarredIntel(JSON.parse(s)); } catch {}
+  }, []);
+  function toggleLpStar(companyId: string, headline: string) {
+    setLpStarredIntel(prev => {
+      const current = prev[companyId] ?? [];
+      const next = current.includes(headline) ? current.filter(h => h !== headline) : [...current, headline];
+      const updated = { ...prev, [companyId]: next };
+      try { localStorage.setItem("lp_starred_intel", JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }
+
   // Fireflies summary state per selected company
   const [ffLoading, setFfLoading]   = useState(false);
   const [ffSummary, setFfSummary]   = useState<string | null>(null);
@@ -609,6 +634,8 @@ export function LpViewClient({ initialCompanies }: Props) {
     setFfSummary(null); setFfError(null); setFfCount(0);
     setBriefContent(""); setBriefError("");
     setOutreachContent(""); setOutreachError("");
+    setLpDetailTab("overview");
+    setLpIntelligence([]); setLpIntelError(null);
     loadDetail(id);
   }
 
@@ -631,6 +658,25 @@ export function LpViewClient({ initialCompanies }: Props) {
     if ("lp_type" in patch) setEditLpType(patch.lp_type ?? "");
     if ("location_city" in patch) setEditCity(patch.location_city ?? "");
     if ("location_country" in patch) setEditCountry(patch.location_country ?? "");
+  }
+
+  async function fetchLpIntelligence() {
+    if (!selected || lpIntelLoading) return;
+    setLpIntelLoading(true);
+    setLpIntelError(null);
+    try {
+      const res = await fetch(`/api/companies/${selected.id}/intelligence`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json() as { items?: LpIntelItem[] };
+        setLpIntelligence(data.items ?? []);
+      } else {
+        setLpIntelError("Could not load intelligence");
+      }
+    } catch {
+      setLpIntelError("Network error");
+    } finally {
+      setLpIntelLoading(false);
+    }
   }
 
   async function handleAddActivity() {
@@ -1285,10 +1331,6 @@ export function LpViewClient({ initialCompanies }: Props) {
 
             {/* Action buttons */}
             <div className="flex gap-2 px-5 py-3 border-b border-slate-100">
-              <a href={`mailto:${primaryContact?.email ?? ""}`}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex-1 justify-center">
-                <Mail size={11} /> Email
-              </a>
               <button onClick={() => { setShowPrepBrief(true); if (!briefContent) generatePrepBrief(); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-violet-300 text-violet-700 rounded-lg hover:bg-violet-50 flex-1 justify-center">
                 <Wand2 size={11} /> Prep Brief (AI)
@@ -1299,7 +1341,113 @@ export function LpViewClient({ initialCompanies }: Props) {
               </button>
             </div>
 
-            {/* Body */}
+            {/* Detail panel tabs */}
+            <div className="flex border-b border-slate-200 px-5 flex-shrink-0">
+              {(["overview", "intelligence"] as const).map(tab => (
+                <button key={tab} onClick={() => { setLpDetailTab(tab); if (tab === "intelligence" && lpIntelligence.length === 0 && !lpIntelLoading) fetchLpIntelligence(); }}
+                  className={cn("px-3 py-2.5 text-xs font-medium border-b-2 transition-colors capitalize flex items-center gap-1.5",
+                    lpDetailTab === tab ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"
+                  )}>
+                  {tab === "intelligence" && <Sparkles size={11} />}{tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {/* Intelligence tab */}
+            {lpDetailTab === "intelligence" && (
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Key Updates · Past 180 Days</p>
+                  <button onClick={fetchLpIntelligence} disabled={lpIntelLoading}
+                    className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1">
+                    {lpIntelLoading ? <><Loader2 size={10} className="animate-spin" />Loading…</> : <><Sparkles size={10} />Refresh</>}
+                  </button>
+                </div>
+
+                {lpIntelLoading ? (
+                  <div className="space-y-2">
+                    {[1,2,3,4].map(i => <div key={i} className="h-16 bg-slate-50 rounded-lg animate-pulse" />)}
+                  </div>
+                ) : lpIntelError ? (
+                  <p className="text-xs text-red-400 italic">{lpIntelError}</p>
+                ) : lpIntelligence.length === 0 ? (
+                  <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl">
+                    <Sparkles size={24} className="mx-auto mb-2 text-slate-300" />
+                    <p className="text-xs text-slate-400 mb-1">No intelligence loaded</p>
+                    <p className="text-[11px] text-slate-300">Click Refresh to fetch latest signals</p>
+                  </div>
+                ) : (() => {
+                  const cutoff = new Date(Date.now() - 180 * 86_400_000);
+                  const recent  = lpIntelligence.filter(i => !i.date || new Date(i.date) >= cutoff)
+                                    .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+                  const older   = lpIntelligence.filter(i => i.date && new Date(i.date) < cutoff)
+                                    .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+                  const starred = (lpStarredIntel[selected?.id ?? ""] ?? []);
+                  const starredItems = lpIntelligence.filter(i => starred.includes(i.headline));
+
+                  function IntelCard({ item }: { item: LpIntelItem }) {
+                    const isStarred = starred.includes(item.headline);
+                    return (
+                      <div className="border border-slate-200 rounded-xl p-3 bg-white hover:bg-slate-50 transition-colors">
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-slate-800 leading-snug mb-1">{item.headline}</p>
+                            {item.summary && <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-3">{item.summary}</p>}
+                          </div>
+                          <button
+                            onClick={() => selected && toggleLpStar(selected.id, item.headline)}
+                            className={cn("flex-shrink-0 mt-0.5 transition-colors", isStarred ? "text-amber-400" : "text-slate-200 hover:text-amber-300")}
+                            title={isStarred ? "Remove from saved" : "Save"}
+                          >
+                            <Star size={13} fill={isStarred ? "currentColor" : "none"} />
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between mt-2 gap-2">
+                          <span className="text-[10px] text-slate-400">{item.source} · {item.date}</span>
+                          {item.url && (
+                            <a href={item.url} target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] text-blue-500 hover:underline flex items-center gap-0.5 flex-shrink-0">
+                              <ExternalLink size={9} /> View
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      {/* Section 1 — Recent (180 days), newest first */}
+                      <div className="space-y-2.5">
+                        {(recent.length > 0 ? recent : older).map((item, i) => (
+                          <IntelCard key={i} item={item} />
+                        ))}
+                        {recent.length === 0 && older.length === 0 && (
+                          <p className="text-xs text-slate-400 italic">No updates found</p>
+                        )}
+                      </div>
+
+                      {/* Section 2 — Starred / Saved */}
+                      {starredItems.length > 0 && (
+                        <div className="pt-3 border-t border-slate-100">
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                            <Star size={9} fill="currentColor" className="text-amber-400" /> Saved
+                          </p>
+                          <div className="space-y-2.5">
+                            {starredItems.map((item, i) => (
+                              <IntelCard key={i} item={item} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Overview tab — Body */}
+            {lpDetailTab === "overview" && (
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
               {/* Relationship Owner */}
@@ -1339,6 +1487,11 @@ export function LpViewClient({ initialCompanies }: Props) {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Commitment Goal</p>
+                      {editGoal && !isNaN(parseFloat(editGoal)) && (
+                        <p className="text-xs font-semibold text-emerald-600 mb-0.5">
+                          {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(parseFloat(editGoal))}
+                        </p>
+                      )}
                       <input type="number" placeholder="e.g. 5000000" value={editGoal}
                         onChange={e => setEditGoal(e.target.value)}
                         onBlur={async () => { const n = parseFloat(editGoal); await saveField(selected.id, { commitment_goal: isNaN(n) ? null : n }); }}
@@ -1529,19 +1682,25 @@ export function LpViewClient({ initialCompanies }: Props) {
                   </>) : contacts.length === 0 ? (
                     <p className="text-xs text-slate-400 italic">No contacts linked yet</p>
                   ) : contacts.map(c => (
-                    <div key={c.id} className="flex items-start gap-2.5 p-2.5 bg-slate-50 rounded-lg">
+                    <a key={c.id} href={`/crm/contacts`}
+                      className="flex items-start gap-2.5 p-2.5 bg-slate-50 rounded-lg border border-transparent hover:border-blue-200 hover:bg-blue-50 transition-colors cursor-pointer">
                       <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5"><User size={11} className="text-violet-600" /></div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}{c.is_primary_contact && <span className="ml-1.5 text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">Primary</span>}</p>
                         {c.title && <p className="text-xs text-slate-500 truncate">{c.title}</p>}
-                        {c.email && <p className="text-xs text-blue-600 truncate">{c.email}</p>}
+                        {c.last_contact_date && (
+                          <p className="flex items-center gap-0.5 text-xs text-slate-400">
+                            <Clock size={9} className="flex-shrink-0" /> Last contact: {formatDate(c.last_contact_date)}
+                          </p>
+                        )}
                         {(c.location_city || c.location_country) && <p className="text-xs text-slate-400 flex items-center gap-0.5"><MapPin size={9} />{[c.location_city, c.location_country].filter(Boolean).join(", ")}</p>}
                       </div>
-                      <div className="flex gap-1.5 text-slate-400 flex-shrink-0">
-                        {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-500"><Mail size={11} /></a>}
-                        {c.phone && <a href={`tel:${c.phone}`} className="hover:text-green-500"><Phone size={11} /></a>}
+                      <div className="flex gap-1.5 text-slate-400 flex-shrink-0 items-start mt-0.5">
+                        {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-500" onClick={e => e.stopPropagation()}><Mail size={11} /></a>}
+                        {c.phone && <a href={`tel:${c.phone}`} className="hover:text-green-500" onClick={e => e.stopPropagation()}><Phone size={11} /></a>}
+                        <ExternalLink size={10} className="text-slate-300 mt-0.5" />
                       </div>
-                    </div>
+                    </a>
                   ))}
                 </div>
               </div>
@@ -1702,6 +1861,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                 View full company profile <ChevronRight size={12} />
               </a>
             </div>
+            )}{/* end overview tab */}
           </>)}
         </div>
 

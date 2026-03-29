@@ -426,8 +426,8 @@ async function createStubCompanies(
   const stubs = new Map<string, string>(); // nameLower → type
 
   for (const row of rows) {
-    const exclude = col(row, "Exclude", "Delete").toLowerCase();
-    if (exclude === "checked" || exclude === "yes") continue;
+    const del = col(row, "Delete").toLowerCase();
+    if (del === "checked" || del === "yes") continue;
     const name = col(row, "Company").trim();
     if (!name || nameToId.has(name.toLowerCase())) continue;
     stubs.set(name.toLowerCase(), companyTypeFromContactType(col(row, "Type")));
@@ -473,14 +473,12 @@ async function importContacts(
   const rows = parseCSV(contactsFile);
   console.log(`    Total rows: ${rows.length}`);
 
-  // Skip flagged rows
+  // Skip only hard-deleted rows (Exclude column is intentionally included — import all contacts)
   const valid = rows.filter(r => {
-    const exclude = col(r, "Exclude").toLowerCase();
-    const del     = col(r, "Delete").toLowerCase();
-    return exclude !== "checked" && exclude !== "yes" &&
-           del     !== "checked" && del     !== "yes";
+    const del = col(r, "Delete").toLowerCase();
+    return del !== "checked" && del !== "yes";
   });
-  console.log(`    After excluding flagged: ${valid.length}`);
+  console.log(`    After excluding deleted: ${valid.length}`);
 
   // Fetch existing emails for dedup
   const { data: existing } = await supabase.from("contacts").select("email").limit(20000);

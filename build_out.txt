@@ -1,0 +1,99 @@
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\sh225\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\sh225\Valuence OS\package-lock.json
+
+▲ Next.js 16.1.7 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 47s
+  Running TypeScript ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/59) ...
+  Generating static pages using 7 workers (14/59) 
+  Generating static pages using 7 workers (29/59) 
+  Generating static pages using 7 workers (44/59) 
+✓ Generating static pages using 7 workers (59/59) in 2.8s
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /admin
+├ ƒ /api/agents/arxiv
+├ ƒ /api/agents/exa-research
+├ ƒ /api/agents/nsf
+├ ƒ /api/agents/run-all
+├ ƒ /api/agents/sbir
+├ ƒ /api/chat
+├ ƒ /api/companies/[id]/drive
+├ ƒ /api/companies/[id]/drive-analyze
+├ ƒ /api/companies/[id]/intelligence
+├ ƒ /api/companies/backfill-deck
+├ ƒ /api/companies/emails
+├ ƒ /api/companies/generate-description
+├ ƒ /api/contacts/match-company
+├ ƒ /api/cron/check-deals
+├ ƒ /api/cron/check-inbox
+├ ƒ /api/drive/list
+├ ƒ /api/drive/reextract
+├ ƒ /api/drive/sync
+├ ƒ /api/drive/sync-bulk
+├ ƒ /api/feeds
+├ ƒ /api/feeds/[id]
+├ ƒ /api/feeds/[id]/fetch
+├ ƒ /api/feeds/articles
+├ ƒ /api/feeds/detect
+├ ƒ /api/feeds/fetch-all
+├ ƒ /api/funds/generate-descriptions
+├ ƒ /api/funds/generate-overlap
+├ ƒ /api/funds/generate-recent-investments
+├ ƒ /api/logo-finder/run
+├ ƒ /api/lp/fireflies-summary
+├ ƒ /api/lp/outreach-draft
+├ ƒ /api/lp/prep-brief
+├ ƒ /api/memos/generate
+├ ƒ /api/pipeline-chat
+├ ƒ /api/storage/upload
+├ ƒ /api/strategic/describe
+├ ƒ /api/strategic/intel
+├ ƒ /api/strategic/sector
+├ ƒ /api/webhooks/email-deal
+├ ƒ /api/webhooks/email-inbound
+├ ƒ /api/webhooks/fireflies
+├ ƒ /api/webhooks/fireflies-direct
+├ ƒ /api/webhooks/generate-memo
+├ ƒ /api/webhooks/logo
+├ ƒ /api/webhooks/new-contact
+├ ƒ /auth/callback
+├ ○ /auth/login
+├ ƒ /chat
+├ ƒ /crm
+├ ƒ /crm/companies
+├ ƒ /crm/companies/[id]
+├ ƒ /crm/contacts
+├ ƒ /crm/contacts/pending
+├ ƒ /crm/ecosystem
+├ ƒ /crm/funds
+├ ƒ /crm/lps
+├ ƒ /crm/other
+├ ƒ /crm/pipeline
+├ ƒ /crm/strategic
+├ ƒ /dashboard
+├ ƒ /lp
+├ ƒ /memos
+├ ƒ /memos/[id]
+├ ƒ /pipeline
+├ ƒ /portfolio
+├ ƒ /sourcing
+└ ƒ /tasks
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
