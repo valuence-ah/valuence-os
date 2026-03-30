@@ -776,7 +776,7 @@ const ContactRow = memo(function ContactRow({
       </div>
 
       {/* Email — fixed, not editable */}
-      <div className="w-44 flex-shrink-0">
+      <div className="w-56 flex-shrink-0">
         <div className={cn(INPUT_CLS, "flex items-center gap-1 bg-slate-50 text-slate-500 cursor-default overflow-hidden")}>
           <Mail size={10} className="flex-shrink-0 text-slate-400" />
           <span className="truncate text-[11px]">{contact.email ?? "—"}</span>
@@ -1031,7 +1031,7 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
       <div className="flex items-center gap-2 px-3 mb-1">
         <div className="w-7 flex-shrink-0" />
         <SortHeader label="Name / Contact" sortKey="name"    active={sortKey==="name"}    dir={sortDir} onSort={handleSort} className="w-40 flex-shrink-0" />
-        <SortHeader label="Email"          sortKey="email"   active={sortKey==="email"}   dir={sortDir} onSort={handleSort} className="w-44 flex-shrink-0" />
+        <SortHeader label="Email"          sortKey="email"   active={sortKey==="email"}   dir={sortDir} onSort={handleSort} className="w-56 flex-shrink-0" />
         <SortHeader label="Type *"         sortKey="type"    active={sortKey==="type"}    dir={sortDir} onSort={handleSort} className="w-36 flex-shrink-0" />
         <SortHeader label="Title"          sortKey="title"   active={sortKey==="title"}   dir={sortDir} onSort={handleSort} className="w-32 flex-shrink-0" />
         <div className="w-48 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Company</div>
