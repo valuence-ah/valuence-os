@@ -10,7 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 60;
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-haiku-4-5";
 
 export async function POST(req: NextRequest) {
   // Auth check

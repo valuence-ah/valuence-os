@@ -4,11 +4,11 @@
 -- ── 1. New ai_config rows for LP + scoring features ─────────────────────────
 INSERT INTO ai_configs (name, label, model, max_tokens, temperature, system_prompt, user_prompt)
 VALUES
-  ('lp_outreach_draft', 'LP Outreach Email',   'claude-opus-4-5-20251001', 800,  0.50, null, ''),
-  ('lp_prep_brief',     'LP Meeting Brief',    'claude-opus-4-5-20251001', 1500, 0.30, null, ''),
-  ('lp_meeting_summary','LP Meeting Summary',  'claude-haiku-4-5-20251001',800, 0.30, null, ''),
-  ('sourcing_scorer',   'Sourcing Scorer',     'claude-haiku-4-5-20251001',2048, 0.10, null, ''),
-  ('exa_research',      'Exa Company Research','claude-haiku-4-5-20251001',1024, 0.20, null, '')
+  ('lp_outreach_draft', 'LP Outreach Email',   'claude-sonnet-4-5', 800,  0.50, null, ''),
+  ('lp_prep_brief',     'LP Meeting Brief',    'claude-sonnet-4-5', 1500, 0.30, null, ''),
+  ('lp_meeting_summary','LP Meeting Summary',  'claude-haiku-4-5',  800,  0.30, null, ''),
+  ('sourcing_scorer',   'Sourcing Scorer',     'claude-haiku-4-5',  2048, 0.10, null, ''),
+  ('exa_research',      'Exa Company Research','claude-haiku-4-5',  1024, 0.20, null, '')
 ON CONFLICT (name) DO NOTHING;
 
 -- ── 2. agent_configs table ───────────────────────────────────────────────────

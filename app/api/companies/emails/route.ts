@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
     }));
 
     const { text } = await generateText({
-      model: anthropic("claude-haiku-4-5-20251001"),
+      model: anthropic("claude-haiku-4-5"),
       maxTokens: 600,
       messages: [{
         role: "user",
