@@ -2431,6 +2431,15 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
                 return next;
               });
             }}
+            onCellCopy={(args, event) => {
+              const val = (args.row as unknown as Record<string, unknown>)[args.column.key] ?? "";
+              event.clipboardData.setData("text/plain", String(val));
+              event.preventDefault();
+            }}
+            onCellPaste={(args) => ({
+              ...args.row,
+              [args.column.key]: args.row[args.column.key as keyof CompanyRow],
+            })}
             className="rdg-light"
             style={{ height: "calc(100vh - 108px)", blockSize: "calc(100vh - 108px)" }}
           />
@@ -2452,6 +2461,15 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
                 return next;
               });
             }}
+            onCellCopy={(args, event) => {
+              const val = (args.row as unknown as Record<string, unknown>)[args.column.key] ?? "";
+              event.clipboardData.setData("text/plain", String(val));
+              event.preventDefault();
+            }}
+            onCellPaste={(args) => ({
+              ...args.row,
+              [args.column.key]: args.row[args.column.key as keyof ContactRow],
+            })}
             className="rdg-light"
             style={{ height: "calc(100vh - 108px)", blockSize: "calc(100vh - 108px)" }}
           />
