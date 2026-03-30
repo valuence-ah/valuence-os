@@ -363,6 +363,244 @@ function TitleCell({ row, onSaved }: { row: ContactRow; onSaved: (id: string, ti
   );
 }
 
+// ─── Portal single-select factory (LP Stage, Deal Status, Investment Round) ────
+
+function makePortalSingleSelectCell<TRow extends { id: string }>(
+  tableName: string,
+  fieldName: string,
+  options: string[],
+  colors: Record<string, { bg: string; color: string }>
+) {
+  return function PortalSelectCell({
+    row, onSaved,
+  }: { row: TRow; onSaved: (id: string, val: string) => void }) {
+    const supabase = createClient();
+    const [open, setOpen] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const cellRef = useRef<HTMLDivElement>(null);
+    const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+    const current = String((row as unknown as Record<string, unknown>)[fieldName] ?? "");
+
+    function openDropdown(e: React.MouseEvent) {
+      e.stopPropagation();
+      if (cellRef.current) {
+        const rect = cellRef.current.getBoundingClientRect();
+        setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
+      }
+      setOpen(true);
+    }
+
+    async function pick(opt: string, e: React.MouseEvent) {
+      e.stopPropagation();
+      setOpen(false);
+      if (!row.id) return;
+      setSaving(true);
+      await supabase.from(tableName).update({ [fieldName]: opt || null }).eq("id", row.id);
+      setSaving(false);
+      onSaved(row.id, opt);
+    }
+
+    useEffect(() => {
+      if (!open) return;
+      function handler(e: MouseEvent) { if (!cellRef.current?.contains(e.target as Node)) setOpen(false); }
+      document.addEventListener("mousedown", handler);
+      return () => document.removeEventListener("mousedown", handler);
+    }, [open]);
+
+    const c = colors[current] ?? { bg: "#f8fafc", color: "#64748b" };
+    return (
+      <div ref={cellRef} onClick={openDropdown}
+        style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer" }}
+        title="Click to edit">
+        {current ? (
+          <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500 }}>
+            {saving ? "Saving…" : current}
+          </span>
+        ) : (
+          <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#cbd5e1" }}>{saving ? "Saving…" : "Click to set"}</span>
+        )}
+        {open && pos && createPortal(
+          <div
+            style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 99999, overflow: "hidden", fontFamily: "inherit" }}
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <div style={{ padding: "6px 0", maxHeight: 280, overflowY: "auto" }}>
+              <div onClick={e => pick("", e)}
+                style={{ padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>
+                — Clear
+              </div>
+              {options.map(opt => {
+                const oc = colors[opt] ?? { bg: "#f8fafc", color: "#64748b" };
+                return (
+                  <div key={opt} onClick={e => pick(opt, e)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", cursor: "pointer", userSelect: "none", background: opt === current ? "#f0f9ff" : "transparent" }}>
+                    <div style={{ width: 14, height: 14, flexShrink: 0, borderRadius: "50%", border: `2px solid ${opt === current ? "#3b82f6" : "#d1d5db"}`, background: opt === current ? "#3b82f6" : "#fff" }} />
+                    <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: oc.bg, color: oc.color, fontWeight: 500 }}>{opt}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>,
+          document.body
+        )}
+      </div>
+    );
+  };
+}
+
+// ─── Portal multi-select factory (Sectors) ────────────────────────────────────
+
+function makePortalMultiSelectCell<TRow extends { id: string }>(
+  tableName: string,
+  fieldName: string,
+  options: string[],
+  colors: Record<string, { bg: string; color: string }>
+) {
+  return function PortalMultiSelectCell({
+    row, onSaved,
+  }: { row: TRow; onSaved: (id: string, vals: string[]) => void }) {
+    const supabase = createClient();
+    const [open, setOpen] = useState(false);
+    const [selected, setSelected] = useState<string[]>([]);
+    const [saving, setSaving] = useState(false);
+    const cellRef = useRef<HTMLDivElement>(null);
+    const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+    const current: string[] = Array.isArray((row as unknown as Record<string, unknown>)[fieldName])
+      ? (row as unknown as Record<string, unknown>)[fieldName] as string[]
+      : [];
+
+    function openDropdown(e: React.MouseEvent) {
+      e.stopPropagation();
+      setSelected([...current]);
+      if (cellRef.current) {
+        const rect = cellRef.current.getBoundingClientRect();
+        setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
+      }
+      setOpen(true);
+    }
+
+    async function toggle(opt: string, e: React.MouseEvent) {
+      e.stopPropagation();
+      const next = selected.includes(opt) ? selected.filter(x => x !== opt) : [...selected, opt];
+      setSelected(next);
+      if (!row.id) return;
+      setSaving(true);
+      await supabase.from(tableName).update({ [fieldName]: next }).eq("id", row.id);
+      setSaving(false);
+      onSaved(row.id, next);
+    }
+
+    useEffect(() => {
+      if (!open) return;
+      function handler(e: MouseEvent) { if (cellRef.current?.contains(e.target as Node)) return; setOpen(false); }
+      document.addEventListener("mousedown", handler);
+      return () => document.removeEventListener("mousedown", handler);
+    }, [open]);
+
+    return (
+      <div ref={cellRef} onClick={openDropdown}
+        style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer", gap: 3, flexWrap: "wrap" }}
+        title="Click to edit">
+        {current.length === 0 ? (
+          <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#cbd5e1" }}>{saving ? "Saving…" : "Click to set"}</span>
+        ) : (
+          current.map(v => {
+            const c = colors[v] ?? { bg: "#f1f5f9", color: "#475569" };
+            return (
+              <span key={v} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500, whiteSpace: "nowrap" }}>{v}</span>
+            );
+          })
+        )}
+        {open && pos && createPortal(
+          <div
+            style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 99999, overflow: "hidden", fontFamily: "inherit" }}
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <div style={{ padding: "6px 0" }}>
+              {options.map(opt => {
+                const checked = selected.includes(opt);
+                const c = colors[opt] ?? { bg: "#f1f5f9", color: "#475569" };
+                return (
+                  <div key={opt} onClick={e => toggle(opt, e)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", cursor: "pointer", userSelect: "none", background: checked ? "#f0f9ff" : "transparent" }}>
+                    <div style={{ width: 16, height: 16, flexShrink: 0, borderRadius: 4, border: `2px solid ${checked ? "#3b82f6" : "#d1d5db"}`, background: checked ? "#3b82f6" : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {checked && <svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                    <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500 }}>{opt}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ borderTop: "1px solid #f1f5f9", padding: "6px 14px", display: "flex", justifyContent: "flex-end" }}>
+              <div onClick={e => { e.stopPropagation(); setOpen(false); }} style={{ padding: "4px 12px", fontSize: 11, color: "#64748b", background: "#f1f5f9", borderRadius: 6, cursor: "pointer" }}>Done</div>
+            </div>
+          </div>,
+          document.body
+        )}
+      </div>
+    );
+  };
+}
+
+// ─── Cell instances ───────────────────────────────────────────────────────────
+
+const LP_STAGE_COLORS: Record<string, { bg: string; color: string }> = {
+  "Lead":                   { bg: "#eff6ff", color: "#1d4ed8" },
+  "Initial Meeting":        { bg: "#f5f3ff", color: "#7c3aed" },
+  "Discussion in Process":  { bg: "#fef3c7", color: "#92400e" },
+  "Due Diligence":          { bg: "#fff7ed", color: "#c2410c" },
+  "Committed":              { bg: "#f0fdf4", color: "#15803d" },
+  "Passed":                 { bg: "#f1f5f9", color: "#475569" },
+};
+const LpStageCell = makePortalSingleSelectCell<CompanyRow>(
+  "companies", "lp_stage",
+  ["Lead","Initial Meeting","Discussion in Process","Due Diligence","Committed","Passed"],
+  LP_STAGE_COLORS
+);
+
+const DEAL_STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+  "identified_introduced":   { bg: "#eff6ff", color: "#1d4ed8" },
+  "first_meeting":           { bg: "#f5f3ff", color: "#7c3aed" },
+  "discussion_in_process":   { bg: "#fef3c7", color: "#92400e" },
+  "due_diligence":           { bg: "#fff7ed", color: "#c2410c" },
+  "passed":                  { bg: "#f1f5f9", color: "#475569" },
+  "portfolio":               { bg: "#f0fdf4", color: "#15803d" },
+  "tracking_hold":           { bg: "#fdf4ff", color: "#86198f" },
+  "exited":                  { bg: "#f8fafc", color: "#94a3b8" },
+};
+const DealStatusCell = makePortalSingleSelectCell<CompanyRow>(
+  "companies", "deal_status",
+  ["identified_introduced","first_meeting","discussion_in_process","due_diligence","passed","portfolio","tracking_hold","exited"],
+  DEAL_STATUS_COLORS
+);
+
+const INVESTMENT_ROUND_COLORS: Record<string, { bg: string; color: string }> = {
+  "Pre-Seed":        { bg: "#eff6ff", color: "#1d4ed8" },
+  "Pre-A":           { bg: "#f0f9ff", color: "#0369a1" },
+  "Seed":            { bg: "#f5f3ff", color: "#7c3aed" },
+  "Seed Extension":  { bg: "#faf5ff", color: "#6d28d9" },
+  "Series A":        { bg: "#ecfdf5", color: "#065f46" },
+  "Series B":        { bg: "#f0fdf4", color: "#15803d" },
+  "Series C":        { bg: "#f7fee7", color: "#3f6212" },
+  "Growth":          { bg: "#fefce8", color: "#854d0e" },
+};
+const InvestmentRoundCell = makePortalSingleSelectCell<CompanyRow>(
+  "companies", "stage",
+  ["Pre-Seed","Pre-A","Seed","Seed Extension","Series A","Series B","Series C","Growth"],
+  INVESTMENT_ROUND_COLORS
+);
+
+const SECTORS_COLORS: Record<string, { bg: string; color: string }> = {
+  "Biotech":   { bg: "#faf5ff", color: "#7e22ce" },
+  "Cleantech": { bg: "#f0fdf4", color: "#15803d" },
+  "Other":     { bg: "#f8fafc", color: "#64748b" },
+};
+const SectorsCell = makePortalMultiSelectCell<CompanyRow>(
+  "companies", "sectors",
+  ["Biotech","Cleantech","Other"],
+  SECTORS_COLORS
+);
+
 // ─── CompanyPickerCell: searchable company FK picker for contacts ──────────────
 
 function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
@@ -1148,26 +1386,42 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       {
         key: "lp_stage",
         name: "LP Stage",
-        width: 140,
+        width: 180,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<CompanyRow>(["Lead","Initial Meeting","Discussion in Process","Due Diligence","Committed","Passed"]),
+        editable: false,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <LpStageCell row={row} onSaved={(id, val) => {
+            setCompanies(prev => prev.map(c => c.id === id ? { ...c, lp_stage: val || null } : c));
+          }} />
+        ),
       },
       {
         key: "deal_status",
         name: "Deal Status",
-        width: 130,
+        width: 180,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<CompanyRow>(["identified_introduced","first_meeting","discussion_in_process","due_diligence","passed","portfolio","tracking_hold","exited"]),
+        editable: false,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <DealStatusCell row={row} onSaved={(id, val) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            setCompanies(prev => prev.map(c => c.id === id ? { ...c, deal_status: (val || null) as any } : c));
+          }} />
+        ),
       },
       {
         key: "stage",
         name: "Investment Round",
-        width: 150,
+        width: 160,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<CompanyRow>(["Pre-Seed","Pre-A","Seed","Seed Extension","Series A","Series B","Series C","Growth"]),
+        editable: false,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <InvestmentRoundCell row={row} onSaved={(id, val) => {
+            setCompanies(prev => prev.map(c => c.id === id ? { ...c, stage: val || null } : c));
+          }} />
+        ),
       },
       {
         key: "sectors",
@@ -1175,9 +1429,12 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 180,
         sortable: true,
         resizable: true,
-        renderCell: ({ row }: { row: CompanyRow }) =>
-          Array.isArray(row.sectors) ? row.sectors.join(", ") : (row.sectors ?? ""),
-        renderEditCell: makeComboEditor<CompanyRow>(["Biotech","Cleantech","Other"]),
+        editable: false,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <SectorsCell row={row} onSaved={(id, vals) => {
+            setCompanies(prev => prev.map(c => c.id === id ? { ...c, sectors: vals } : c));
+          }} />
+        ),
       },
       {
         key: "description",
