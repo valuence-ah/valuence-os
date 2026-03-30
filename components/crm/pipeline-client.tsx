@@ -1030,14 +1030,14 @@ export function PipelineClient({ initialCompanies }: Props) {
       // (enriched with the Exa signals we just saved)
       setIntelligenceStatus("Generating…");
       const res = await fetch(`/api/companies/${selected.id}/intelligence`, { method: "POST" });
+      const data = await res.json() as { items?: IntelItem[]; error?: string };
       if (res.ok) {
-        const data = await res.json() as { items?: IntelItem[] };
         setIntelligence(data.items ?? []);
       } else {
-        setIntelligenceError("Could not load intelligence");
+        setIntelligenceError(data.error ?? `HTTP ${res.status}`);
       }
-    } catch {
-      setIntelligenceError("Network error");
+    } catch (err) {
+      setIntelligenceError(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoadingIntelligence(false);
       setIntelligenceStatus("Refresh");
@@ -2161,7 +2161,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                 ) : intelligenceError ? (
                   <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2.5 mt-1">
                     <p className="text-xs font-medium text-red-600 mb-0.5">Failed to load intelligence</p>
-                    <p className="text-[11px] text-red-400">{intelligenceError}. Check that ANTHROPIC_API_KEY is set in Vercel → Settings → Environment Variables.</p>
+                    <p className="text-[11px] text-red-400 break-words">{intelligenceError}</p>
                   </div>
                 ) : intelligence.length === 0 ? (
                   <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl">
