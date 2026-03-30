@@ -345,13 +345,13 @@ function IntelligenceTab({ companyId }: { companyId: string }) {
               <div key={s.id} className="px-5 py-3.5">
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-sm font-medium text-slate-800 leading-snug">{s.title}</p>
-                  {s.score != null && (
+                  {s.relevance_score != null && (
                     <span className={cn(
                       "text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0",
-                      s.score >= 0.7 ? "bg-green-100 text-green-700" :
-                      s.score >= 0.5 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"
+                      s.relevance_score >= 0.7 ? "bg-green-100 text-green-700" :
+                      s.relevance_score >= 0.5 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"
                     )}>
-                      {Math.round(s.score * 100)}%
+                      {Math.round(s.relevance_score * 100)}%
                     </span>
                   )}
                 </div>
