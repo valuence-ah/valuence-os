@@ -2159,7 +2159,10 @@ export function PipelineClient({ initialCompanies }: Props) {
                     {[1,2,3].map(i => <div key={i} className="h-10 bg-slate-50 rounded-lg animate-pulse" />)}
                   </div>
                 ) : intelligenceError ? (
-                  <p className="text-xs text-red-400 italic pt-2">{intelligenceError}</p>
+                  <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2.5 mt-1">
+                    <p className="text-xs font-medium text-red-600 mb-0.5">Failed to load intelligence</p>
+                    <p className="text-[11px] text-red-400">{intelligenceError}. Check that ANTHROPIC_API_KEY is set in Vercel → Settings → Environment Variables.</p>
+                  </div>
                 ) : intelligence.length === 0 ? (
                   <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl">
                     <Sparkles size={20} className="mx-auto mb-2 text-slate-300" />
