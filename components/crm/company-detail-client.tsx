@@ -221,7 +221,11 @@ function IntelligenceTab({ companyId }: { companyId: string }) {
     setItems([]);
     try {
       const res = await fetch(`/api/companies/${companyId}/intelligence`, { method: "POST" });
-      const data = await res.json() as { items?: IntelItem[] };
+      const data = await res.json() as { items?: IntelItem[]; error?: string };
+      if (!res.ok || data.error) {
+        setStatus("error");
+        return;
+      }
       setItems(data.items ?? []);
       setStatus("done");
     } catch {

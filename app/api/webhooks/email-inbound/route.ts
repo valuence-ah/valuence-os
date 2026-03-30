@@ -16,7 +16,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient, validateWebhookSecret } from "@/lib/supabase/admin";
 
 // ── Postmark payload shape ────────────────────────────────────────────────────
 interface PostmarkEmail {
@@ -120,6 +120,10 @@ JSON:
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  if (!validateWebhookSecret(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = (await req.json().catch(() => ({}))) as PostmarkEmail;
 
   const fromEmail = (body.From ?? "").toLowerCase();
@@ -198,6 +202,19 @@ export async function POST(req: NextRequest) {
       .select("id")
       .single();
 
+    // Log inbound email as an interaction, linked to company + contact
+    if (contact?.id) {
+      await supabase.from("interactions").insert({
+        type: "email",
+        subject: body.Subject,
+        body: body.TextBody?.slice(0, 2000) ?? null,
+        date: body.Date ? new Date(body.Date).toISOString() : new Date().toISOString(),
+        company_id: companyId,
+        contact_ids: [contact.id],
+        sentiment: "neutral",
+      });
+    }
+
     return NextResponse.json({ success: true, contact_id: contact?.id });
   }
 
@@ -258,25 +275,28 @@ export async function POST(req: NextRequest) {
       .eq("email", contactEmail)
       .maybeSingle();
 
+    let contactId: string | null = existingContact?.id ?? null;
     if (!existingContact) {
       const parts = (parsed.founder_name || fromName).trim().split(" ");
-      await supabase.from("contacts").insert({
+      const { data: newContact } = await supabase.from("contacts").insert({
         first_name: parts[0] || contactEmail.split("@")[0],
         last_name: parts.slice(1).join(" ") || "(unknown)",
         email: contactEmail,
         company_id: companyId,
         type: "founder",
         status: "pending",
-      });
+      }).select("id").single();
+      contactId = newContact?.id ?? null;
     }
 
-    // Log interaction
+    // Log interaction, linked to company + contact
     await supabase.from("interactions").insert({
       type: "email",
       subject: body.Subject,
       body: body.TextBody?.slice(0, 2000) ?? null,
       date: body.Date ? new Date(body.Date).toISOString() : new Date().toISOString(),
       company_id: companyId,
+      contact_ids: contactId ? [contactId] : null,
       sentiment: "neutral",
     });
 

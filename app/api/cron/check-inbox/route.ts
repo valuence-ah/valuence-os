@@ -82,6 +82,13 @@ Return JSON:
 }
 
 export async function POST(req: NextRequest) {
+  // Verify Vercel cron secret or authenticated user
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = req.headers.get("authorization");
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   // Allow Vercel Cron or manual call with optional ?since= param
   const url = new URL(req.url);
   const since =

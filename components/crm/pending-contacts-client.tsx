@@ -350,7 +350,7 @@ function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onCha
 // ── Company Expand Panel ───────────────────────────────────────────────────────
 
 function CompanyExpandPanel({ companyId, onClose }: { companyId: string; onClose: () => void }) {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [company, setCompany]   = useState<Company | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -540,7 +540,7 @@ const ContactRow = memo(function ContactRow({
   onDiscarded: (id: string) => void;
   onExpand: (id: string) => void;
 }) {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [firstName, setFirstName] = useState(contact.first_name ?? "");
   const [lastName,  setLastName]  = useState(contact.last_name ?? "");
   const [type,      setType]      = useState<string>(() => mapTypeToAdmin(contact.type));
@@ -590,7 +590,7 @@ const ContactRow = memo(function ContactRow({
         await supabase.from("companies").update({ type: targetType }).eq("id", resolvedCompanyId);
       }
     }
-    await supabase.from("contacts").update({
+    const { error } = await supabase.from("contacts").update({
       first_name: firstName.trim() || contact.first_name,
       last_name:  lastName.trim()  || contact.last_name,
       type:       type as Contact["type"],
@@ -601,13 +601,15 @@ const ContactRow = memo(function ContactRow({
       status: "active",
     }).eq("id", contact.id);
     setBusy(false);
+    if (error) { console.error("[confirm] update failed:", error); return; }
     onConfirmed(contact.id);
   }
 
   async function discard() {
     setBusy(true);
-    await supabase.from("contacts").update({ status: "archived" }).eq("id", contact.id);
+    const { error } = await supabase.from("contacts").update({ status: "archived" }).eq("id", contact.id);
     setBusy(false);
+    if (error) { console.error("[discard] update failed:", error); return; }
     onDiscarded(contact.id);
   }
 
@@ -866,7 +868,7 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
           </div>
 
           <p className="text-[10px] text-amber-500">
-            Common exclusions: <button onClick={() => { ["info", "marketing", "newsletter", "noreply", "no-reply", "donotreply", "notifications", "updates", "alerts", "bounce", "support", "hello", "contact"].filter(w => !exclusions.includes(w)).forEach(w => setExclusions(prev => [...prev, w])); }} className="underline hover:text-amber-700">Add common spam patterns</button>
+            Common exclusions: <button onClick={() => { const common = ["info", "marketing", "newsletter", "noreply", "no-reply", "donotreply", "notifications", "updates", "alerts", "bounce", "support", "hello", "contact"]; setExclusions(prev => [...prev, ...common.filter(w => !prev.includes(w))]); }} className="underline hover:text-amber-700">Add common spam patterns</button>
           </p>
         </div>
       )}

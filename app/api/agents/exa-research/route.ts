@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { getAiConfig } from "@/lib/ai-config";
 
 export const maxDuration = 60;
@@ -30,6 +31,10 @@ interface ClaudeResearch {
 }
 
 export async function POST(req: NextRequest) {
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const EXA_API_KEY = process.env.EXA_API_KEY;
   if (!EXA_API_KEY) {
     return NextResponse.json(

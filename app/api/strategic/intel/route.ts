@@ -2,12 +2,17 @@
 // Uses Exa to search for recent news, Claude to summarize, returns intel items
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 30;
 
 interface ExaResult { url?: string; title?: string; text?: string; publishedDate?: string; }
 
 export async function POST(req: NextRequest) {
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { company_id, name, sectors } = await req.json();
   const EXA_KEY = process.env.EXA_API_KEY;
   const items: { id: string; headline: string; source: string; url: string; date: string; is_signal: boolean; summary: string }[] = [];
