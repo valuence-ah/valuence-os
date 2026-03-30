@@ -12,19 +12,19 @@ import { cn } from "@/lib/utils";
 // ── Model options ─────────────────────────────────────────────────────────────
 const MODELS = [
   { group: "Claude Sonnet 4.5 (recommended)", options: [
-    { value: "claude-sonnet-4-5-20251001", label: "Claude Sonnet 4.5" },
+    { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
   ]},
   { group: "Claude Haiku 4.5 (fast / cheap)", options: [
-    { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+    { value: "claude-haiku-4-5",  label: "Claude Haiku 4.5" },
   ]},
   { group: "Claude Opus 4.5 (most capable)", options: [
-    { value: "claude-opus-4-5-20251001",  label: "Claude Opus 4.5" },
+    { value: "claude-opus-4-5",   label: "Claude Opus 4.5" },
   ]},
-  { group: "Claude Sonnet 4.6", options: [
-    { value: "claude-sonnet-4-6",         label: "Claude Sonnet 4.6" },
+  { group: "Claude Sonnet 4 (latest)", options: [
+    { value: "claude-sonnet-4-0", label: "Claude Sonnet 4" },
   ]},
-  { group: "Claude Opus 4.6", options: [
-    { value: "claude-opus-4-6",           label: "Claude Opus 4.6" },
+  { group: "Claude Opus 4 (most powerful)", options: [
+    { value: "claude-opus-4-0",   label: "Claude Opus 4" },
   ]},
 ];
 

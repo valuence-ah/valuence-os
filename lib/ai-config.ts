@@ -13,7 +13,7 @@ export interface AiConfig {
   user_prompt: string;
 }
 
-const SONNET = "claude-sonnet-4-5-20251001";
+const SONNET = "claude-sonnet-4-5";
 
 const DEFAULTS: Record<string, AiConfig> = {
   pipeline_assistant:  { model: SONNET, max_tokens: 2048, temperature: 0.30, system_prompt: null, user_prompt: "" },

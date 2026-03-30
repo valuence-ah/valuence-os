@@ -114,12 +114,16 @@ If you lack recent data, include items about known facts (founding, key technolo
     });
 
     const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return NextResponse.json({ items: [] });
+    if (!jsonMatch) {
+      console.error("[intelligence] No JSON array in response:", text.slice(0, 200));
+      return NextResponse.json({ error: "Model returned unexpected format" }, { status: 500 });
+    }
 
     const items = JSON.parse(jsonMatch[0]);
     return NextResponse.json({ items: Array.isArray(items) ? items : [] });
   } catch (err) {
-    console.error("[intelligence] Error:", err);
-    return NextResponse.json({ items: [] });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[intelligence] Error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
