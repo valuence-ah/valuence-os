@@ -350,11 +350,12 @@ function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onCha
 
 // ── Company Expand Panel ───────────────────────────────────────────────────────
 
-function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initialName }: {
+function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initialName, onDeleted }: {
   companyId: string;
   onClose: () => void;
   createMode?: boolean;
   onCreated?: (id: string) => void;
+  onDeleted?: (id: string) => void;
   initialName?: string;
 }) {
   const supabase = useMemo(() => createClient(), []);
@@ -371,6 +372,18 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
   const [editType, setEditType]             = useState("");
   const [saving, setSaving]                 = useState(false);
   const [createSaving, setCreateSaving]     = useState(false);
+  const [confirmDelete, setConfirmDelete]   = useState(false);
+  const [deleting, setDeleting]             = useState(false);
+
+  async function handleDelete() {
+    if (!company) return;
+    setDeleting(true);
+    // Dismiss immediately — no waiting for network
+    onDeleted?.(company.id);
+    onClose();
+    const { error } = await supabase.from("companies").delete().eq("id", company.id);
+    if (error) console.error("[delete company]", error);
+  }
 
   useEffect(() => {
     if (createMode) {
@@ -655,12 +668,27 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
             </div>
           </div>
         )}
-        {company && (
-          <div className="px-5 py-4 border-t border-slate-200">
+        {company && !createMode && (
+          <div className="px-5 py-4 border-t border-slate-200 space-y-2">
             <a href={`/crm/companies/${company.id}`}
               className="flex items-center justify-center gap-2 w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
               Open Full Profile <ChevronRight size={14} />
             </a>
+            {confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-red-600 flex-1">Delete this company and unlink all contacts?</span>
+                <button onClick={() => setConfirmDelete(false)} className="text-xs px-2.5 py-1 border border-slate-200 rounded text-slate-500 hover:bg-slate-50">Cancel</button>
+                <button onClick={handleDelete} disabled={deleting}
+                  className="text-xs px-2.5 py-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded font-medium flex items-center gap-1">
+                  {deleting ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />} Delete
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)}
+                className="flex items-center justify-center gap-1.5 w-full py-2 border border-red-200 text-red-500 hover:bg-red-50 text-sm font-medium rounded-lg transition-colors">
+                <Trash2 size={13} /> Delete Company
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -729,13 +757,10 @@ const ContactRow = memo(function ContactRow({
     setBusy(true);
     const resolvedCompanyId = companyId || null;
     const targetType = CONTACT_TO_COMPANY_TYPE[type as ContactTypeStr];
-    if (resolvedCompanyId && targetType) {
-      const co = mergedCompanies.find(c => c.id === resolvedCompanyId);
-      if (co && (!co.type || co.type === "other")) {
-        await supabase.from("companies").update({ type: targetType }).eq("id", resolvedCompanyId);
-      }
-    }
-    const { error } = await supabase.from("contacts").update({
+    // Dismiss immediately — no waiting for network
+    onConfirmed(contact.id);
+    // Run DB saves concurrently in background (component may unmount)
+    const contactSave = supabase.from("contacts").update({
       first_name: firstName.trim() || contact.first_name,
       last_name:  lastName.trim()  || contact.last_name,
       type:       type as Contact["type"],
@@ -745,23 +770,31 @@ const ContactRow = memo(function ContactRow({
       location_country: resolvedCountry,
       status: "active",
     }).eq("id", contact.id);
-    setBusy(false);
-    if (error) { console.error("[confirm] update failed:", error); return; }
-    onConfirmed(contact.id);
+    const companySave = (resolvedCompanyId && targetType)
+      ? (() => {
+          const co = mergedCompanies.find(c => c.id === resolvedCompanyId);
+          return co && (!co.type || co.type === "other")
+            ? supabase.from("companies").update({ type: targetType }).eq("id", resolvedCompanyId)
+            : null;
+        })()
+      : null;
+    const [{ error: ce }, coResult] = await Promise.all([contactSave, companySave ?? Promise.resolve({ error: null })]);
+    if (ce) console.error("[confirm] contact save error:", ce);
+    if ((coResult as { error: unknown } | null)?.error) console.error("[confirm] company save error:", (coResult as { error: unknown }).error);
   }
 
   async function discard() {
     setBusy(true);
-    const { error } = await supabase.from("contacts").update({ status: "archived" }).eq("id", contact.id);
-    setBusy(false);
-    if (error) { console.error("[discard] update failed:", error); return; }
+    // Dismiss immediately — no waiting for network
     onDiscarded(contact.id);
+    const { error } = await supabase.from("contacts").update({ status: "archived" }).eq("id", contact.id);
+    if (error) console.error("[discard] update failed:", error);
   }
 
   const initials = getInitials(`${firstName} ${lastName}`);
 
   return (
-    <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 hover:border-slate-300 transition-colors">
+    <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2.5 hover:border-slate-300 hover:bg-slate-50/40 transition-all">
 
       {/* Avatar */}
       <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
@@ -769,7 +802,7 @@ const ContactRow = memo(function ContactRow({
       </div>
 
       {/* Name */}
-      <div className="w-40 flex-shrink-0 flex gap-1">
+      <div className="w-48 flex-shrink-0 flex gap-1">
         <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First"
           className={cn(INPUT_CLS, "w-1/2")} />
         <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last"
@@ -1056,7 +1089,14 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
       </div>
 
       {expandedCompanyId && (
-        <CompanyExpandPanel companyId={expandedCompanyId} onClose={() => setExpandedCompanyId(null)} />
+        <CompanyExpandPanel
+          companyId={expandedCompanyId}
+          onClose={() => setExpandedCompanyId(null)}
+          onDeleted={(id) => {
+            setContacts(prev => prev.map(c => c.company_id === id ? { ...c, company_id: null, company: undefined } : c));
+            setExpandedCompanyId(null);
+          }}
+        />
       )}
     </div>
   );

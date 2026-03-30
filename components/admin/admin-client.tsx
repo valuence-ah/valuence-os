@@ -281,6 +281,88 @@ function ContactTypeCell({ row, onSaved }: { row: ContactRow; onSaved: (id: stri
   );
 }
 
+// ─── TitleCell: portal single-select for contact title ───────────────────────
+
+const TITLE_OPTIONS_LIST = [
+  "Admin", "Advisor", "Analyst", "Associate", "Board Member",
+  "CEO", "CEO / Co-founder", "CFO", "Chief of Staff", "Co-Founder",
+  "COO", "CTO", "CTO / Co-founder", "Director", "Founder",
+  "General Counsel", "General Partner", "Head of Investments",
+  "Head of Portfolio", "Investment Manager", "Managing Director",
+  "Managing Partner", "Operating Partner", "Partner", "Portfolio Manager",
+  "President", "Principal", "Senior Associate", "Senior Vice President",
+  "Venture Partner", "Vice President", "Other",
+];
+
+function TitleCell({ row, onSaved }: { row: ContactRow; onSaved: (id: string, title: string) => void }) {
+  const supabase = createClient();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const cellRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const current = row.title ?? "";
+
+  function openDropdown(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (cellRef.current) {
+      const rect = cellRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 200) });
+    }
+    setOpen(true);
+  }
+
+  async function pick(opt: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setOpen(false);
+    if (!row.id) return;
+    setSaving(true);
+    await supabase.from("contacts").update({ title: opt || null }).eq("id", row.id);
+    setSaving(false);
+    onSaved(row.id, opt);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) { if (!cellRef.current?.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={cellRef} onClick={openDropdown}
+      style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer" }}
+      title="Click to edit">
+      {current ? (
+        <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#1e293b", fontWeight: 500 }}>
+          {saving ? "Saving…" : current}
+        </span>
+      ) : (
+        <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#cbd5e1" }}>{saving ? "Saving…" : "—"}</span>
+      )}
+      {open && pos && createPortal(
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 99999, overflow: "hidden", fontFamily: "inherit" }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div style={{ padding: "6px 0", maxHeight: 280, overflowY: "auto" }}>
+            <div onClick={e => pick("", e)}
+              style={{ padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>
+              — No title
+            </div>
+            {TITLE_OPTIONS_LIST.map(opt => (
+              <div key={opt} onClick={e => pick(opt, e)}
+                style={{ padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#1e293b", background: opt === current ? "#f0f9ff" : "transparent" }}>
+                {opt}
+              </div>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 // ─── CompanyPickerCell: searchable company FK picker for contacts ──────────────
 
 function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
@@ -1338,7 +1420,15 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         width: 160,
         sortable: true,
         resizable: true,
-        renderEditCell: renderTextEditor,
+        editable: false,
+        renderCell: ({ row }: { row: ContactRow }) => (
+          <TitleCell
+            row={row}
+            onSaved={(id, title) => {
+              setContacts(prev => prev.map(c => c.id === id ? { ...c, title: title || null } : c));
+            }}
+          />
+        ),
       },
       {
         key: "type",
