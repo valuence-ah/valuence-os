@@ -8,7 +8,7 @@ import { getInitials, formatDate, cn } from "@/lib/utils";
 import {
   Check, X, Mail, ExternalLink, UserPlus, Maximize2, Loader2,
   Search, ChevronDown, ChevronUp, Plus, MapPin, Globe, Users,
-  Tag, ChevronRight, Linkedin, SlidersHorizontal, Trash2,
+  Tag, ChevronRight, Linkedin, SlidersHorizontal, Trash2, Pencil, Clock,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -349,14 +349,36 @@ function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onCha
 
 // ── Company Expand Panel ───────────────────────────────────────────────────────
 
-function CompanyExpandPanel({ companyId, onClose }: { companyId: string; onClose: () => void }) {
+function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initialName }: {
+  companyId: string;
+  onClose: () => void;
+  createMode?: boolean;
+  onCreated?: (id: string) => void;
+  initialName?: string;
+}) {
   const supabase = useMemo(() => createClient(), []);
   const [company, setCompany]   = useState<Company | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading]   = useState(true);
   const [imgError, setImgError] = useState(false);
+  const [editing, setEditing]   = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editWebsite, setEditWebsite]       = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editCity, setEditCity]             = useState("");
+  const [editCountry, setEditCountry]       = useState("");
+  const [editType, setEditType]             = useState("");
+  const [saving, setSaving]                 = useState(false);
+  const [createSaving, setCreateSaving]     = useState(false);
 
   useEffect(() => {
+    if (createMode) {
+      setEditing(true);
+      setEditName(initialName ?? "");
+      setEditType("startup");
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     async function load() {
       setLoading(true); setImgError(false);
@@ -370,6 +392,55 @@ function CompanyExpandPanel({ companyId, onClose }: { companyId: string; onClose
     load();
     return () => { cancelled = true; };
   }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function startEditing() {
+    if (!company) return;
+    setEditName(company.name);
+    setEditWebsite(company.website ?? "");
+    setEditDescription(company.description ?? "");
+    setEditCity(company.location_city ?? "");
+    setEditCountry(company.location_country ?? "");
+    setEditType(company.type);
+    setEditing(true);
+  }
+  async function saveEdits() {
+    if (createMode) {
+      if (!editName.trim()) return;
+      setCreateSaving(true);
+      const { data, error } = await supabase.from("companies")
+        .insert({
+          name: editName.trim(),
+          type: editType || "startup",
+          website: editWebsite.trim() || null,
+          description: editDescription.trim() || null,
+          location_city: editCity.trim() || null,
+          location_country: editCountry.trim() || null,
+          status: "active",
+        })
+        .select("id")
+        .single();
+      setCreateSaving(false);
+      if (error || !data) { console.error("[create company]", error); return; }
+      onCreated?.(data.id);
+      onClose();
+      return;
+    }
+    if (!company) return;
+    setSaving(true);
+    const updates: Record<string, unknown> = {
+      name: editName.trim() || company.name,
+      website: editWebsite.trim() || null,
+      description: editDescription.trim() || null,
+      location_city: editCity.trim() || null,
+      location_country: editCountry.trim() || null,
+      type: editType || company.type,
+    };
+    const { error } = await supabase.from("companies").update(updates).eq("id", company.id);
+    setSaving(false);
+    if (error) { console.error("[save company]", error); return; }
+    setCompany({ ...company, ...updates } as Company);
+    setEditing(false);
+  }
 
   const domain = company?.website ? company.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "") : null;
   const clearbitUrl = domain ? `https://logo.clearbit.com/${domain}` : null;
@@ -389,7 +460,7 @@ function CompanyExpandPanel({ companyId, onClose }: { companyId: string; onClose
               </div>
             )}
             <div>
-              <h3 className="text-sm font-semibold text-slate-900">{loading ? "Loading…" : company?.name ?? "Company"}</h3>
+              <h3 className="text-sm font-semibold text-slate-900">{createMode ? "New Company" : loading ? "Loading…" : company?.name ?? "Company"}</h3>
               {company && (
                 <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium",
                   TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
@@ -399,6 +470,12 @@ function CompanyExpandPanel({ companyId, onClose }: { companyId: string; onClose
             </div>
           </div>
           <div className="flex items-center gap-1.5">
+            {company && !editing && (
+              <button onClick={startEditing}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                <Pencil size={11} /> Edit
+              </button>
+            )}
             {company && (
               <a href={`/crm/companies/${company.id}`} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
@@ -414,6 +491,58 @@ function CompanyExpandPanel({ companyId, onClose }: { companyId: string; onClose
           <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Company not found.</div>
         ) : (
           <div className="flex-1 overflow-y-auto">
+            {editing ? (
+              <div className="px-5 py-4 border-b border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Edit Company</p>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => setEditing(false)} className="text-xs px-2.5 py-1 border border-slate-200 rounded text-slate-500 hover:bg-slate-50">Cancel</button>
+                    <button onClick={saveEdits} disabled={saving}
+                      className="text-xs px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded font-medium flex items-center gap-1">
+                      {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Name</p>
+                    <input value={editName} onChange={e => setEditName(e.target.value)} className={INPUT_CLS} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Type</p>
+                    <select value={editType} onChange={e => setEditType(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
+                      <option value="startup">Startup</option>
+                      <option value="fund">Fund / VC</option>
+                      <option value="lp">LP</option>
+                      <option value="corporate">Corporate</option>
+                      <option value="ecosystem_partner">Ecosystem</option>
+                      <option value="government">Government / Academic</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Website</p>
+                    <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)} placeholder="https://..." className={INPUT_CLS} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-0.5">City</p>
+                      <input value={editCity} onChange={e => setEditCity(e.target.value)} className={INPUT_CLS} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Country</p>
+                      <input value={editCountry} onChange={e => setEditCountry(e.target.value)} className={INPUT_CLS} />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Description</p>
+                    <textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={3}
+                      className="w-full text-xs border border-slate-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 resize-none" />
+                  </div>
+                </div>
+              </div>
+            ) : (
+            <>
             <div className="px-5 py-4 border-b border-slate-100 space-y-3">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">General Information</p>
               <div className="grid grid-cols-2 gap-3">
@@ -475,6 +604,8 @@ function CompanyExpandPanel({ companyId, onClose }: { companyId: string; onClose
                 </div>
               </div>
             )}
+            </>
+            )}
             <div className="px-5 py-4">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1">
                 <Users size={10} /> Contacts ({contacts.length})
@@ -497,7 +628,14 @@ function CompanyExpandPanel({ companyId, onClose }: { companyId: string; onClose
                             <span className="ml-1.5 text-[9px] text-blue-600 bg-blue-50 px-1 py-0.5 rounded">Primary</span>
                           )}
                         </p>
-                        <p className="text-[10px] text-slate-400 truncate">{c.title ?? c.type}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[10px] text-slate-400 truncate">{c.title ?? c.type}</p>
+                          {c.last_contact_date && (
+                            <span className="text-[9px] text-slate-300 flex items-center gap-0.5 flex-shrink-0">
+                              <Clock size={8} /> {formatDate(c.last_contact_date)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex gap-1.5 text-slate-300">
                         {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-600 transition-colors"><Mail size={12} /></a>}
@@ -558,23 +696,29 @@ const ContactRow = memo(function ContactRow({
   });
   const [busy, setBusy] = useState(false);
   const [extraCompanies, setExtraCompanies] = useState<CompanyStub[]>([]);
+  const [showCreatePanel, setShowCreatePanel] = useState(false);
+  const [createPanelName, setCreatePanelName] = useState("");
 
   const mergedCompanies = useMemo(
     () => (extraCompanies.length ? [...extraCompanies, ...allCompanies] : allCompanies),
     [extraCompanies, allCompanies]
   );
 
-  const handleCreateCompany = useCallback(async (name: string, coType: string): Promise<string | null> => {
-    const { data, error } = await supabase
-      .from("companies")
-      .insert({ name, type: coType, status: "active" })
-      .select("id, name, type")
-      .single();
-    if (error || !data) return null;
-    const stub = data as CompanyStub;
-    setExtraCompanies(prev => [stub, ...prev]);
-    return stub.id;
-  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+  const handleCreateCompany = useCallback(async (name: string, _coType: string): Promise<string | null> => {
+    setCreatePanelName(name);
+    setShowCreatePanel(true);
+    return null; // panel will handle creation
+  }, []);
+
+  const handleCompanyCreated = useCallback(async (newId: string) => {
+    const { data } = await supabase.from("companies").select("id, name, type, website").eq("id", newId).single();
+    if (data) {
+      const stub = data as CompanyStub;
+      setExtraCompanies(prev => [stub, ...prev]);
+      setCompanyId(stub.id);
+    }
+    setShowCreatePanel(false);
+  }, [supabase]);
 
   const resolvedTitle   = title === "Other" ? customTitle : title;
   const resolvedCountry = country === "__custom__" ? customCountry : country;
@@ -692,7 +836,7 @@ const ContactRow = memo(function ContactRow({
       </div>
 
       {/* Added date */}
-      <span className="text-[10px] text-slate-400 flex-shrink-0 w-14 truncate text-right">
+      <span className="text-[10px] text-slate-400 flex-shrink-0 w-20 truncate text-right">
         {formatDate(contact.created_at)}
       </span>
 
@@ -708,6 +852,16 @@ const ContactRow = memo(function ContactRow({
           <X size={12} />
         </button>
       </div>
+
+      {showCreatePanel && (
+        <CompanyExpandPanel
+          companyId=""
+          createMode
+          initialName={createPanelName}
+          onCreated={handleCompanyCreated}
+          onClose={() => setShowCreatePanel(false)}
+        />
+      )}
     </div>
   );
 });
@@ -883,7 +1037,7 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
         <div className="w-48 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Company</div>
         <div className="w-20 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">City</div>
         <SortHeader label="Country *"      sortKey="country" active={sortKey==="country"} dir={sortDir} onSort={handleSort} className="w-28 flex-shrink-0" />
-        <SortHeader label="Added"          sortKey="added"   active={sortKey==="added"}   dir={sortDir} onSort={handleSort} className="w-14 flex-shrink-0 justify-end" />
+        <SortHeader label="Added"          sortKey="added"   active={sortKey==="added"}   dir={sortDir} onSort={handleSort} className="w-20 flex-shrink-0 justify-end" />
       </div>
 
       {/* Rows */}

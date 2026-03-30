@@ -487,6 +487,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [loadingIntelligence, setLoadingIntelligence] = useState(false);
   const [intelligenceStatus, setIntelligenceStatus] = useState<string>("Refresh");
   const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   // Link existing contact in manage panel
   const [showLinkContactForm, setShowLinkContactForm] = useState(false);
@@ -1964,14 +1965,17 @@ export function PipelineClient({ initialCompanies }: Props) {
                             {kindIcon[ev.kind] ?? <FileText size={13} className="text-slate-400" />}
                           </div>
                           {/* Card */}
-                          <div className={cn("flex-1 border rounded-xl px-4 py-3 min-w-0", kindColor[ev.kind] ?? "bg-slate-50 border-slate-200")}>
+                          <div
+                            className={cn("flex-1 border rounded-xl px-4 py-3 min-w-0 cursor-pointer transition-colors hover:ring-1 hover:ring-slate-300", kindColor[ev.kind] ?? "bg-slate-50 border-slate-200")}
+                            onClick={() => setExpandedEventId(prev => prev === ev.id ? null : ev.id)}
+                          >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{kindLabel[ev.kind] ?? ev.kind}</span>
                                   <span className="text-xs font-medium text-slate-700 truncate">{ev.title}</span>
                                 </div>
-                                {ev.body && <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-3">{ev.body}</p>}
+                                {ev.body && <p className={cn("text-xs text-slate-500 mt-1 leading-relaxed whitespace-pre-wrap", expandedEventId !== ev.id && "line-clamp-3")}>{ev.body}</p>}
                                 {ev.contact_ids && ev.contact_ids.length > 0 && (
                                   <div className="flex flex-wrap gap-1 mt-1.5">
                                     {ev.contact_ids.map((cid: string) => {
