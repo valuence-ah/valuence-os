@@ -99,6 +99,7 @@ export interface Interaction {
   contact_ids: string[] | null;
   fireflies_id: string | null;
   transcript_url: string | null;
+  transcript_text: string | null;
   summary: string | null;
   action_items: string[] | null;
   sentiment: "positive" | "neutral" | "negative" | null;

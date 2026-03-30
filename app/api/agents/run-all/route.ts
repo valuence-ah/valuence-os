@@ -1,9 +1,10 @@
 // ─── Run All Agents API Route ─────────────────────────────────────────────────
-// Runs all 3 sourcing agents in parallel. Used by the daily Vercel Cron.
+// Runs all 4 sourcing agents in parallel. Used by the daily Vercel Cron.
 import { NextResponse } from "next/server";
 import { runArxivAgent } from "@/lib/agents/arxiv";
 import { runSbirAgent } from "@/lib/agents/sbir";
 import { runNsfAgent } from "@/lib/agents/nsf";
+import { runExaSourcingAgent } from "@/lib/agents/exa-sourcing";
 
 export const maxDuration = 120;
 
@@ -14,10 +15,11 @@ interface AgentResult {
 }
 
 export async function POST() {
-  const [arxivSettled, sbirSettled, nsfSettled] = await Promise.allSettled([
+  const [arxivSettled, sbirSettled, nsfSettled, exaSettled] = await Promise.allSettled([
     runArxivAgent(),
     runSbirAgent(),
     runNsfAgent(),
+    runExaSourcingAgent(),
   ]);
 
   const arxiv: AgentResult =
@@ -35,8 +37,13 @@ export async function POST() {
       ? nsfSettled.value
       : { fetched: 0, saved: 0, error: String(nsfSettled.reason) };
 
+  const exa: AgentResult =
+    exaSettled.status === "fulfilled"
+      ? exaSettled.value
+      : { fetched: 0, saved: 0, error: String(exaSettled.reason) };
+
   return NextResponse.json({
     success: true,
-    results: { arxiv, sbir, nsf },
+    results: { arxiv, sbir, nsf, exa },
   });
 }

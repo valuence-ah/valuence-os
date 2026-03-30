@@ -7,17 +7,9 @@ import {
   saveSignals,
   type RawSignal,
 } from "@/lib/sourcing-agents";
+import { loadAgentConfig } from "@/lib/agent-config";
 
 const SBIR_BASE = "https://api.sbir.gov/public/api/awards";
-
-const KEYWORDS = [
-  "clean energy",
-  "synthetic biology",
-  "advanced materials",
-  "carbon capture",
-  "battery",
-  "hydrogen",
-];
 
 interface SbirAward {
   companyName?: string;
@@ -56,15 +48,16 @@ function buildAuthors(award: SbirAward): string[] {
 
 /** Fetches SBIR awards matching Valuence keywords and saves relevant ones. */
 export async function runSbirAgent(): Promise<{ fetched: number; saved: number }> {
+  const cfg = await loadAgentConfig("sbir");
   const currentYear = new Date().getFullYear();
   const allSignals = new Map<string, RawSignal>(); // deduplicate by URL
 
-  for (const keyword of KEYWORDS) {
+  for (const keyword of cfg.keywords) {
     try {
       const params = new URLSearchParams({
         keyword,
-        rows: "15",
-        year: String(currentYear),
+        rows: String(cfg.rowsPerKeyword),
+        year: String(currentYear - cfg.yearOffset),
       });
 
       const res = await fetch(`${SBIR_BASE}?${params.toString()}`, {
@@ -126,7 +119,7 @@ export async function runSbirAgent(): Promise<{ fetched: number; saved: number }
   if (fetched === 0) return { fetched: 0, saved: 0 };
 
   const scored = await scoreSignals(signals);
-  const saved = await saveSignals(scored, 0.4);
+  const saved = await saveSignals(scored, cfg.minScore);
 
   return { fetched, saved };
 }

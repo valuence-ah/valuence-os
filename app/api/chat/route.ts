@@ -1,33 +1,60 @@
 // ─── Chat API Route /api/chat ─────────────────────────────────────────────────
 // Receives a user message, queries the database for relevant context,
 // injects it into Claude's system prompt, and streams the response back.
-// This is what makes Claude "know" about your fund's actual data.
+//
+// Context strategy (layered):
+//   Layer 1 — Always injected: fund snapshot (companies, deals, portfolio, LPs, memos)
+//   Layer 2 — Smart context:   if user mentions a company name, fetch that company's
+//                              full interactions, documents, and signals
+//   Layer 3 — Semantic search: if VOYAGE_API_KEY is set, embed the query and search
+//                              documents + signals via pgvector
 
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
 import { createClient } from "@/lib/supabase/server";
+import { embedText } from "@/lib/embeddings";
 
-// Allow streaming responses up to 30 seconds
-export const maxDuration = 30;
+// Allow streaming responses up to 60 seconds
+export const maxDuration = 60;
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Extract the last user message text from the messages array. */
+function getLastUserMessage(messages: { role: string; content: string }[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user") return messages[i].content ?? "";
+  }
+  return "";
+}
+
+/** Find company names from the query against a known list. Returns matched IDs. */
+function detectMentionedCompanies(
+  query: string,
+  companies: { id: string; name: string }[]
+): string[] {
+  const q = query.toLowerCase();
+  return companies
+    .filter((c) => c.name && q.includes(c.name.toLowerCase()))
+    .map((c) => c.id);
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
 export async function POST(req: Request) {
   const { messages } = await req.json();
   const supabase = await createClient();
 
-  // ── 1. Verify the user is authenticated ──────────────────────────────────
+  // ── 1. Auth ───────────────────────────────────────────────────────────────
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  if (!user) return new Response("Unauthorized", { status: 401 });
 
-  // ── 2. Gather live context from the database ──────────────────────────────
-  // We run several quick queries to give Claude real-time fund data.
-  // This is a "retrieval-augmented" approach without needing vector search for simple queries.
+  const lastUserMessage = getLastUserMessage(messages);
 
+  // ── 2. Layer 1: Fund snapshot ─────────────────────────────────────────────
   type CompanyRow = { id: string; name: string; type: string; deal_status: string | null; sectors: string[] | null; stage: string | null; description: string | null; location_city: string | null; location_country: string | null; funding_raised: number | null; source: string | null; created_at: string };
   type DealRow = { stage: string; instrument: string | null; investment_amount: number | null; valuation_cap: number | null; company?: { name: string; sectors: string[] | null } | null };
   type PortfolioRow = { name: string; sectors: string[] | null; deal_status: string | null; funding_raised: number | null };
@@ -51,7 +78,6 @@ export async function POST(req: Request) {
     supabase.from("ic_memos").select("title, recommendation, status, company:companies(name, sectors), created_at").order("created_at", { ascending: false }).limit(10) as unknown as Promise<{ data: MemoRow[] | null; error: unknown }>,
   ]);
 
-  // ── 3. Format context as readable text for Claude ─────────────────────────
   const fundContext = `
 CURRENT FUND DATA (as of ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })})
 =======================================================================
@@ -75,13 +101,109 @@ RECENT IC MEMOS (${recentMemos?.length ?? 0}):
 ${recentMemos?.map(m => `- ${m.title} (${m.company?.name}) | Recommendation: ${m.recommendation} | Status: ${m.status} | Date: ${new Date(m.created_at).toLocaleDateString()}`).join("\n") || "None"}
 `;
 
-  // ── 4. Build the system prompt ─────────────────────────────────────────────
+  // ── 3. Layer 2: Smart company deep-dive ───────────────────────────────────
+  let deepDiveContext = "";
+
+  if (lastUserMessage && companies) {
+    const mentionedIds = detectMentionedCompanies(lastUserMessage, companies);
+
+    if (mentionedIds.length > 0) {
+      type InteractionRow = { type: string; subject: string | null; summary: string | null; action_items: string[] | null; date: string; sentiment: string | null };
+      type DocRow = { name: string; type: string; ai_summary: string | null; created_at: string };
+
+      const [{ data: interactions }, { data: docs }] = await Promise.all([
+        supabase
+          .from("interactions")
+          .select("type, subject, summary, action_items, date, sentiment")
+          .in("company_id", mentionedIds)
+          .order("date", { ascending: false })
+          .limit(10) as unknown as Promise<{ data: InteractionRow[] | null; error: unknown }>,
+        supabase
+          .from("documents")
+          .select("name, type, ai_summary, created_at")
+          .in("company_id", mentionedIds)
+          .limit(5) as unknown as Promise<{ data: DocRow[] | null; error: unknown }>,
+      ]);
+
+      if ((interactions?.length ?? 0) > 0 || (docs?.length ?? 0) > 0) {
+        const companyNames = companies
+          .filter((c) => mentionedIds.includes(c.id))
+          .map((c) => c.name)
+          .join(", ");
+
+        deepDiveContext = `
+\nDEEP-DIVE DATA FOR: ${companyNames}
+──────────────────────────────────────
+RECENT MEETINGS & INTERACTIONS (${interactions?.length ?? 0}):
+${interactions?.map(i => `- [${i.type.toUpperCase()}] ${i.subject || "—"} | ${new Date(i.date).toLocaleDateString()} | Sentiment: ${i.sentiment || "—"}${i.summary ? `\n  Summary: ${i.summary}` : ""}${i.action_items?.length ? `\n  Actions: ${i.action_items.join("; ")}` : ""}`).join("\n") || "None"}
+
+DOCUMENTS (${docs?.length ?? 0}):
+${docs?.map(d => `- ${d.name} (${d.type}) | ${new Date(d.created_at).toLocaleDateString()}${d.ai_summary ? `\n  AI Summary: ${d.ai_summary}` : ""}`).join("\n") || "None"}
+`;
+      }
+    }
+  }
+
+  // ── 4. Layer 3: Semantic search (pgvector) ────────────────────────────────
+  let semanticContext = "";
+
+  if (lastUserMessage && process.env.VOYAGE_API_KEY) {
+    try {
+      const queryEmbedding = await embedText(lastUserMessage);
+
+      if (queryEmbedding) {
+        type DocMatch = { id: string; name: string; type: string; company_name: string | null; text_snippet: string | null; similarity: number };
+        type SignalMatch = { id: string; title: string; source: string; summary: string | null; relevance_score: number | null; url: string | null; similarity: number };
+
+        const [{ data: docMatches }, { data: signalMatches }] = await Promise.all([
+          supabase.rpc("match_documents", {
+            query_embedding: queryEmbedding,
+            match_threshold: 0.5,
+            match_count: 4,
+          }) as unknown as Promise<{ data: DocMatch[] | null; error: unknown }>,
+          supabase.rpc("match_signals", {
+            query_embedding: queryEmbedding,
+            match_threshold: 0.5,
+            match_count: 4,
+          }) as unknown as Promise<{ data: SignalMatch[] | null; error: unknown }>,
+        ]);
+
+        const hasDocMatches    = (docMatches?.length ?? 0) > 0;
+        const hasSignalMatches = (signalMatches?.length ?? 0) > 0;
+
+        if (hasDocMatches || hasSignalMatches) {
+          semanticContext = `
+\nSEMANTICALLY RELEVANT RESULTS (matched to your query):
+──────────────────────────────────────`;
+
+          if (hasDocMatches) {
+            semanticContext += `\nDOCUMENTS (${docMatches!.length} matches):\n`;
+            semanticContext += docMatches!.map(d =>
+              `- "${d.name}" (${d.type})${d.company_name ? ` — ${d.company_name}` : ""} [${Math.round(d.similarity * 100)}% match]${d.text_snippet ? `\n  Excerpt: ${d.text_snippet}` : ""}`
+            ).join("\n");
+          }
+
+          if (hasSignalMatches) {
+            semanticContext += `\nSOURCING SIGNALS (${signalMatches!.length} matches):\n`;
+            semanticContext += signalMatches!.map(s =>
+              `- [${s.source.toUpperCase()}] ${s.title} [${Math.round(s.similarity * 100)}% match]${s.summary ? `\n  ${s.summary}` : ""}`
+            ).join("\n");
+          }
+        }
+      }
+    } catch (err) {
+      // Semantic search failing silently is acceptable — Layer 1+2 still work
+      console.warn("[chat] Semantic search error:", err);
+    }
+  }
+
+  // ── 5. System prompt ──────────────────────────────────────────────────────
   const systemPrompt = `You are the AI assistant for Valuence Ventures, an early-stage deeptech venture capital fund focused on cleantech, techbio, and advanced materials. You invest at pre-seed and seed stage.
 
-You have direct access to the fund's live operating data (CRM, pipeline, portfolio, LP tracker). Use this data to give accurate, specific, and actionable answers.
+You have direct access to the fund's live operating data (CRM, pipeline, portfolio, LP tracker, meetings, documents). Use this data to give accurate, specific, and actionable answers.
 
 FUND CONTEXT:
-${fundContext}
+${fundContext}${deepDiveContext}${semanticContext}
 
 INSTRUCTIONS:
 - Always refer to specific company names, amounts, and data when answering
@@ -92,7 +214,7 @@ INSTRUCTIONS:
 - You can help draft emails, memos, meeting prep notes, and analysis
 - Speak like a sharp, knowledgeable VC analyst/partner`;
 
-  // ── 5. Stream the response ─────────────────────────────────────────────────
+  // ── 6. Stream ─────────────────────────────────────────────────────────────
   const result = streamText({
     model: anthropic("claude-sonnet-4-5"),
     system: systemPrompt,

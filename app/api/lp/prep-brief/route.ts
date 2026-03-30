@@ -1,10 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
+import { getAiConfig } from "@/lib/ai-config";
 
 export async function POST(req: NextRequest) {
   try {
     const { company, contacts, interactions, mandateScores, coinvestInterest, coinvestSector, owner } = await req.json();
 
+    const cfg = await getAiConfig("lp_prep_brief");
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const lastInteractions = (interactions ?? []).slice(0, 3).map((i: any) =>
@@ -64,10 +66,12 @@ Write a brief with these EXACT sections (use bold headers):
 **Suggested Ask For This Meeting**
 [Specific, stage-appropriate ask — e.g., "Request first close commitment of $Xm", "Submit DDQ materials", "Confirm co-invest interest in Techbio portfolio companies"]`;
 
+    const fullPrompt = cfg.user_prompt ? `${prompt}\n\nAdditional instructions: ${cfg.user_prompt}` : prompt;
     const message = await anthropic.messages.create({
-      model: "claude-4-opus-20250514",
-      max_tokens: 1500,
-      messages: [{ role: "user", content: prompt }],
+      model: cfg.model,
+      max_tokens: cfg.max_tokens,
+      ...(cfg.system_prompt ? { system: cfg.system_prompt } : {}),
+      messages: [{ role: "user", content: fullPrompt }],
     });
 
     const brief = message.content[0].type === "text" ? message.content[0].text : "";

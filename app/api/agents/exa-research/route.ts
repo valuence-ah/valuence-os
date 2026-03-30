@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const maxDuration = 60;
 
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createAdminClient();
+  const cfg = await getAiConfig("exa_research");
 
   // 1. Fetch company from Supabase
   const { data: company, error: companyError } = await supabase
@@ -114,9 +116,9 @@ export async function POST(req: NextRequest) {
     try {
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const message = await anthropic.messages.create({
-        model: "claude-haiku-4-5",
-        max_tokens: 1024,
-        system: `You are a VC analyst extracting structured insights about a company.
+        model: cfg.model,
+        max_tokens: cfg.max_tokens,
+        system: cfg.system_prompt ?? `You are a VC analyst extracting structured insights about a company.
 Return ONLY valid JSON with these fields:
 {
   "description_update": "1-2 sentence description of what the company does",

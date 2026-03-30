@@ -21,7 +21,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
 import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen } from "lucide-react";
 import { AiConfigPanel } from "@/components/admin/ai-config-panel";
-import { FeedsManager } from "@/components/admin/feeds-manager";
+import { ApiConfigPanel } from "@/components/admin/api-config-panel";
 import { DrivePanel } from "@/components/admin/drive-panel";
 
 // ─── Row types ────────────────────────────────────────────────────────────────
@@ -881,7 +881,7 @@ interface AdminClientProps {
 export function AdminClient({ initialCompanies, initialContacts }: AdminClientProps) {
   const supabase = createClient();
 
-  const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "feeds" | "drive">("companies");
+  const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive">("companies");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<ToastState>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2103,14 +2103,14 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
             <Sparkles size={11} /> AI Config
           </button>
           <button
-            onClick={() => { setActiveTab("feeds"); setSearch(""); }}
+            onClick={() => { setActiveTab("api"); setSearch(""); }}
             className={`px-3 py-1.5 border-l border-slate-200 transition-colors flex items-center gap-1 ${
-              activeTab === "feeds"
+              activeTab === "api"
                 ? "bg-blue-600 text-white"
                 : "bg-white text-slate-600 hover:bg-slate-50"
             }`}
           >
-            <Rss size={11} /> Feeds
+            <Rss size={11} /> API
           </button>
           <button
             onClick={() => { setActiveTab("drive"); setSearch(""); }}
@@ -2124,8 +2124,8 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           </button>
         </div>
 
-        {/* Search — hidden on feeds/drive tab */}
-        <div className={`relative flex-1 max-w-xs ${(activeTab === "feeds" || isDrive) ? "invisible" : ""}`}>
+        {/* Search — hidden on api/drive tab */}
+        <div className={`relative flex-1 max-w-xs ${(activeTab === "api" || isDrive) ? "invisible" : ""}`}>
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -2315,10 +2315,10 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         </button>
       </div>
 
-      {/* ── Grid or AI Config panel or Feeds or Drive ── */}
+      {/* ── Grid or AI Config panel or API or Drive ── */}
       <div className="flex-1 overflow-hidden admin-grid">
-        {activeTab === "feeds" ? (
-          <FeedsManager />
+        {activeTab === "api" ? (
+          <ApiConfigPanel />
         ) : isDrive ? (
           <div className="h-full overflow-y-auto"><DrivePanel /></div>
         ) : isAiConfig ? (

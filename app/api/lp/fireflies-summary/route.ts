@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
+import { getAiConfig } from "@/lib/ai-config";
 
 interface FirefliesTranscript {
   id: string;
@@ -89,14 +90,17 @@ export async function POST(req: NextRequest) {
       })
       .join("\n\n---\n\n");
 
+    const cfg = await getAiConfig("lp_meeting_summary");
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+    const basePrompt = `Summarize these meeting transcripts for ${companyName} (LP relationship).`;
     const message = await anthropic.messages.create({
-      model: "claude-4-opus-20250514",
-      max_tokens: 800,
+      model: cfg.model,
+      max_tokens: cfg.max_tokens,
+      ...(cfg.system_prompt ? { system: cfg.system_prompt } : {}),
       messages: [{
         role: "user",
-        content: `Summarize these meeting transcripts for ${companyName} (LP relationship).
+        content: `${cfg.user_prompt ? cfg.user_prompt + "\n\n" : ""}${basePrompt}
 Group by date, be concise. Focus on: investment interest signals, concerns raised, commitments made, and next steps agreed.
 Format each meeting as "**[Date]** — [1-2 sentence summary]". Then add "**Key Themes:** [3-5 bullet points]" at the end.
 

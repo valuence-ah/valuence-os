@@ -8,7 +8,7 @@ import { Loader2, ChevronDown, Sparkles } from "lucide-react";
 
 type AgentOption = {
   label: string;
-  value: "all" | "arxiv" | "sbir" | "nsf";
+  value: "all" | "arxiv" | "sbir" | "nsf" | "exa";
   endpoint: string;
 };
 
@@ -17,6 +17,7 @@ const OPTIONS: AgentOption[] = [
   { label: "arXiv only", value: "arxiv", endpoint: "/api/agents/arxiv" },
   { label: "SBIR only", value: "sbir", endpoint: "/api/agents/sbir" },
   { label: "NSF only", value: "nsf", endpoint: "/api/agents/nsf" },
+  { label: "Exa only", value: "exa", endpoint: "/api/agents/exa" },
 ];
 
 interface RunAllResult {
@@ -25,6 +26,7 @@ interface RunAllResult {
     arxiv?: { fetched: number; saved: number };
     sbir?: { fetched: number; saved: number };
     nsf?: { fetched: number; saved: number };
+    exa?: { fetched: number; saved: number };
   };
   fetched?: number;
   saved?: number;
@@ -60,7 +62,8 @@ export function RunAgentsButton() {
         const totalSaved =
           (data.results.arxiv?.saved ?? 0) +
           (data.results.sbir?.saved ?? 0) +
-          (data.results.nsf?.saved ?? 0);
+          (data.results.nsf?.saved ?? 0) +
+          (data.results.exa?.saved ?? 0);
         setResultMessage(`${totalSaved} new signal${totalSaved !== 1 ? "s" : ""}`);
       } else {
         const saved = data.saved ?? 0;

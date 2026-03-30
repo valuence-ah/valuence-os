@@ -8,14 +8,9 @@ import {
   saveSignals,
   type RawSignal,
 } from "@/lib/sourcing-agents";
+import { loadAgentConfig } from "@/lib/agent-config";
 
 const ARXIV_BASE = "https://export.arxiv.org/api/query";
-
-const QUERIES = [
-  "cleantech energy storage carbon capture hydrogen fuel cell solar",
-  "synthetic biology bioengineering biomanufacturing metabolic engineering",
-  "advanced materials graphene perovskite nanomaterials solid-state battery",
-];
 
 function extractTag(block: string, tag: string): string {
   const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i");
@@ -78,15 +73,16 @@ function parseEntries(xml: string): RawSignal[] {
 
 /** Fetches arXiv papers matching the Valuence thesis and saves relevant ones. */
 export async function runArxivAgent(): Promise<{ fetched: number; saved: number }> {
+  const cfg = await loadAgentConfig("arxiv");
   const allSignals = new Map<string, RawSignal>(); // deduplicate by URL
 
-  for (const query of QUERIES) {
+  for (const query of cfg.queries) {
     try {
       const params = new URLSearchParams({
         search_query: `all:${query}`,
-        max_results: "25",
-        sortBy: "submittedDate",
-        sortOrder: "descending",
+        max_results: String(cfg.maxResults),
+        sortBy: cfg.sortBy,
+        sortOrder: cfg.sortOrder,
       });
 
       const res = await fetch(`${ARXIV_BASE}?${params.toString()}`, {
@@ -119,7 +115,7 @@ export async function runArxivAgent(): Promise<{ fetched: number; saved: number 
   if (fetched === 0) return { fetched: 0, saved: 0 };
 
   const scored = await scoreSignals(signals);
-  const saved = await saveSignals(scored, 0.45);
+  const saved = await saveSignals(scored, cfg.minScore);
 
   return { fetched, saved };
 }

@@ -30,6 +30,7 @@ import {
   MoreHorizontal,
   Shield,
   CheckSquare,
+  Mic,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +54,7 @@ const TOP_ITEMS = [
 
 const INTELLIGENCE_ITEMS = [
   { href: "/sourcing",  icon: Radar,        label: "Sourcing"    },
+  { href: "/meetings",  icon: Mic,          label: "Meetings"    },
   { href: "/portfolio", icon: BarChart3,    label: "Portfolio"   },
   { href: "/memos",     icon: FileText,     label: "IC Memos"    },
 ];

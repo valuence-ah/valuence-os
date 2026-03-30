@@ -4,7 +4,7 @@
 // Tabs: Overview | Contacts | Interactions | Deals
 // Includes "Add Note" and "Log Interaction" actions.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact, Interaction, Deal } from "@/lib/types";
 import {
@@ -14,12 +14,13 @@ import {
 } from "@/lib/utils";
 import {
   Globe, Linkedin, ExternalLink, MapPin, Building2,
-  MessageSquare, Phone, Mail, Plus, ChevronDown, FileText,
+  MessageSquare, Phone, Mail, Plus, ChevronDown, FileText, Mic, CheckSquare,
+  Sparkles, Loader2, AlertCircle, Calendar, Link as LinkIcon,
 } from "lucide-react";
 import Link from "next/link";
 import type { IcMemo } from "@/lib/types";
 
-const TABS = ["Overview", "Contacts", "Interactions", "Deals", "Memos"] as const;
+const TABS = ["Overview", "Contacts", "Interactions", "Deals", "Memos", "Intelligence"] as const;
 type Tab = typeof TABS[number];
 
 type MemoSummary = Pick<IcMemo, "id" | "title" | "recommendation" | "status" | "created_at">;
@@ -37,6 +38,340 @@ interface Props {
   interactions: Interaction[];
   deals: Deal[];
   memos: MemoSummary[];
+}
+
+// ── Interactions tab with expandable meeting transcripts ──────────────────────
+function InteractionsTab({ interactions }: { interactions: Interaction[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const meetings    = interactions.filter(i => i.type === "meeting");
+  const otherEvents = interactions.filter(i => i.type !== "meeting");
+
+  function InteractionRow({ i }: { i: Interaction }) {
+    const isMeeting    = i.type === "meeting";
+    const hasTranscript = !!(i.transcript_text);
+    const isExpanded   = expandedId === i.id;
+
+    return (
+      <div className="border-b border-slate-100 last:border-0">
+        <button
+          className="w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors"
+          onClick={() => isMeeting ? setExpandedId(isExpanded ? null : i.id) : undefined}
+          style={{ cursor: isMeeting ? "pointer" : "default" }}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              {isMeeting
+                ? <span className="inline-flex items-center gap-1 badge bg-violet-100 text-violet-700"><Mic size={10} /> Meeting</span>
+                : <span className="badge bg-slate-100 text-slate-600 capitalize">{i.type}</span>
+              }
+              {hasTranscript && (
+                <span className="badge bg-blue-50 text-blue-600 text-[10px]">Transcript</span>
+              )}
+              {i.fireflies_id && (
+                <span className="badge bg-orange-50 text-orange-600 text-[10px]">Fireflies</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">{timeAgo(i.date)}</span>
+              {isMeeting && <ChevronDown size={13} className={cn("text-slate-400 transition-transform", isExpanded && "rotate-180")} />}
+            </div>
+          </div>
+          {i.subject && <p className="text-sm font-medium text-slate-800">{i.subject}</p>}
+          {/* Summary line (always visible) */}
+          {i.summary && !isExpanded && (
+            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{i.summary}</p>
+          )}
+          {/* Body for non-meetings */}
+          {!isMeeting && i.body && (
+            <p className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap">{i.body}</p>
+          )}
+        </button>
+
+        {/* Expanded meeting detail */}
+        {isMeeting && isExpanded && (
+          <div className="px-5 pb-4 space-y-3 bg-slate-50/60">
+            {/* Summary */}
+            {i.summary && (
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Summary</p>
+                <p className="text-sm text-slate-700 leading-relaxed">{i.summary}</p>
+              </div>
+            )}
+
+            {/* Action items */}
+            {(i.action_items?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Action Items</p>
+                <ul className="space-y-1">
+                  {i.action_items!.map((a, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm text-slate-700">
+                      <CheckSquare size={12} className="mt-0.5 text-amber-500 flex-shrink-0" />
+                      {a}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Full transcript */}
+            {i.transcript_text && (
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Full Transcript</p>
+                <pre className="max-h-64 overflow-y-auto text-xs text-slate-600 leading-relaxed whitespace-pre-wrap bg-white border border-slate-200 rounded-lg p-3 font-mono">
+                  {i.transcript_text}
+                </pre>
+              </div>
+            )}
+
+            {/* Transcript file link */}
+            {i.transcript_url && (
+              <a
+                href={i.transcript_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700"
+              >
+                <ExternalLink size={11} /> Open transcript file
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (interactions.length === 0) {
+    return (
+      <div className="card">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-semibold text-slate-800">Interaction History</h3>
+        </div>
+        <p className="px-5 py-8 text-sm text-slate-400 text-center">No interactions logged yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Meeting Transcripts section */}
+      {meetings.length > 0 && (
+        <div className="card">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <Mic size={14} className="text-violet-600" />
+            <h3 className="text-sm font-semibold text-slate-800">Meeting Transcripts</h3>
+            <span className="ml-auto badge bg-slate-100 text-slate-500">{meetings.length}</span>
+          </div>
+          <div>
+            {meetings.map(i => <InteractionRow key={i.id} i={i} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Other interactions */}
+      {otherEvents.length > 0 && (
+        <div className="card">
+          <div className="px-5 py-4 border-b border-slate-100">
+            <h3 className="text-sm font-semibold text-slate-800">Other Interactions</h3>
+          </div>
+          <div>
+            {otherEvents.map(i => <InteractionRow key={i.id} i={i} />)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Intelligence tab ──────────────────────────────────────────────────────────
+interface IntelItem {
+  headline: string;
+  source: string;
+  date: string;
+  summary: string;
+  url: string | null;
+}
+
+function IntelligenceTab({ companyId }: { companyId: string }) {
+  const supabase = createClient();
+  const [items, setItems]         = useState<IntelItem[]>([]);
+  const [signals, setSignals]     = useState<{ id: string; title: string; summary: string | null; source: string | null; url: string | null; relevance_score: number | null; created_at: string }[]>([]);
+  const [status, setStatus]       = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [exaStatus, setExaStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [exaMsg, setExaMsg]       = useState<string | null>(null);
+  const [loadingSignals, setLoadingSignals] = useState(true);
+
+  // Load saved sourcing signals for this company on mount
+  useEffect(() => {
+    supabase
+      .from("sourcing_signals")
+      .select("id, title, summary, source, url, relevance_score, created_at")
+      .eq("company_id", companyId)
+      .order("relevance_score", { ascending: false })
+      .limit(20)
+      .then(({ data }) => {
+        setSignals((data ?? []) as typeof signals);
+        setLoadingSignals(false);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
+
+  async function runIntelligence() {
+    setStatus("loading");
+    setItems([]);
+    try {
+      const res = await fetch(`/api/companies/${companyId}/intelligence`, { method: "POST" });
+      const data = await res.json() as { items?: IntelItem[] };
+      setItems(data.items ?? []);
+      setStatus("done");
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  async function runExa() {
+    setExaStatus("loading");
+    setExaMsg(null);
+    try {
+      const res  = await fetch("/api/agents/exa-research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: companyId }),
+      });
+      const data = await res.json() as { success?: boolean; signals_saved?: number; error?: string };
+      if (!data.success) { setExaStatus("error"); setExaMsg(data.error ?? "Research failed"); return; }
+      const saved = data.signals_saved ?? 0;
+      setExaMsg(`${saved} signal${saved !== 1 ? "s" : ""} saved`);
+      setExaStatus("done");
+      // Reload signals
+      const { data: fresh } = await supabase
+        .from("sourcing_signals")
+        .select("id, title, summary, source, url, score, created_at")
+        .eq("company_id", companyId)
+        .order("score", { ascending: false })
+        .limit(20);
+      setSignals((fresh ?? []) as typeof signals);
+    } catch {
+      setExaStatus("error");
+      setExaMsg("Research failed");
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+
+      {/* Action bar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          onClick={runIntelligence}
+          disabled={status === "loading"}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 transition-colors"
+        >
+          {status === "loading" ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+          {status === "loading" ? "Generating…" : "Get AI Intelligence"}
+        </button>
+
+        <button
+          onClick={runExa}
+          disabled={exaStatus === "loading"}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+        >
+          {exaStatus === "loading" ? <Loader2 size={12} className="animate-spin" /> : <LinkIcon size={12} />}
+          {exaStatus === "loading" ? "Searching Exa…" : "Research with Exa"}
+        </button>
+        {exaMsg && (
+          <span className={`text-xs ${exaStatus === "error" ? "text-red-500" : "text-slate-500"}`}>{exaMsg}</span>
+        )}
+      </div>
+
+      {/* AI Intelligence results */}
+      {status === "error" && (
+        <div className="flex items-center gap-2 text-sm text-red-500 bg-red-50 rounded-lg px-4 py-3">
+          <AlertCircle size={14} /> Failed to generate intelligence. Try again.
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <div className="card">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <Sparkles size={14} className="text-blue-600" />
+            <h3 className="text-sm font-semibold text-slate-800">AI Intelligence</h3>
+            <span className="ml-auto text-[10px] text-slate-400">Generated by Claude · may contain inaccuracies</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {items.map((item, i) => (
+              <div key={i} className="px-5 py-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-medium text-slate-800 leading-snug">{item.headline}</p>
+                  <div className="flex items-center gap-1.5 flex-shrink-0 text-[10px] text-slate-400">
+                    <Calendar size={10} />
+                    {item.date}
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">{item.summary}</p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{item.source}</span>
+                  {item.url && (
+                    <a href={item.url} target="_blank" rel="noopener noreferrer"
+                      className="text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-0.5">
+                      <ExternalLink size={9} /> Source
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Saved Exa signals */}
+      <div className="card">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+          <LinkIcon size={14} className="text-teal-600" />
+          <h3 className="text-sm font-semibold text-slate-800">Saved Signals</h3>
+          {signals.length > 0 && <span className="ml-auto badge bg-slate-100 text-slate-500">{signals.length}</span>}
+        </div>
+        {loadingSignals ? (
+          <div className="px-5 py-8 flex justify-center">
+            <Loader2 size={16} className="animate-spin text-slate-300" />
+          </div>
+        ) : signals.length === 0 ? (
+          <p className="px-5 py-8 text-sm text-slate-400 text-center">
+            No signals yet. Click &quot;Research with Exa&quot; to pull signals for this company.
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {signals.map(s => (
+              <div key={s.id} className="px-5 py-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-medium text-slate-800 leading-snug">{s.title}</p>
+                  {s.score != null && (
+                    <span className={cn(
+                      "text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0",
+                      s.score >= 0.7 ? "bg-green-100 text-green-700" :
+                      s.score >= 0.5 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"
+                    )}>
+                      {Math.round(s.score * 100)}%
+                    </span>
+                  )}
+                </div>
+                {s.summary && <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">{s.summary}</p>}
+                <div className="flex items-center gap-2 mt-1.5">
+                  {s.source && <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{s.source}</span>}
+                  {s.url && (
+                    <a href={s.url} target="_blank" rel="noopener noreferrer"
+                      className="text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-0.5">
+                      <ExternalLink size={9} /> Source
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function CompanyDetailClient({ company, contacts: initContacts, interactions: initInteractions, deals, memos }: Props) {
@@ -318,35 +653,7 @@ export function CompanyDetailClient({ company, contacts: initContacts, interacti
 
       {/* ── INTERACTIONS TAB ── */}
       {tab === "Interactions" && (
-        <div className="card">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-800">Interaction History</h3>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {interactions.length === 0 ? (
-              <p className="px-5 py-8 text-sm text-slate-400 text-center">No interactions logged yet.</p>
-            ) : (
-              interactions.map(i => (
-                <div key={i.id} className="px-5 py-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="badge bg-slate-100 text-slate-600 capitalize">{i.type}</span>
-                    <span className="text-xs text-slate-400">{timeAgo(i.date)}</span>
-                  </div>
-                  {i.subject && <p className="text-sm font-medium text-slate-800">{i.subject}</p>}
-                  {i.body && <p className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap">{i.body}</p>}
-                  {i.action_items && i.action_items.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs font-medium text-slate-500 mb-1">Action items:</p>
-                      <ul className="list-disc list-inside text-xs text-slate-600 space-y-0.5">
-                        {i.action_items.map((a, idx) => <li key={idx}>{a}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        <InteractionsTab interactions={interactions} />
       )}
 
       {/* ── MEMOS TAB ── */}
@@ -424,6 +731,11 @@ export function CompanyDetailClient({ company, contacts: initContacts, interacti
             )}
           </div>
         </div>
+      )}
+
+      {/* ── INTELLIGENCE TAB ── */}
+      {tab === "Intelligence" && (
+        <IntelligenceTab companyId={company.id} />
       )}
 
     </div>

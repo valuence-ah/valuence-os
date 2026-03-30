@@ -1,10 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
+import { getAiConfig } from "@/lib/ai-config";
 
 export async function POST(req: NextRequest) {
   try {
     const { company, contact, interactions, mandateScores, stage, senderName } = await req.json();
 
+    const cfg = await getAiConfig("lp_outreach_draft");
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const lastInteraction = interactions?.[0];
@@ -32,10 +34,12 @@ Write a short, professional email that:
 
 Keep the total email under 180 words. Avoid generic VC language. Be specific and genuine.`;
 
+    const fullPrompt = cfg.user_prompt ? `${prompt}\n\nAdditional instructions: ${cfg.user_prompt}` : prompt;
     const message = await anthropic.messages.create({
-      model: "claude-4-opus-20250514",
-      max_tokens: 800,
-      messages: [{ role: "user", content: prompt }],
+      model: cfg.model,
+      max_tokens: cfg.max_tokens,
+      ...(cfg.system_prompt ? { system: cfg.system_prompt } : {}),
+      messages: [{ role: "user", content: fullPrompt }],
     });
 
     const draft = message.content[0].type === "text" ? message.content[0].text : "";

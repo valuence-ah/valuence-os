@@ -7,16 +7,9 @@ import {
   saveSignals,
   type RawSignal,
 } from "@/lib/sourcing-agents";
+import { loadAgentConfig } from "@/lib/agent-config";
 
 const NSF_BASE = "https://api.nsf.gov/services/v1/awards.json";
-
-const KEYWORDS = [
-  "clean energy",
-  "synthetic biology",
-  "advanced materials",
-  "graphene",
-  "bioprocess engineering",
-];
 
 interface NsfAward {
   title?: string;
@@ -44,14 +37,22 @@ function formatDateStart(): string {
 
 /** Fetches NSF awards matching Valuence keywords and saves relevant ones. */
 export async function runNsfAgent(): Promise<{ fetched: number; saved: number }> {
+  const cfg = await loadAgentConfig("nsf");
   const allSignals = new Map<string, RawSignal>(); // deduplicate by URL
-  const dateStart = formatDateStart();
 
-  for (const keyword of KEYWORDS) {
+  // Build dateStart from lookbackMonths
+  const d = new Date();
+  d.setMonth(d.getMonth() - cfg.lookbackMonths);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const dateStart = `${mm}/${dd}/${yyyy}`;
+
+  for (const keyword of cfg.keywords) {
     try {
       const params = new URLSearchParams({
         keyword,
-        rpp: "20",
+        rpp: String(cfg.resultsPerPage),
         offset: "1",
         dateStart,
         printFields: "id,title,abstractText,pdPIName,startDate",
@@ -107,7 +108,7 @@ export async function runNsfAgent(): Promise<{ fetched: number; saved: number }>
   if (fetched === 0) return { fetched: 0, saved: 0 };
 
   const scored = await scoreSignals(signals);
-  const saved = await saveSignals(scored, 0.4);
+  const saved = await saveSignals(scored, cfg.minScore);
 
   return { fetched, saved };
 }
