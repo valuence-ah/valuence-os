@@ -481,10 +481,11 @@ export function PipelineClient({ initialCompanies }: Props) {
   // Inline tag editing (quick-edit outside full edit mode)
   const [editTagsValue, setEditTagsValue] = useState<string[]>([]);
 
-  // Portfolio Intelligence
+  // Company Intelligence
   type IntelItem = { headline: string; source: string; date: string; summary?: string; url?: string };
   const [intelligence, setIntelligence] = useState<IntelItem[]>([]);
   const [loadingIntelligence, setLoadingIntelligence] = useState(false);
+  const [intelligenceStatus, setIntelligenceStatus] = useState<string>("Refresh");
   const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
 
   // Link existing contact in manage panel
@@ -1008,7 +1009,26 @@ export function PipelineClient({ initialCompanies }: Props) {
     if (!selected || loadingIntelligence) return;
     setLoadingIntelligence(true);
     setIntelligenceError(null);
+    setIntelligence([]);
     try {
+      // Step 1: Run Exa to pull fresh web signals for this company
+      // (saves results to sourcing_signals so the intelligence route can use them)
+      if (process.env.NEXT_PUBLIC_EXA_ENABLED !== "false") {
+        setIntelligenceStatus("Searching Exa…");
+        try {
+          await fetch("/api/agents/exa-research", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ company_id: selected.id }),
+          });
+        } catch {
+          // Non-fatal — intelligence will still run with whatever signals exist in DB
+        }
+      }
+
+      // Step 2: Generate intelligence items using Claude
+      // (enriched with the Exa signals we just saved)
+      setIntelligenceStatus("Generating…");
       const res = await fetch(`/api/companies/${selected.id}/intelligence`, { method: "POST" });
       if (res.ok) {
         const data = await res.json() as { items?: IntelItem[] };
@@ -1020,6 +1040,7 @@ export function PipelineClient({ initialCompanies }: Props) {
       setIntelligenceError("Network error");
     } finally {
       setLoadingIntelligence(false);
+      setIntelligenceStatus("Refresh");
     }
   }
 
@@ -2014,15 +2035,17 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </button>
               </div>
 
-              {/* Header: Portfolio Intelligence */}
+              {/* Header: Company Intelligence */}
               <div className="flex items-center justify-between pb-3">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Portfolio Intelligence</h2>
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Company Intelligence</h2>
                 <button
                   onClick={fetchIntelligence}
                   disabled={loadingIntelligence}
                   className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
                 >
-                  {loadingIntelligence ? <><Loader2 size={10} className="animate-spin" /> Loading…</> : <><Sparkles size={10} /> Refresh</>}
+                  {loadingIntelligence
+                    ? <><Loader2 size={10} className="animate-spin" /> {intelligenceStatus}</>
+                    : <><Sparkles size={10} /> Refresh</>}
                 </button>
               </div>
 
