@@ -246,9 +246,9 @@ function IntelligenceTab({ companyId }: { companyId: string }) {
       // Reload signals
       const { data: fresh } = await supabase
         .from("sourcing_signals")
-        .select("id, title, summary, source, url, score, created_at")
+        .select("id, title, summary, source, url, relevance_score, created_at")
         .eq("company_id", companyId)
-        .order("score", { ascending: false })
+        .order("relevance_score", { ascending: false })
         .limit(20);
       setSignals((fresh ?? []) as typeof signals);
     } catch {
