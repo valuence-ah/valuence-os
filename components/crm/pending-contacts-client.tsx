@@ -42,6 +42,7 @@ type ContactTypeStr = (typeof CONTACT_TYPE_OPTIONS)[number];
 
 // Titles — full alphabetic list matching Admin → Contacts
 const TITLE_OPTIONS = [
+  "Admin",
   "Advisor",
   "Analyst",
   "Associate",
@@ -824,7 +825,7 @@ const ContactRow = memo(function ContactRow({
       <div className="w-28 flex-shrink-0 space-y-1">
         <select value={country} onChange={e => setCountry(e.target.value)}
           className={cn(INPUT_CLS, "cursor-pointer")}>
-          <option value="">— Country * —</option>
+          <option value="">Country</option>
           {COUNTRY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
           <option value="__custom__">Other (type below)…</option>
         </select>
