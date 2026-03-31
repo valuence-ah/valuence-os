@@ -350,12 +350,13 @@ function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onCha
 
 // ── Company Expand Panel ───────────────────────────────────────────────────────
 
-function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initialName, onDeleted }: {
+function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initialName, onDeleted, onUpdated }: {
   companyId: string;
   onClose: () => void;
   createMode?: boolean;
   onCreated?: (id: string) => void;
   onDeleted?: (id: string) => void;
+  onUpdated?: (id: string, updates: Partial<CompanyStub>) => void;
   initialName?: string;
 }) {
   const supabase = useMemo(() => createClient(), []);
@@ -454,6 +455,11 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
     if (error) { console.error("[save company]", error); return; }
     setCompany({ ...company, ...updates } as Company);
     setEditing(false);
+    onUpdated?.(company.id, {
+      name: String(updates.name ?? company.name),
+      type: String(updates.type ?? company.type),
+      website: updates.website as string | null | undefined ?? company.website,
+    });
   }
 
   const domain = company?.website ? company.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "") : null;
@@ -700,12 +706,16 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
 
 const ContactRow = memo(function ContactRow({
   contact, allCompanies, onConfirmed, onDiscarded, onExpand,
+  onCompanyUpdated, customCountries, onAddCustomCountry,
 }: {
   contact: PendingContact;
   allCompanies: CompanyStub[];
   onConfirmed: (id: string) => void;
   onDiscarded: (id: string) => void;
   onExpand: (id: string) => void;
+  onCompanyUpdated: (id: string, updates: Partial<CompanyStub>) => void;
+  customCountries: string[];
+  onAddCustomCountry: (country: string) => void;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [firstName, setFirstName] = useState(contact.first_name ?? "");
@@ -757,6 +767,10 @@ const ContactRow = memo(function ContactRow({
     setBusy(true);
     const resolvedCompanyId = companyId || null;
     const targetType = CONTACT_TO_COMPANY_TYPE[type as ContactTypeStr];
+    // Persist custom country for future dropdowns
+    if (country === "__custom__" && customCountry.trim()) {
+      onAddCustomCountry(customCountry.trim());
+    }
     // Dismiss immediately — no waiting for network
     onConfirmed(contact.id);
     // Run DB saves concurrently in background (component may unmount)
@@ -859,7 +873,7 @@ const ContactRow = memo(function ContactRow({
         <select value={country} onChange={e => setCountry(e.target.value)}
           className={cn(INPUT_CLS, "cursor-pointer")}>
           <option value="">Country</option>
-          {COUNTRY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+          {[...COUNTRY_OPTIONS, ...customCountries.filter(c => !(COUNTRY_OPTIONS as readonly string[]).includes(c))].sort().map(c => <option key={c} value={c}>{c}</option>)}
           <option value="__custom__">Other (type below)…</option>
         </select>
         {country === "__custom__" && (
@@ -894,6 +908,7 @@ const ContactRow = memo(function ContactRow({
           initialName={createPanelName}
           onCreated={handleCompanyCreated}
           onClose={() => setShowCreatePanel(false)}
+          onUpdated={onCompanyUpdated}
         />
       )}
     </div>
@@ -919,11 +934,16 @@ function SortHeader({ label, sortKey, active, dir, onSort, className }: {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-const LS_EXCLUSIONS_KEY = "pending_contacts_exclusions";
+const LS_EXCLUSIONS_KEY  = "pending_contacts_exclusions";
+const LS_COUNTRIES_KEY   = "pending_contacts_custom_countries";
 
 export function PendingContactsClient({ initialContacts, companies }: Props) {
   const [contacts, setContacts]               = useState<PendingContact[]>(initialContacts);
+  const [companiesState, setCompaniesState]   = useState<CompanyStub[]>(companies);
   const [expandedCompanyId, setExpandedCompanyId] = useState<string | null>(null);
+  const [customCountries, setCustomCountries] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(LS_COUNTRIES_KEY) ?? "[]") as string[]; } catch { return []; }
+  });
   const [sortKey, setSortKey]                 = useState<SortKey>("added");
   const [sortDir, setSortDir]                 = useState<SortDir>("desc");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
@@ -981,6 +1001,20 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
   const handleConfirmed = useCallback((id: string) => { setContacts(prev => prev.filter(c => c.id !== id)); }, []);
   const handleDiscarded = useCallback((id: string) => { setContacts(prev => prev.filter(c => c.id !== id)); }, []);
   const handleExpand    = useCallback((id: string) => { setExpandedCompanyId(id); }, []);
+
+  const handleCompanyUpdated = useCallback((id: string, updates: Partial<CompanyStub>) => {
+    setCompaniesState(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  }, []);
+
+  const handleAddCustomCountry = useCallback((country: string) => {
+    if (!country) return;
+    setCustomCountries(prev => {
+      if (prev.includes(country)) return prev;
+      const next = [...prev, country].sort();
+      localStorage.setItem(LS_COUNTRIES_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   if (contacts.length === 0) {
     return (
@@ -1080,10 +1114,13 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
           <ContactRow
             key={c.id}
             contact={c}
-            allCompanies={companies}
+            allCompanies={companiesState}
             onConfirmed={handleConfirmed}
             onDiscarded={handleDiscarded}
             onExpand={handleExpand}
+            onCompanyUpdated={handleCompanyUpdated}
+            customCountries={customCountries}
+            onAddCustomCountry={handleAddCustomCountry}
           />
         ))}
       </div>
@@ -1096,6 +1133,7 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
             setContacts(prev => prev.map(c => c.company_id === id ? { ...c, company_id: null, company: undefined } : c));
             setExpandedCompanyId(null);
           }}
+          onUpdated={handleCompanyUpdated}
         />
       )}
     </div>

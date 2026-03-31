@@ -78,13 +78,23 @@ function makeComboEditor<TRow>(options: string[]) {
 // Completely bypasses react-data-grid's editor/save mechanism to avoid bugs
 // with onClose(true) + stale closures. Uses a portal dropdown + direct DB save.
 
-const TYPE_OPTIONS = ["startup","limited partner","investor","strategic partner","ecosystem_partner","other"];
+const TYPE_OPTIONS = ["startup","fund","lp","corporate","ecosystem_partner","government","other"];
+const TYPE_LABELS: Record<string, string> = {
+  startup:           "Startup",
+  fund:              "Fund / VC",
+  lp:                "LP",
+  corporate:         "Corporate",
+  ecosystem_partner: "Ecosystem",
+  government:        "Gov / Academic",
+  other:             "Other",
+};
 const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   "startup":           { bg: "#eff6ff", color: "#1d4ed8" },
-  "limited partner":   { bg: "#f0fdf4", color: "#15803d" },
-  "investor":          { bg: "#faf5ff", color: "#7e22ce" },
-  "strategic partner": { bg: "#fff7ed", color: "#c2410c" },
+  "fund":              { bg: "#f5f3ff", color: "#7c3aed" },
+  "lp":                { bg: "#f0fdf4", color: "#15803d" },
+  "corporate":         { bg: "#fff7ed", color: "#c2410c" },
   "ecosystem_partner": { bg: "#ecfdf5", color: "#065f46" },
+  "government":        { bg: "#f0f9ff", color: "#0369a1" },
   "other":             { bg: "#f8fafc", color: "#64748b" },
 };
 
@@ -153,7 +163,7 @@ function TypeCell({
           const c = TYPE_COLORS[v.toLowerCase()] ?? { bg: "#f1f5f9", color: "#475569" };
           return (
             <span key={v} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500, whiteSpace: "nowrap" }}>
-              {v}
+              {TYPE_LABELS[v.toLowerCase()] ?? v}
             </span>
           );
         })
@@ -177,7 +187,7 @@ function TypeCell({
                   <div style={{ width: 16, height: 16, flexShrink: 0, borderRadius: 4, border: `2px solid ${checked ? "#3b82f6" : "#d1d5db"}`, background: checked ? "#3b82f6" : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {checked && <svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
-                  <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500 }}>{opt}</span>
+                  <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500 }}>{TYPE_LABELS[opt] ?? opt}</span>
                 </div>
               );
             })}
@@ -601,6 +611,19 @@ const SectorsCell = makePortalMultiSelectCell<CompanyRow>(
   SECTORS_COLORS
 );
 
+const INVESTOR_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
+  "Accelerator":    { bg: "#fef3c7", color: "#92400e" },
+  "Corporate":      { bg: "#fff7ed", color: "#c2410c" },
+  "Family Office":  { bg: "#f5f3ff", color: "#7c3aed" },
+  "HNW":            { bg: "#fdf4ff", color: "#86198f" },
+  "Venture Capital":{ bg: "#eff6ff", color: "#1d4ed8" },
+};
+const InvestorTypeCell = makePortalSingleSelectCell<CompanyRow>(
+  "companies", "investor_type",
+  ["Accelerator","Corporate","Family Office","HNW","Venture Capital"],
+  INVESTOR_TYPE_COLORS
+);
+
 // ─── CompanyPickerCell: searchable company FK picker for contacts ──────────────
 
 function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
@@ -746,6 +769,25 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
               style={{ padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>
               — No company
             </div>
+            {search.trim() && !filtered.some(c => c.name.toLowerCase() === search.trim().toLowerCase()) && (
+              <div onMouseDown={async (e) => {
+                e.stopPropagation();
+                if (!search.trim() || !row.id) return;
+                setOpen(false);
+                setSaving(true);
+                const sb = createClient();
+                const { data: nc, error: ce } = await sb.from("companies").insert({ name: search.trim(), type: "other", status: "active" }).select().single();
+                if (!ce && nc) {
+                  setCompanies(prev => [nc as CompanyRow, ...prev]);
+                  const { error: ue } = await sb.from("contacts").update({ company_id: nc.id }).eq("id", row.id);
+                  if (!ue) onSaved(row.id, nc.id, nc.name);
+                }
+                setSaving(false);
+              }}
+                style={{ padding: "8px 14px", cursor: "pointer", fontSize: 12, color: "#2563eb", fontWeight: 600, borderBottom: "1px solid #f1f5f9", background: "#f0f9ff" }}>
+                + Create &quot;{search.trim()}&quot;
+              </div>
+            )}
             {filtered.map(c => (
               <div key={c.id} onMouseDown={e => pick(c, e)}
                 style={{ padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#1e293b", background: c.id === row.company_id ? "#f0f9ff" : "transparent" }}>
@@ -1433,6 +1475,19 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         renderCell: ({ row }: { row: CompanyRow }) => (
           <SectorsCell row={row} onSaved={(id, vals) => {
             setCompanies(prev => prev.map(c => c.id === id ? { ...c, sectors: vals } : c));
+          }} />
+        ),
+      },
+      {
+        key: "investor_type",
+        name: "Investor Type",
+        width: 160,
+        sortable: true,
+        resizable: true,
+        editable: false,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <InvestorTypeCell row={row} onSaved={(id, val) => {
+            setCompanies(prev => prev.map(c => c.id === id ? { ...c, investor_type: val || null } : c));
           }} />
         ),
       },
