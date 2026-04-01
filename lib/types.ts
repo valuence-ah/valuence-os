@@ -7,7 +7,7 @@ export type ContactStatus = "active" | "pending";
 export type DealStage = "sourced" | "first_meeting" | "deep_dive" | "ic_memo" | "term_sheet" | "due_diligence" | "closed" | "passed";
 export type DealStatus = "sourced" | "active_deal" | "portfolio" | "passed" | "monitoring" | "exited";
 export type LpStage = "target" | "intro_made" | "meeting_scheduled" | "meeting_done" | "materials_sent" | "soft_commit" | "committed" | "closed" | "passed";
-export type SignalSource = "arxiv" | "sbir" | "nsf" | "uspto" | "crunchbase" | "news" | "linkedin" | "exa" | "manual" | "other";
+export type SignalSource = "arxiv" | "sbir" | "nsf" | "uspto" | "crunchbase" | "news" | "linkedin" | "exa" | "semantic_scholar" | "nih" | "nrel" | "manual" | "other";
 
 // ── Row types (what comes back from Supabase) ─────────────────────────────────
 
@@ -203,6 +203,13 @@ export interface SourcingSignal {
   status: "new" | "reviewed" | "contacted" | "archived";
   reviewed_by: string | null;
   created_at: string;
+  // v2 enrichment fields
+  geography: string | null;
+  technology_category: string | null;
+  company_name: string | null;
+  source_count: number;
+  is_watchlisted: boolean;
+  extra_urls: string[] | null;
 }
 
 export interface LpRelationship {

@@ -23,6 +23,7 @@ import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, R
 import { AiConfigPanel } from "@/components/admin/ai-config-panel";
 import { ApiConfigPanel } from "@/components/admin/api-config-panel";
 import { DrivePanel } from "@/components/admin/drive-panel";
+import { SourcingConfigPanel } from "@/components/admin/sourcing-config-panel";
 
 // ─── Row types ────────────────────────────────────────────────────────────────
 
@@ -1358,7 +1359,7 @@ interface AdminClientProps {
 export function AdminClient({ initialCompanies, initialContacts }: AdminClientProps) {
   const supabase = createClient();
 
-  const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive">("companies");
+  const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive" | "sourcing">("companies");
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [toast, setToast] = useState<ToastState>(null);
@@ -2536,6 +2537,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   const isCompanies = activeTab === "companies";
   const isAiConfig  = activeTab === "ai_config";
   const isDrive     = activeTab === "drive";
+  const isSourcing  = activeTab === "sourcing";
 
   // ─── Clear filters helper ────────────────────────────────────────────────
 
@@ -2709,10 +2711,20 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           >
             <FolderOpen size={11} /> Drive
           </button>
+          <button
+            onClick={() => { setActiveTab("sourcing"); setSearch(""); setSearchInput(""); }}
+            className={`px-3 py-1.5 border-l border-slate-200 transition-colors flex items-center gap-1 ${
+              activeTab === "sourcing"
+                ? "bg-blue-600 text-white"
+                : "bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <Sparkles size={11} /> Sourcing
+          </button>
         </div>
 
-        {/* Search — hidden on api/drive tab */}
-        <div className={`relative flex-1 max-w-xs ${(activeTab === "api" || isDrive) ? "invisible" : ""}`}>
+        {/* Search — hidden on api/drive/sourcing tab */}
+        <div className={`relative flex-1 max-w-xs ${(activeTab === "api" || isDrive || isSourcing) ? "invisible" : ""}`}>
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -2913,9 +2925,11 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         </button>
       </div>
 
-      {/* ── Grid or AI Config panel or API or Drive ── */}
+      {/* ── Grid or AI Config panel or API or Drive or Sourcing ── */}
       <div className="flex-1 overflow-hidden admin-grid">
-        {activeTab === "api" ? (
+        {activeTab === "sourcing" ? (
+          <div className="h-full overflow-y-auto"><SourcingConfigPanel /></div>
+        ) : activeTab === "api" ? (
           <ApiConfigPanel />
         ) : isDrive ? (
           <div className="h-full overflow-y-auto"><DrivePanel /></div>
