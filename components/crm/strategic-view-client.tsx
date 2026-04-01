@@ -95,9 +95,17 @@ const PORTCO_STATUS_COLORS: Record<PortcoStatus, string> = {
   "Not started":    "bg-slate-100 text-slate-500",
 };
 
+// Strategic type badge styles — match Admin→Companies→Strategic Type colours
+const STRATEGIC_TYPE_STYLES: Record<string, { background: string; color: string }> = {
+  "Corporate":  { background: "#fff7ed", color: "#c2410c" },
+  "Foundation": { background: "#f0fdf4", color: "#15803d" },
+  "Government": { background: "#f0f9ff", color: "#0369a1" },
+  "Other":      { background: "#f8fafc", color: "#64748b" },
+};
+
 // Column widths for resizable columns
 const DEFAULT_COL_WIDTHS: Record<string, number> = {
-  Company: 200, Sector: 120, "Rel. Health": 110, Utility: 90,
+  Company: 200, "Strategic Type": 140, Sector: 120, "Rel. Health": 110, Utility: 90,
   Roles: 160, "Co-invest": 90, Diligence: 100, "Pilot/Customer": 110,
   "Last Contact": 110, City: 90, Country: 90, Signal: 90, Owner: 80,
 };
@@ -885,6 +893,19 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                           {co.description && <p className="text-[10px] text-slate-400 truncate max-w-[150px]">{co.description}</p>}
                         </div>
                       </div>
+                    </td>
+                    {/* Strategic Type */}
+                    <td className="px-3 py-2.5">
+                      {(co as unknown as Record<string, string>).strategic_type ? (
+                        <span
+                          className="text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
+                          style={STRATEGIC_TYPE_STYLES[(co as unknown as Record<string, string>).strategic_type] ?? { background: "#f8fafc", color: "#64748b" }}
+                        >
+                          {(co as unknown as Record<string, string>).strategic_type}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
                     </td>
                     {/* Sector */}
                     <td className="px-3 py-2.5">

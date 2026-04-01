@@ -47,6 +47,7 @@ interface FundData {
   strategic: boolean;
   sector: string;
   website: string;
+  investorType: string;
 }
 
 // ── localStorage key for user-editable overrides per fund ─────────────────────
@@ -105,6 +106,7 @@ function companyToFundData(c: Company): FundData {
     strategic: false,
     sector: (c.sectors?.[0] as string | undefined) ?? "",
     website: c.website ?? "",
+    investorType: (c as unknown as Record<string, string>).investor_type ?? "",
   };
 }
 
@@ -139,6 +141,15 @@ const AVATAR_COLORS = [
   "from-red-500 to-rose-600",
   "from-indigo-500 to-blue-700",
 ];
+
+// Investor type badge styles — match Admin→Companies→Investor Type colours
+const INVESTOR_TYPE_STYLES: Record<string, { background: string; color: string }> = {
+  "Accelerator":     { background: "#fef3c7", color: "#92400e" },
+  "Corporate":       { background: "#fff7ed", color: "#c2410c" },
+  "Family Office":   { background: "#f5f3ff", color: "#7c3aed" },
+  "HNW":             { background: "#fdf4ff", color: "#86198f" },
+  "Venture Capital": { background: "#eff6ff", color: "#1d4ed8" },
+};
 
 function hashColor(name: string): string {
   let h = 0;
@@ -892,7 +903,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>
                 {[
-                  "Fund", "Type", "Stage focus", "Sector",
+                  "Fund", "Type", "Investor Type", "Stage focus", "Sector",
                   "Thesis alignment", "Check size", "Co-invest status", "Rel. health",
                   "Portfolio overlap", "Deal flow", "Owner",
                   "Last contact", "Next action", "Location",
@@ -956,6 +967,20 @@ export function FundsViewClient({ initialCompanies }: Props) {
                       <span className="text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium whitespace-nowrap">
                         {fund.type}
                       </span>
+                    </td>
+
+                    {/* Investor Type */}
+                    <td className="px-3 py-2.5 min-w-[130px]">
+                      {fund.investorType ? (
+                        <span
+                          className="text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
+                          style={INVESTOR_TYPE_STYLES[fund.investorType] ?? { background: "#f1f5f9", color: "#475569" }}
+                        >
+                          {fund.investorType}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
                     </td>
 
                     {/* Stage focus */}

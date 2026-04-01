@@ -114,9 +114,17 @@ const TYPE_BADGE: Record<string, string> = {
   other:             "bg-gray-50 text-gray-500 border-gray-200",
 };
 const TYPE_LABEL: Record<string, string> = {
-  startup: "Startup", lp: "LP", fund: "Fund",
-  ecosystem_partner: "Eco", corporate: "Corp",
-  government: "Gov", other: "Other",
+  startup:           "Startup",
+  lp:                "LP",
+  fund:              "Fund / VC",
+  ecosystem_partner: "Ecosystem",
+  corporate:         "Corporate",
+  government:        "Gov / Academic",
+  other:             "Other",
+  // Legacy DB values
+  investor:          "Fund / VC",
+  "strategic partner": "Corporate",
+  "limited partner": "LP",
 };
 
 // Shared input/select height class for consistency

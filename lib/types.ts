@@ -61,6 +61,8 @@ export interface Company {
   created_at: string;
   updated_at: string;
   drive_folder_url: string | null;
+  investor_type: string | null;
+  strategic_type: string | null;
 }
 
 export interface Contact {

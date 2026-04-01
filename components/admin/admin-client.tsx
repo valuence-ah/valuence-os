@@ -87,6 +87,10 @@ const TYPE_LABELS: Record<string, string> = {
   ecosystem_partner: "Ecosystem",
   government:        "Gov / Academic",
   other:             "Other",
+  // Legacy DB values → display as their modern label
+  investor:          "Fund / VC",
+  "strategic partner": "Corporate",
+  "limited partner": "LP",
 };
 const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   "startup":           { bg: "#eff6ff", color: "#1d4ed8" },
@@ -96,6 +100,10 @@ const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   "ecosystem_partner": { bg: "#ecfdf5", color: "#065f46" },
   "government":        { bg: "#f0f9ff", color: "#0369a1" },
   "other":             { bg: "#f8fafc", color: "#64748b" },
+  // Legacy DB values
+  "investor":          { bg: "#f5f3ff", color: "#7c3aed" },
+  "strategic partner": { bg: "#fff7ed", color: "#c2410c" },
+  "limited partner":   { bg: "#f0fdf4", color: "#15803d" },
 };
 
 function TypeCell({
@@ -622,6 +630,18 @@ const InvestorTypeCell = makePortalSingleSelectCell<CompanyRow>(
   "companies", "investor_type",
   ["Accelerator","Corporate","Family Office","HNW","Venture Capital"],
   INVESTOR_TYPE_COLORS
+);
+
+const STRATEGIC_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
+  "Corporate":   { bg: "#fff7ed", color: "#c2410c" },
+  "Foundation":  { bg: "#f0fdf4", color: "#15803d" },
+  "Government":  { bg: "#f0f9ff", color: "#0369a1" },
+  "Other":       { bg: "#f8fafc", color: "#64748b" },
+};
+const StrategicTypeCell = makePortalSingleSelectCell<CompanyRow>(
+  "companies", "strategic_type",
+  ["Corporate","Foundation","Government","Other"],
+  STRATEGIC_TYPE_COLORS
 );
 
 // ─── CompanyPickerCell: searchable company FK picker for contacts ──────────────
@@ -1488,6 +1508,19 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         renderCell: ({ row }: { row: CompanyRow }) => (
           <InvestorTypeCell row={row} onSaved={(id, val) => {
             setCompanies(prev => prev.map(c => c.id === id ? { ...c, investor_type: val || null } : c));
+          }} />
+        ),
+      },
+      {
+        key: "strategic_type",
+        name: "Strategic Type",
+        width: 160,
+        sortable: true,
+        resizable: true,
+        editable: false,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <StrategicTypeCell row={row} onSaved={(id, val) => {
+            setCompanies(prev => prev.map(c => c.id === id ? { ...c, strategic_type: val || null } : c));
           }} />
         ),
       },
