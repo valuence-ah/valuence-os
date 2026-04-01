@@ -11,6 +11,7 @@ import {
   Search, Plus, ExternalLink, ChevronRight, Pencil, Check, X,
   User, FileText, Link2, MapPin, Calendar, Mail, Phone,
   Building2, Sparkles, Paperclip, Tag, Upload, Loader2, ImageIcon, Bot,
+  List, LayoutGrid,
 } from "lucide-react";
 import { PdfCover } from "@/components/ui/pdf-cover";
 
@@ -80,6 +81,22 @@ const PRIORITY_COLORS: Record<string, string> = {
   High:   "bg-emerald-100 text-emerald-700",
   Medium: "bg-orange-100 text-orange-700",
   Low:    "bg-slate-100 text-slate-500",
+};
+
+const BOARD_STAGES = [
+  "identified_introduced", "first_meeting", "discussion_in_process",
+  "due_diligence", "portfolio", "tracking_hold", "passed", "exited",
+];
+
+const STAGE_DOT: Record<string, string> = {
+  identified_introduced:  "bg-slate-400",
+  first_meeting:          "bg-sky-500",
+  discussion_in_process:  "bg-blue-500",
+  due_diligence:          "bg-violet-500",
+  passed:                 "bg-red-400",
+  portfolio:              "bg-emerald-500",
+  tracking_hold:          "bg-amber-500",
+  exited:                 "bg-gray-400",
 };
 
 // Values match Excel "Sub-sector" column
@@ -384,6 +401,9 @@ export function PipelineClient({ initialCompanies }: Props) {
     initialCompanies[0]?.id ?? null
   );
   const [search, setSearch]               = useState("");
+  const [pipelineView, setPipelineView]   = useState<"list" | "board">("list");
+  const [boardDragItem, setBoardDragItem] = useState<string | null>(null);
+  const [boardDragOver, setBoardDragOver] = useState<string | null>(null);
   const [sortBy, setSortBy]               = useState<"name" | "status" | "last_contact" | "date_added">("name");
   const [includePassed, setIncludePassed] = useState(false);
   const [contacts, setContacts]           = useState<Contact[]>([]);
@@ -1106,14 +1126,171 @@ export function PipelineClient({ initialCompanies }: Props) {
     setDeleting(false);
   }
 
+  // ── Board drag-and-drop ───────────────────────────────────────────────────
+  async function handleBoardDrop(targetStage: string) {
+    if (!boardDragItem || !targetStage) return;
+    const company = companies.find(c => c.id === boardDragItem);
+    if (!company || company.deal_status === targetStage) { setBoardDragItem(null); return; }
+
+    // Optimistic update
+    setCompanies(prev => prev.map(c => c.id === boardDragItem ? { ...c, deal_status: targetStage as DealStatus } : c));
+
+    const { error } = await supabase.from("companies").update({ deal_status: targetStage }).eq("id", boardDragItem);
+    if (error) {
+      // Revert on error
+      setCompanies(prev => prev.map(c => c.id === boardDragItem ? { ...c, deal_status: company.deal_status } : c));
+    }
+    setBoardDragItem(null);
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-1 overflow-hidden">
 
       {/* ═══════════════════════════════════════════════════════════════════════
+          BOARD VIEW — Full-width Kanban
+      ═══════════════════════════════════════════════════════════════════════ */}
+      {pipelineView === "board" && (
+        <>
+          {/* Board toolbar (search + controls, same as list header) */}
+          <div className="w-[300px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
+            <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-800">
+                  Pipeline
+                  <span className="ml-2 text-xs font-normal text-slate-400">{filtered.length}</span>
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex rounded-md border border-slate-200 overflow-hidden">
+                    <button
+                      onClick={() => setPipelineView("list")}
+                      className="px-2.5 py-1.5 text-xs font-medium transition-colors bg-white text-slate-500 hover:bg-slate-50"
+                      title="List view"
+                    >
+                      <List size={13} />
+                    </button>
+                    <button
+                      onClick={() => setPipelineView("board")}
+                      className="px-2.5 py-1.5 border-l border-slate-200 text-xs font-medium transition-colors bg-slate-800 text-white"
+                      title="Board view"
+                    >
+                      <LayoutGrid size={13} />
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="w-7 h-7 flex items-center justify-center rounded-md bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                    title="Add company"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+              </div>
+              <div className="relative">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  className="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Search…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value as typeof sortBy)}
+                  className="flex-1 text-xs border border-slate-200 rounded-md px-2 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  <option value="name">Name A→Z</option>
+                  <option value="status">Status</option>
+                  <option value="last_contact">Last Contact</option>
+                  <option value="date_added">Date Added</option>
+                </select>
+                <button
+                  onClick={() => setIncludePassed(v => !v)}
+                  className={cn(
+                    "flex-shrink-0 text-[10px] font-medium px-2 py-1.5 rounded-md border transition-colors whitespace-nowrap",
+                    includePassed
+                      ? "bg-red-50 border-red-200 text-red-600"
+                      : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
+                  )}
+                >
+                  {includePassed ? "✕ Passed" : "+ Passed"}
+                </button>
+              </div>
+            </div>
+            {/* Hidden in board view — just takes up the sidebar space for layout consistency */}
+            <div className="flex-1" />
+          </div>
+
+          {/* Board columns */}
+          <div className="flex-1 overflow-x-auto flex gap-3 p-4 h-full bg-slate-50">
+            {BOARD_STAGES.map(stageKey => {
+              const stageCompanies = filtered.filter(c => (c.deal_status ?? "identified_introduced") === stageKey);
+              const isDragTarget = boardDragOver === stageKey;
+              return (
+                <div
+                  key={stageKey}
+                  className={`flex-shrink-0 w-64 flex flex-col rounded-xl border transition-colors ${isDragTarget ? "bg-blue-50 border-blue-300" : "bg-white border-slate-200"}`}
+                  onDragOver={e => { e.preventDefault(); setBoardDragOver(stageKey); }}
+                  onDragLeave={() => setBoardDragOver(null)}
+                  onDrop={e => { e.preventDefault(); handleBoardDrop(stageKey); setBoardDragOver(null); }}
+                >
+                  {/* Column header */}
+                  <div className="px-3 py-2.5 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${STAGE_DOT[stageKey] ?? "bg-slate-400"}`} />
+                      <span className="text-xs font-semibold text-slate-700">{STATUS_LABELS[stageKey]}</span>
+                    </div>
+                    <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-1.5 py-0.5 font-medium">
+                      {stageCompanies.length}
+                    </span>
+                  </div>
+                  {/* Cards */}
+                  <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
+                    {stageCompanies.map(company => (
+                      <div
+                        key={company.id}
+                        draggable
+                        onDragStart={() => setBoardDragItem(company.id)}
+                        onDragEnd={() => setBoardDragItem(null)}
+                        onClick={() => setSelectedId(company.id)}
+                        className={`bg-white rounded-lg border p-2.5 cursor-pointer hover:shadow-sm transition-all select-none
+                          ${selectedId === company.id ? "border-blue-400 shadow-sm ring-1 ring-blue-100" : "border-slate-200 hover:border-slate-300"}
+                          ${boardDragItem === company.id ? "opacity-50" : ""}`}
+                      >
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <CompanyLogo company={company} size="sm" />
+                          <span className="text-xs font-semibold text-slate-800 leading-tight line-clamp-2">{company.name}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {company.stage && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded font-medium">{company.stage}</span>
+                          )}
+                          {(company.sectors ?? []).slice(0, 1).map(s => (
+                            <span key={s} className={`text-[10px] px-1.5 py-0.5 rounded font-medium capitalize ${SECTOR_COLORS[s.toLowerCase()] ?? "bg-slate-100 text-slate-600"}`}>{s}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    {stageCompanies.length === 0 && (
+                      <div className={`flex-1 flex items-center justify-center py-6 ${isDragTarget ? "opacity-100" : "opacity-0"}`}>
+                        <p className="text-xs text-blue-400 font-medium">Drop here</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+        </>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════
           LEFT PANEL — Company List
       ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="w-[300px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
+      {pipelineView === "list" && <div className="w-[300px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
 
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-2">
@@ -1122,13 +1299,32 @@ export function PipelineClient({ initialCompanies }: Props) {
               Pipeline
               <span className="ml-2 text-xs font-normal text-slate-400">{filtered.length}</span>
             </span>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="w-7 h-7 flex items-center justify-center rounded-md bg-blue-600 hover:bg-blue-500 text-white transition-colors"
-              title="Add company"
-            >
-              <Plus size={14} />
-            </button>
+            <div className="flex items-center gap-1.5">
+              {/* View toggle */}
+              <div className="flex rounded-md border border-slate-200 overflow-hidden">
+                <button
+                  onClick={() => setPipelineView("list")}
+                  className="px-2.5 py-1.5 text-xs font-medium transition-colors bg-slate-800 text-white"
+                  title="List view"
+                >
+                  <List size={13} />
+                </button>
+                <button
+                  onClick={() => setPipelineView("board")}
+                  className="px-2.5 py-1.5 border-l border-slate-200 text-xs font-medium transition-colors bg-white text-slate-500 hover:bg-slate-50"
+                  title="Board view"
+                >
+                  <LayoutGrid size={13} />
+                </button>
+              </div>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="w-7 h-7 flex items-center justify-center rounded-md bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                title="Add company"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
           </div>
 
           {/* Search */}
@@ -1221,20 +1417,20 @@ export function PipelineClient({ initialCompanies }: Props) {
             })
           )}
         </div>
-      </div>
+      </div>}
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          RIGHT PANEL — Company Detail
+          RIGHT PANEL — Company Detail  (list view: flex-1 / board view: fixed 520px)
       ═══════════════════════════════════════════════════════════════════════ */}
-      {!selected ? (
+      {pipelineView === "list" && !selected ? (
         <div className="flex-1 flex items-center justify-center bg-slate-50">
           <div className="text-center text-slate-400">
             <Building2 size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-xs">Select a company to view details</p>
           </div>
         </div>
-      ) : (
-        <div ref={rightPanelRef} className="flex-1 overflow-y-auto bg-white">
+      ) : selected ? (
+        <div ref={rightPanelRef} className={pipelineView === "board" ? "w-[520px] flex-shrink-0 border-l border-slate-200 overflow-y-auto bg-white" : "flex-1 overflow-y-auto bg-white"}>
 
           {/* ── Company Header ── */}
           <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between">
@@ -2605,7 +2801,7 @@ export function PipelineClient({ initialCompanies }: Props) {
             <div className="h-8" />
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           ADD COMPANY MODAL

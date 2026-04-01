@@ -29,6 +29,7 @@ import {
   Shield,
   CheckSquare,
   Mic,
+  Rss,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -51,11 +52,12 @@ const TOP_ITEMS = [
 ];
 
 const INTELLIGENCE_ITEMS = [
-  { href: "/sourcing",  icon: Radar,          label: "Sourcing"   },
-  { href: "/meetings",  icon: Mic,            label: "Meetings"   },
-  { href: "/portfolio", icon: BarChart3,      label: "Portfolio"  },
-  { href: "/memos",     icon: FileText,       label: "IC Memos"   },
-  { href: "/chat",      icon: MessageSquare,  label: "AI Chat"    },
+  { href: "/sourcing",              icon: Radar,          label: "Sourcing"   },
+  { href: "/meetings",              icon: Mic,            label: "Meetings"   },
+  { href: "/intelligence/feeds",    icon: Rss,            label: "News Feeds" },
+  { href: "/portfolio",             icon: BarChart3,      label: "Portfolio"  },
+  { href: "/memos",                 icon: FileText,       label: "IC Memos"   },
+  { href: "/chat",                  icon: MessageSquare,  label: "AI Chat"    },
 ];
 
 export function Sidebar() {
@@ -63,11 +65,26 @@ export function Sidebar() {
   const router    = useRouter();
   const supabase  = createClient();
 
-  // Auto-open CRM section when on any /crm/* route
-  const [crmOpen, setCrmOpen] = useState(pathname.startsWith("/crm"));
+  // CRM section: default open; persist collapsed state in localStorage
+  const [crmOpen, setCrmOpen] = useState(true); // default open on server; overridden by localStorage on client
+  useEffect(() => {
+    const saved = localStorage.getItem("crm_nav_open");
+    if (saved !== null) {
+      setCrmOpen(saved === "true");
+    }
+    // Always force open when navigating to a CRM page
+  }, []);
   useEffect(() => {
     if (pathname.startsWith("/crm")) setCrmOpen(true);
   }, [pathname]);
+
+  function toggleCrm() {
+    setCrmOpen(o => {
+      const next = !o;
+      localStorage.setItem("crm_nav_open", String(next));
+      return next;
+    });
+  }
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -124,7 +141,7 @@ export function Sidebar() {
             {/* ── CRM expandable group ── */}
             <div>
               <button
-                onClick={() => setCrmOpen(o => !o)}
+                onClick={toggleCrm}
                 className={cn(
                   "nav-item w-full text-left",
                   pathname.startsWith("/crm") && "active"

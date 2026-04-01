@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { FeedsManager } from "@/components/admin/feeds-manager";
 import {
   Loader2, Save, Check, Rss, Search, BookOpen, Award, FlaskConical,
-  Plus, Trash2,
+  Plus, Trash2, Mail, Wifi, WifiOff, AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +54,14 @@ const TABS = [
     color:       "text-emerald-600",
     bg:          "bg-emerald-50",
     description: "NSF Awards agent — fetches National Science Foundation grants by keyword and recency. Free government API, no key required.",
+  },
+  {
+    id:          "outlook",
+    label:       "Outlook / Graph",
+    icon:        Mail,
+    color:       "text-blue-600",
+    bg:          "bg-blue-50",
+    description: "Microsoft Graph API — reads Outlook emails from the fund mailbox and surfaces them on company pages.",
   },
 ] as const;
 
@@ -460,6 +468,125 @@ function AgentEditor({ agentName, tab }: AgentEditorProps) {
   );
 }
 
+// ── Outlook / Microsoft Graph status panel ────────────────────────────────────
+function OutlookPanel() {
+  const [status, setStatus]   = useState<"idle" | "checking" | "ok" | "error" | "not_configured">("idle");
+  const [message, setMessage] = useState("");
+
+  async function checkConnection() {
+    setStatus("checking");
+    setMessage("");
+    try {
+      // Call the emails endpoint with a dummy company_id — it will return a graphError field if Graph isn't configured
+      const res = await fetch("/api/companies/emails?company_id=00000000-0000-0000-0000-000000000000");
+      const data = await res.json();
+      if (data.graphError === "not_configured") {
+        setStatus("not_configured");
+        setMessage(data.message ?? "Microsoft Graph env vars not set.");
+      } else if (data.graphError === "fetch_failed") {
+        setStatus("error");
+        setMessage(data.message ?? "Token or API request failed.");
+      } else {
+        setStatus("ok");
+        setMessage("Connection successful — Graph API is reachable.");
+      }
+    } catch (err) {
+      setStatus("error");
+      setMessage(err instanceof Error ? err.message : "Network error.");
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">Microsoft Graph API</h3>
+        <p className="text-xs text-slate-500">
+          Reads Outlook emails from the fund mailbox and surfaces them on company detail pages.
+          Uses app-only authentication (client credentials flow — no user login needed).
+        </p>
+      </div>
+
+      {/* Connection status */}
+      <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Connection Status</p>
+          <button
+            onClick={checkConnection}
+            disabled={status === "checking"}
+            className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+          >
+            {status === "checking" ? <Loader2 size={12} className="animate-spin" /> : <Wifi size={12} />}
+            {status === "checking" ? "Checking…" : "Test Connection"}
+          </button>
+        </div>
+
+        {status === "idle" && (
+          <p className="text-xs text-slate-400">Click "Test Connection" to verify your Microsoft Graph credentials.</p>
+        )}
+        {status === "ok" && (
+          <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
+            <Wifi size={14} />
+            <span className="text-xs font-medium">{message}</span>
+          </div>
+        )}
+        {status === "not_configured" && (
+          <div className="flex items-start gap-2 text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+            <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-semibold">Not configured</p>
+              <p className="text-xs mt-0.5 font-mono opacity-80">{message}</p>
+            </div>
+          </div>
+        )}
+        {status === "error" && (
+          <div className="flex items-start gap-2 text-red-700 bg-red-50 rounded-lg px-3 py-2">
+            <WifiOff size={14} className="mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-semibold">Connection failed</p>
+              <p className="text-xs mt-0.5 opacity-80">{message}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Required env vars */}
+      <div className="space-y-3">
+        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Required Environment Variables</p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-200">
+          {[
+            { name: "MICROSOFT_TENANT_ID",     desc: "Azure AD Directory (tenant) ID" },
+            { name: "MICROSOFT_CLIENT_ID",     desc: "App registration (client) ID" },
+            { name: "MICROSOFT_CLIENT_SECRET", desc: "App registration client secret" },
+            { name: "OUTLOOK_MAILBOX",         desc: "Mailbox to read, e.g. andrew@valuence.vc" },
+          ].map(({ name, desc }) => (
+            <div key={name} className="px-4 py-2.5 flex items-center justify-between gap-4">
+              <code className="text-xs font-mono text-blue-700">{name}</code>
+              <span className="text-xs text-slate-500 text-right">{desc}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-slate-400">
+          Set these in <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">.env.local</code> for local dev,
+          and in <strong>Vercel → Settings → Environment Variables</strong> for production.
+          The app registration needs <strong>Mail.Read</strong> (Application permission, not Delegated).
+        </p>
+      </div>
+
+      {/* Setup guide link */}
+      <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+        <p className="text-xs font-semibold text-blue-800 mb-1">Setup Guide</p>
+        <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+          <li>Go to <strong>portal.azure.com</strong> → App registrations → New registration</li>
+          <li>Add <strong>Mail.Read</strong> under API permissions (Application, not Delegated)</li>
+          <li>Create a client secret under Certificates &amp; secrets</li>
+          <li>Grant admin consent for the tenant</li>
+          <li>Copy Tenant ID, Client ID, and Client Secret into env vars above</li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
 // ── Main panel ────────────────────────────────────────────────────────────────
 export function ApiConfigPanel() {
   const [activeTab, setActiveTab] = useState<TabId>("feeds");
@@ -495,14 +622,10 @@ export function ApiConfigPanel() {
 
       {/* ── Right: content ── */}
       <div className="flex-1 overflow-y-auto p-6">
-        {activeTab === "feeds" ? (
-          <FeedsManager />
-        ) : (
-          <AgentEditor
-            agentName={activeTab as "exa" | "arxiv" | "sbir" | "nsf"}
-            tab={tab}
-          />
-        )}
+        {activeTab === "feeds"   ? <FeedsManager /> :
+         activeTab === "outlook" ? <OutlookPanel /> :
+         <AgentEditor agentName={activeTab as "exa" | "arxiv" | "sbir" | "nsf"} tab={tab} />
+        }
       </div>
 
     </div>

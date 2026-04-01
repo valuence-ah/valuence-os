@@ -12,6 +12,19 @@ export async function PATCH(
   const supabase = await createClient();
   const body = await req.json();
 
+  // If updating article-specific fields, update feed_articles table
+  if ("is_read" in body || "is_starred" in body) {
+    const { data, error } = await supabase
+      .from("feed_articles")
+      .update(body)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data);
+  }
+
+  // Otherwise update feed_sources
   const { data, error } = await supabase
     .from("feed_sources")
     .update({ ...body, updated_at: new Date().toISOString() })

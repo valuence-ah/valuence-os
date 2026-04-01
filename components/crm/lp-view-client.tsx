@@ -37,6 +37,8 @@ const LP_STAGE_OPTIONS = [
   "Lead", "Initial Meeting", "Discussion in Process",
   "Due Diligence", "Committed", "Passed",
 ] as const;
+
+const LP_STAGE_ORDER = ["Lead", "Initial Meeting", "Discussion in Process", "Due Diligence", "Committed", "Passed"] as const;
 const STAGE_DOT:  Record<string, string> = {
   Lead: "bg-slate-400", "Initial Meeting": "bg-blue-500",
   "Discussion in Process": "bg-amber-500", "Due Diligence": "bg-violet-500",
@@ -863,6 +865,19 @@ export function LpViewClient({ initialCompanies }: Props) {
     };
   }, [selected]);
 
+  const stageProgressPct = useMemo(() => {
+    if (!selected?.lp_stage) return 0;
+    const activeStages = LP_STAGE_ORDER.filter(s => s !== "Passed");
+    const idx = activeStages.indexOf(selected.lp_stage as typeof activeStages[number]);
+    if (idx === -1) return 0;
+    return (idx / (activeStages.length - 1)) * 100;
+  }, [selected]);
+
+  async function handleUpdateLpStage(stage: string) {
+    if (!selectedId) return;
+    await saveField(selectedId, { lp_stage: stage });
+  }
+
   // 90-day stats from interactions
   const ninetyDaysAgo = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
   const emails90d   = interactions.filter(i => i.type === "email"   && i.date >= ninetyDaysAgo).length;
@@ -1574,6 +1589,68 @@ export function LpViewClient({ initialCompanies }: Props) {
             {/* Overview tab — Body */}
             {lpDetailTab === "overview" && (
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+              {/* Fundraising Stage Tracker */}
+              <div className="mb-5">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Fundraising Stage</p>
+                <div className="relative">
+                  {/* Progress line */}
+                  <div className="absolute top-3.5 left-0 right-0 h-0.5 bg-slate-200" />
+                  <div
+                    className="absolute top-3.5 left-0 h-0.5 bg-blue-500 transition-all duration-300"
+                    style={{ width: `${stageProgressPct}%` }}
+                  />
+                  <div className="relative flex justify-between">
+                    {LP_STAGE_ORDER.filter(s => s !== "Passed").map((stage) => {
+                      const isActive = selected?.lp_stage === stage;
+                      const isDone = LP_STAGE_ORDER.indexOf(selected?.lp_stage as typeof LP_STAGE_ORDER[number]) > LP_STAGE_ORDER.indexOf(stage);
+                      return (
+                        <button
+                          key={stage}
+                          onClick={() => handleUpdateLpStage(stage)}
+                          title={stage}
+                          className={`flex flex-col items-center gap-1.5 group`}
+                        >
+                          <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all z-10 relative
+                            ${isActive ? "bg-blue-600 border-blue-600 text-white shadow-md scale-110" :
+                              isDone ? "bg-blue-100 border-blue-400 text-blue-600" :
+                              "bg-white border-slate-300 text-slate-400 group-hover:border-blue-300"}`}>
+                            {isDone ? "✓" : LP_STAGE_ORDER.indexOf(stage) + 1}
+                          </div>
+                          <span className={`text-[9px] leading-tight text-center max-w-[50px] ${isActive ? "text-blue-700 font-semibold" : isDone ? "text-slate-500" : "text-slate-400"}`}>
+                            {stage}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Passed pill */}
+                {selected?.lp_stage === "Passed" && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full font-medium">Passed</span>
+                    <span className="text-xs text-slate-400">This LP has been marked as passed</span>
+                    <button
+                      onClick={() => handleUpdateLpStage("Lead")}
+                      className="ml-auto text-xs text-slate-400 hover:text-blue-600 border border-slate-200 rounded px-2 py-0.5 hover:border-blue-300 transition-colors"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                )}
+                {/* Quick-pass button when not already passed */}
+                {selected?.lp_stage !== "Passed" && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={() => handleUpdateLpStage("Passed")}
+                      className="text-[10px] text-slate-300 hover:text-red-500 transition-colors"
+                      title="Mark as Passed"
+                    >
+                      Mark as Passed
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Relationship Owner */}
               <div>

@@ -10,13 +10,17 @@ export const metadata = { title: "Contacts" };
 export default async function ContactsPage() {
   const supabase = createAdminClient();
 
-  const [{ data: contacts }, { count: pendingCount }] = await Promise.all([
+  const [{ data: contacts }, { count: totalCount }, { count: pendingCount }] = await Promise.all([
     supabase
       .from("contacts")
       .select("*, company:companies(id, name, type)")
       .eq("status", "active")
       .order("updated_at", { ascending: false })
-      .limit(10000) as unknown as Promise<{ data: (import("@/lib/types").Contact & { company?: { id: string; name: string; type: string } | null })[] | null; error: unknown }>,
+      .range(0, 199) as unknown as Promise<{ data: (import("@/lib/types").Contact & { company?: { id: string; name: string; type: string } | null })[] | null; error: unknown }>,
+    supabase
+      .from("contacts")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "active") as unknown as Promise<{ count: number | null; error: unknown }>,
     supabase
       .from("contacts")
       .select("*", { count: "exact", head: true })
@@ -39,10 +43,10 @@ export default async function ContactsPage() {
     <div className="flex flex-col h-full">
       <Header
         title="Contacts"
-        subtitle={`${contacts?.length ?? 0} active contacts`}
+        subtitle={`${totalCount ?? 0} active contacts`}
         actions={PendingBadge}
       />
-      <ContactsClient initialContacts={contacts ?? []} />
+      <ContactsClient initialContacts={contacts ?? []} totalCount={totalCount ?? 0} />
     </div>
   );
 }

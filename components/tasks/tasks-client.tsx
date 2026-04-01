@@ -498,7 +498,15 @@ const KANBAN_COLS: { id: string; label: string; color: string }[] = [
   { id: "Completed",   label: "Completed",   color: "border-t-slate-200" },
 ];
 
-function KanbanView({ tasks, allTasks, onSelect }: { tasks: Task[]; allTasks: Task[]; onSelect: (t: Task) => void }) {
+function KanbanView({ tasks, allTasks, onSelect, onStatusChange }: {
+  tasks: Task[];
+  allTasks: Task[];
+  onSelect: (t: Task) => void;
+  onStatusChange: (taskId: string, newStatus: string) => void;
+}) {
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null);
+
   return (
     <div className="flex-1 overflow-x-auto overflow-y-hidden">
       <div className="flex gap-3 h-full p-3 min-w-[900px]">
@@ -508,19 +516,46 @@ function KanbanView({ tasks, allTasks, onSelect }: { tasks: Task[]; allTasks: Ta
             ? allTasks.filter(t => t.status === "Completed")
             : tasks.filter(t => t.status === col.id);
           return (
-            <div key={col.id} className="flex flex-col flex-1 min-w-[180px] max-w-[240px]">
+            <div
+              key={col.id}
+              className="flex flex-col flex-1 min-w-[180px] max-w-[240px]"
+              onDragOver={e => { e.preventDefault(); setDragOver(col.id); }}
+              onDragLeave={e => {
+                // Only clear if leaving the column entirely (not entering a child)
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setDragOver(null);
+                }
+              }}
+              onDrop={e => {
+                e.preventDefault();
+                if (dragId) {
+                  onStatusChange(dragId, col.id);
+                }
+                setDragId(null);
+                setDragOver(null);
+              }}
+            >
               <div className={cn("bg-white rounded-t border-t-2 border-x border-slate-200 px-3 py-2", col.color)}>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-700">{col.label}</span>
                   <span className="text-xs text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{colTasks.length}</span>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto bg-slate-50 border border-t-0 border-slate-200 rounded-b p-2 space-y-2">
+              <div
+                className={cn(
+                  "flex-1 overflow-y-auto border border-t-0 border-slate-200 rounded-b p-2 space-y-2 transition-colors",
+                  dragOver === col.id ? "bg-blue-50 ring-2 ring-inset ring-blue-300" : "bg-slate-50"
+                )}
+              >
                 {colTasks.map(t => (
                   <div
                     key={t.id}
+                    draggable
+                    onDragStart={e => { e.stopPropagation(); setDragId(String(t.id)); }}
+                    onDragEnd={() => { setDragId(null); setDragOver(null); }}
                     onClick={() => onSelect(t)}
-                    className="bg-white border border-slate-200 rounded-lg p-2.5 cursor-pointer hover:border-slate-300 hover:shadow-sm transition-all space-y-2"
+                    style={{ opacity: dragId === String(t.id) ? 0.45 : 1 }}
+                    className="bg-white border border-slate-200 rounded-lg p-2.5 cursor-grab active:cursor-grabbing hover:border-slate-300 hover:shadow-sm transition-all space-y-2 select-none"
                   >
                     <div className="flex items-start gap-1.5">
                       <span className={cn("mt-0.5 w-1.5 h-1.5 rounded-full flex-shrink-0", PRIO_DOTS[t.prio])} />
@@ -535,7 +570,9 @@ function KanbanView({ tasks, allTasks, onSelect }: { tasks: Task[]; allTasks: Ta
                   </div>
                 ))}
                 {colTasks.length === 0 && (
-                  <div className="text-[11px] text-slate-400 text-center py-4">Empty</div>
+                  <div className="text-[11px] text-slate-400 text-center py-4">
+                    {dragOver === col.id ? "Drop here" : "Empty"}
+                  </div>
                 )}
               </div>
             </div>
@@ -546,60 +583,121 @@ function KanbanView({ tasks, allTasks, onSelect }: { tasks: Task[]; allTasks: Ta
   );
 }
 
-// ── Timeline view ─────────────────────────────────────────────────────────────
+// ── Timeline / Gantt view ──────────────────────────────────────────────────────
 
-const MONTHS = ["Mar 2026", "Apr 2026", "May 2026"];
-const MONTH_DAYS = [31, 30, 31];
-const TOTAL_DAYS = MONTH_DAYS.reduce((a, b) => a + b, 0);
-const TODAY_OFFSET = 23; // Mar 24, 2026 = day index 23 from Mar 1
+const GANTT_DAYS = 60;          // total window width in days
+const GANTT_PAST = 7;           // days before today shown on the left
 
-function taskToBar(t: Task): { left: number; width: number } {
-  const dueDayOffset = TODAY_OFFSET + t.daysLeft;
-  const startMonthMap: Record<string, number> = { "Feb": -1, "Mar": 0, "Apr": 31, "May": 61 };
-  const startMatch = t.start.match(/(\w+)\s+(\d+)/);
-  let startOffset = 0;
-  if (startMatch) {
-    const mo = startMonthMap[startMatch[1]] ?? 0;
-    startOffset = mo + parseInt(startMatch[2], 10) - 1;
-  }
-  const clampedStart = Math.max(0, Math.min(startOffset, TOTAL_DAYS - 1));
-  const clampedEnd = Math.max(clampedStart + 2, Math.min(dueDayOffset, TOTAL_DAYS));
-  const left = (clampedStart / TOTAL_DAYS) * 100;
-  const width = Math.max(2, ((clampedEnd - clampedStart) / TOTAL_DAYS) * 100);
-  return { left, width };
+function ganttBarColor(status: string): string {
+  if (status === "Overdue")    return "bg-red-400";
+  if (status === "At risk")    return "bg-amber-400";
+  if (status === "On track")   return "bg-blue-500";
+  if (status === "Completed")  return "bg-emerald-500";
+  if (status === "Blocked")    return "bg-violet-400";
+  return "bg-slate-400";
 }
 
-function barColor(status: string) {
-  if (status === "Overdue")  return "bg-red-400";
-  if (status === "At risk")  return "bg-amber-400";
-  if (status === "On track") return "bg-blue-400";
-  if (status === "Completed") return "bg-slate-300";
-  return "bg-slate-300";
+/** Build month header labels dynamically from the window start date */
+function buildMonthHeaders(windowStart: Date, totalDays: number): { label: string; widthPct: number }[] {
+  const headers: { label: string; widthPct: number }[] = [];
+  let cursor = new Date(windowStart);
+  cursor.setDate(1); // start of the first month
+
+  // Skip forward if the first-of-month is before windowStart
+  if (cursor < windowStart) cursor.setMonth(cursor.getMonth() + 1);
+
+  // Always add the partial first month
+  const windowEnd = new Date(windowStart);
+  windowEnd.setDate(windowStart.getDate() + totalDays);
+
+  let prev = new Date(windowStart);
+  while (cursor < windowEnd) {
+    const days = Math.round((cursor.getTime() - prev.getTime()) / 86400000);
+    const label = prev.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    headers.push({ label, widthPct: (days / totalDays) * 100 });
+    prev = new Date(cursor);
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  // Last segment
+  const days = Math.round((windowEnd.getTime() - prev.getTime()) / 86400000);
+  if (days > 0) {
+    const label = prev.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    headers.push({ label, widthPct: (days / totalDays) * 100 });
+  }
+  return headers;
 }
 
 function TimelineView({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => void }) {
+  const TODAY = new Date();
+  TODAY.setHours(0, 0, 0, 0);
+
+  const windowStart = new Date(TODAY);
+  windowStart.setDate(TODAY.getDate() - GANTT_PAST);
+
+  const windowEnd = new Date(windowStart);
+  windowEnd.setDate(windowStart.getDate() + GANTT_DAYS);
+
+  const todayPct = (GANTT_PAST / GANTT_DAYS) * 100;
+  const monthHeaders = buildMonthHeaders(windowStart, GANTT_DAYS);
+
+  // Sort tasks by due date ascending
+  const sorted = [...tasks].sort((a, b) => a.daysLeft - b.daysLeft);
+
+  // Group by owner
   const groups = OWNERS.map(owner => ({
     owner,
-    tasks: tasks.filter(t => t.owner === owner),
+    tasks: sorted.filter(t => t.owner === owner),
   })).filter(g => g.tasks.length > 0);
+
+  function calcBar(t: Task): { leftPct: number; widthPct: number } | null {
+    // Bar end = today + daysLeft
+    const barEnd = new Date(TODAY);
+    barEnd.setDate(TODAY.getDate() + t.daysLeft);
+
+    // Parse start date string e.g. "Mar 15" or full date
+    let barStart = new Date(t.start);
+    if (isNaN(barStart.getTime())) {
+      // Fallback: use windowStart so bar is visible
+      barStart = new Date(windowStart);
+    }
+    barStart.setHours(0, 0, 0, 0);
+
+    // Clamp to window
+    const clampedStart = barStart < windowStart ? windowStart : barStart;
+    const clampedEnd   = barEnd   > windowEnd   ? windowEnd   : barEnd;
+
+    if (clampedEnd <= clampedStart) return null; // entirely outside window
+
+    const msPerDay = 86400000;
+    const leftPct  = ((clampedStart.getTime() - windowStart.getTime()) / msPerDay / GANTT_DAYS) * 100;
+    const widthPct = Math.max(1.5, ((clampedEnd.getTime() - clampedStart.getTime()) / msPerDay / GANTT_DAYS) * 100);
+    return { leftPct, widthPct };
+  }
 
   return (
     <div className="flex-1 overflow-auto">
       <div className="min-w-[700px]">
+        {/* Month header */}
         <div className="flex sticky top-0 bg-white z-10 border-b border-slate-200">
           <div className="w-56 flex-shrink-0 px-3 py-2 text-xs font-semibold text-slate-500 border-r border-slate-200">Task</div>
-          <div className="flex-1 flex">
-            {MONTHS.map((m, i) => (
+          <div className="flex-1 flex relative">
+            {monthHeaders.map((h, i) => (
               <div
-                key={m}
-                className="border-r border-slate-200 py-2 px-2 text-xs font-semibold text-slate-500 bg-slate-50"
-                style={{ width: `${(MONTH_DAYS[i] / TOTAL_DAYS) * 100}%` }}
+                key={i}
+                className="border-r border-slate-200 py-2 px-2 text-xs font-semibold text-slate-500 bg-slate-50 overflow-hidden whitespace-nowrap"
+                style={{ width: `${h.widthPct}%` }}
               >
-                {m}
+                {h.label}
               </div>
             ))}
+            {/* Today marker in header */}
+            <div
+              className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10 opacity-70"
+              style={{ left: `${todayPct}%` }}
+            />
           </div>
         </div>
+
         {groups.map(g => (
           <div key={g.owner}>
             <div className="flex items-center border-b border-slate-200 bg-slate-50 px-3 py-1.5">
@@ -608,7 +706,7 @@ function TimelineView({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) 
               <span className="ml-2 text-[10px] text-slate-400">{g.tasks.length} tasks</span>
             </div>
             {g.tasks.map(t => {
-              const { left, width } = taskToBar(t);
+              const bar = calcBar(t);
               return (
                 <div
                   key={t.id}
@@ -620,24 +718,31 @@ function TimelineView({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) 
                     <span className="text-xs text-slate-700 leading-snug line-clamp-2">{t.title}</span>
                   </div>
                   <div className="flex-1 relative h-8 flex items-center">
+                    {/* Today vertical marker */}
                     <div
-                      className="absolute top-0 bottom-0 w-px bg-red-300 z-10 opacity-60"
-                      style={{ left: `${(TODAY_OFFSET / TOTAL_DAYS) * 100}%` }}
+                      className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10 opacity-40"
+                      style={{ left: `${todayPct}%` }}
                     />
-                    <div
-                      className={cn(
-                        "absolute h-4 rounded-full opacity-80 group-hover:opacity-100 transition-opacity",
-                        barColor(t.status)
-                      )}
-                      style={{ left: `${left}%`, width: `${width}%` }}
-                      title={`${t.title} · ${t.status}`}
-                    />
+                    {bar && (
+                      <div
+                        className={cn(
+                          "absolute h-4 rounded-full opacity-80 group-hover:opacity-100 transition-opacity",
+                          ganttBarColor(t.status)
+                        )}
+                        style={{ left: `${bar.leftPct}%`, width: `${bar.widthPct}%` }}
+                        title={`${t.title} · ${t.status} · due in ${t.daysLeft}d`}
+                      />
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
         ))}
+
+        {sorted.length === 0 && (
+          <div className="text-xs text-slate-400 text-center py-10">No tasks to display</div>
+        )}
       </div>
     </div>
   );
@@ -1648,7 +1753,14 @@ export function TasksClient() {
           />
         )}
         {view === "kanban" && (
-          <KanbanView tasks={filteredTasks} allTasks={allSearchedTasks} onSelect={setSelectedTask} />
+          <KanbanView
+            tasks={filteredTasks}
+            allTasks={allSearchedTasks}
+            onSelect={setSelectedTask}
+            onStatusChange={(taskId, newStatus) =>
+              setTasks(prev => prev.map(t => String(t.id) === taskId ? { ...t, status: newStatus as Task["status"] } : t))
+            }
+          />
         )}
         {view === "timeline" && (
           <TimelineView tasks={filteredTasks} onSelect={setSelectedTask} />

@@ -21,7 +21,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
   const [{ data: company }, { data: contacts }, { data: interactions }, { data: deals }, { data: memos }] = await Promise.all([
     supabase.from("companies").select("*").eq("id", id).single() as unknown as Promise<{ data: Company | null; error: unknown }>,
     supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }) as unknown as Promise<{ data: Contact[] | null; error: unknown }>,
-    supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(10) as unknown as Promise<{ data: import("@/lib/types").Interaction[] | null; error: unknown }>,
+    supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(50) as unknown as Promise<{ data: import("@/lib/types").Interaction[] | null; error: unknown }>,
     supabase.from("deals").select("*").eq("company_id", id).order("created_at", { ascending: false }) as unknown as Promise<{ data: Deal[] | null; error: unknown }>,
     supabase.from("ic_memos").select("id, title, recommendation, status, created_at").eq("company_id", id).order("created_at", { ascending: false }) as unknown as Promise<{ data: Pick<IcMemo, "id" | "title" | "recommendation" | "status" | "created_at">[] | null; error: unknown }>,
   ]);

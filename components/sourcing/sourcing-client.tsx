@@ -38,6 +38,10 @@ export function SourcingClient({ initialSignals }: Props) {
   const [showAdd, setShowAdd]     = useState(false);
   const [form, setForm]           = useState<Partial<SourcingSignal>>({ source: "manual", signal_type: "other", status: "new" });
   const [saving, setSaving]       = useState(false);
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [linkPickerOpen, setLinkPickerOpen] = useState<string | null>(null); // signal id
+  const [linkSearch, setLinkSearch] = useState("");
+  const [addingPipeline, setAddingPipeline] = useState<string | null>(null); // signal id
 
   const sources = useMemo(() => {
     const all = new Set(signals.map(s => s.source));
@@ -51,6 +55,50 @@ export function SourcingClient({ initialSignals }: Props) {
     const matchSearch = !q || (s.title ?? "").toLowerCase().includes(q) || (s.summary ?? "").toLowerCase().includes(q);
     return matchSource && matchStatus && matchSearch;
   }), [signals, sourceFilter, statusFilter, search]);
+
+  async function loadCompanies() {
+    if (companies.length > 0) return;
+    const { data } = await supabase.from("companies").select("id, name").order("name").limit(500);
+    setCompanies(data ?? []);
+  }
+
+  async function handleAddToPipeline(signal: SourcingSignal) {
+    setAddingPipeline(signal.id);
+    const { data: company, error: compErr } = await supabase
+      .from("companies")
+      .insert({
+        name: signal.title ?? "Untitled",
+        type: "startup",
+        types: ["startup"],
+        deal_status: "identified_introduced",
+        source: signal.source,
+        notes: signal.summary ?? null,
+      })
+      .select()
+      .single();
+
+    if (compErr || !company) {
+      alert("Failed to create company: " + compErr?.message);
+      setAddingPipeline(null);
+      return;
+    }
+
+    await supabase
+      .from("sourcing_signals")
+      .update({ company_id: company.id, status: "reviewed" })
+      .eq("id", signal.id);
+
+    setSignals(prev => prev.map(s => s.id === signal.id ? { ...s, company_id: company.id, status: "reviewed" } : s));
+    setAddingPipeline(null);
+    alert(`✓ "${company.name}" added to Pipeline. View it in CRM → Pipeline.`);
+  }
+
+  async function handleLinkToCompany(signalId: string, companyId: string) {
+    await supabase.from("sourcing_signals").update({ company_id: companyId }).eq("id", signalId);
+    setSignals(prev => prev.map(s => s.id === signalId ? { ...s, company_id: companyId } : s));
+    setLinkPickerOpen(null);
+    setLinkSearch("");
+  }
 
   async function updateStatus(id: string, status: SourcingSignal["status"]) {
     await supabase.from("sourcing_signals").update({ status }).eq("id", id);
@@ -130,19 +178,37 @@ export function SourcingClient({ initialSignals }: Props) {
                     {signal.signal_type && (
                       <span className="badge bg-slate-100 text-slate-500 capitalize">{signal.signal_type.replace("_", " ")}</span>
                     )}
-                    {signal.relevance_score != null && (
-                      <span className={cn("badge text-xs", signal.relevance_score > 0.7 ? "bg-green-100 text-green-700" : signal.relevance_score > 0.4 ? "bg-yellow-100 text-yellow-700" : "bg-slate-100 text-slate-500")}>
-                        {Math.round(signal.relevance_score * 100)}% relevant
-                      </span>
-                    )}
                   </div>
                   <p className="text-sm font-semibold text-slate-800 leading-snug">{signal.title ?? "Untitled signal"}</p>
                   {signal.summary && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{signal.summary}</p>}
+                  {/* Sector tags */}
+                  {signal.sector_tags && signal.sector_tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {signal.sector_tags.slice(0, 4).map(tag => (
+                        <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-teal-50 text-teal-700 border border-teal-100 rounded font-medium">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+                  {/* Relevance bar */}
+                  {signal.relevance_score != null && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[10px] text-slate-400">Relevance</span>
+                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full max-w-[80px]">
+                        <div
+                          className={cn("h-full rounded-full", signal.relevance_score > 0.7 ? "bg-green-500" : signal.relevance_score > 0.4 ? "bg-amber-400" : "bg-slate-300")}
+                          style={{ width: `${Math.round(signal.relevance_score * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-medium text-slate-500">{Math.round(signal.relevance_score * 100)}%</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
                     {signal.authors && signal.authors.length > 0 && (
                       <span>{signal.authors.slice(0,3).join(", ")}{signal.authors.length > 3 ? ` +${signal.authors.length - 3}` : ""}</span>
                     )}
-                    {signal.published_date && <span>{formatDate(signal.published_date)}</span>}
+                    {signal.published_date && (
+                      <span className="font-medium text-slate-600">{formatDate(signal.published_date)}</span>
+                    )}
                     <span>{timeAgo(signal.created_at)}</span>
                   </div>
                 </div>
@@ -157,6 +223,62 @@ export function SourcingClient({ initialSignals }: Props) {
                     <option value="contacted">Contacted</option>
                     <option value="archived">Archived</option>
                   </select>
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-1">
+                    {/* Link to company picker */}
+                    <div className="relative">
+                      <button
+                        onClick={async () => { await loadCompanies(); setLinkPickerOpen(linkPickerOpen === signal.id ? null : signal.id); setLinkSearch(""); }}
+                        className={cn("text-xs px-2 py-1 rounded border transition-colors",
+                          signal.company_id
+                            ? "bg-green-50 text-green-700 border-green-200"
+                            : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                        )}
+                        title={signal.company_id ? "Linked to company" : "Link to company"}
+                      >
+                        🔗
+                      </button>
+                      {linkPickerOpen === signal.id && (
+                        <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-lg shadow-xl w-64 p-2">
+                          <input
+                            autoFocus
+                            placeholder="Search companies…"
+                            value={linkSearch}
+                            onChange={e => setLinkSearch(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 mb-2 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          />
+                          <div className="max-h-48 overflow-y-auto space-y-0.5">
+                            {companies
+                              .filter(c => !linkSearch || c.name.toLowerCase().includes(linkSearch.toLowerCase()))
+                              .slice(0, 20)
+                              .map(c => (
+                                <button
+                                  key={c.id}
+                                  onClick={() => handleLinkToCompany(signal.id, c.id)}
+                                  className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-slate-100 text-slate-700 truncate"
+                                >
+                                  {c.name}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Add to pipeline */}
+                    {!signal.company_id && (
+                      <button
+                        onClick={() => handleAddToPipeline(signal)}
+                        disabled={addingPipeline === signal.id}
+                        className="text-xs px-2 py-1 rounded border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                        title="Add to Pipeline"
+                      >
+                        {addingPipeline === signal.id ? "…" : "+ Pipeline"}
+                      </button>
+                    )}
+                  </div>
+
                   {signal.url && (
                     <a href={signal.url} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-blue-600 p-1">
                       <ExternalLink size={14} />

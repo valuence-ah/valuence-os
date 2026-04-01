@@ -63,6 +63,7 @@ type ContactRow = Contact & { company?: { id: string; name: string; type: string
 
 interface Props {
   initialContacts: ContactRow[];
+  totalCount: number;
 }
 
 // ── Avatar ─────────────────────────────────────────────────────────────────────
@@ -80,11 +81,14 @@ function avatarGradient(name: string): string {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
-export function ContactsClient({ initialContacts }: Props) {
+export function ContactsClient({ initialContacts, totalCount }: Props) {
   const supabase = createClient();
 
   // ── List state ───────────────────────────────────────────────────────────────
   const [contacts, setContacts] = useState(initialContacts);
+  const [allLoaded, setAllLoaded] = useState(initialContacts.length >= totalCount);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadOffset, setLoadOffset] = useState(initialContacts.length);
   const [searchInput, setSearchInput] = useState(""); // raw input value
   const [search, setSearch]           = useState(""); // debounced value
   const [typeFilter, setTypeFilter]   = useState("all");
@@ -228,6 +232,27 @@ export function ContactsClient({ initialContacts }: Props) {
     }
   }
 
+  // ── Load more ────────────────────────────────────────────────────────────────
+  async function loadMore() {
+    if (loadingMore || allLoaded) return;
+    setLoadingMore(true);
+    const { data } = await supabase
+      .from("contacts")
+      .select("*, company:companies(id, name, type)")
+      .eq("status", "active")
+      .order("updated_at", { ascending: false })
+      .range(loadOffset, loadOffset + 199);
+
+    if (data && data.length > 0) {
+      setContacts(prev => [...prev, ...(data as ContactRow[])]);
+      setLoadOffset(prev => prev + data.length);
+      if (loadOffset + data.length >= totalCount) setAllLoaded(true);
+    } else {
+      setAllLoaded(true);
+    }
+    setLoadingMore(false);
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -340,6 +365,20 @@ export function ContactsClient({ initialContacts }: Props) {
             })}
           </tbody>
         </table>
+
+        {/* Load More */}
+        {!allLoaded && !search && (
+          <div className="flex items-center justify-center py-4 border-t border-slate-100">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+            >
+              {loadingMore ? <Loader2 size={14} className="animate-spin" /> : null}
+              {loadingMore ? "Loading…" : `Load more (${contacts.length} of ${totalCount} loaded)`}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Right Detail Panel ── */}

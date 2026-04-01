@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 
 export function DashboardGreeting() {
-  const [text, setText] = useState("Good morning");
+  const [text, setText] = useState(""); // empty on server; set only on client via useEffect
 
   useEffect(() => {
     const h = new Date().getHours();

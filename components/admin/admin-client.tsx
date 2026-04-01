@@ -19,7 +19,7 @@ import {
 import "react-data-grid/lib/styles.css";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
-import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen } from "lucide-react";
+import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen, Download } from "lucide-react";
 import { AiConfigPanel } from "@/components/admin/ai-config-panel";
 import { ApiConfigPanel } from "@/components/admin/api-config-panel";
 import { DrivePanel } from "@/components/admin/drive-panel";
@@ -34,11 +34,10 @@ type ContactRow = Contact & { company_name?: string | null; _dirty?: boolean; na
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "";
   try {
-    return new Date(iso).toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    // Use ISO slice + UTC to avoid server/client timezone mismatch (hydration error #418)
+    const [y, m, d] = iso.slice(0, 10).split("-");
+    const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${d} ${MONTHS[parseInt(m) - 1]} ${y}`;
   } catch {
     return iso;
   }
@@ -1361,6 +1360,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
 
   const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive">("companies");
   const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [toast, setToast] = useState<ToastState>(null);
   const [companyPage, setCompanyPage] = useState(0);
   const [contactPage, setContactPage] = useState(0);
@@ -1481,6 +1481,12 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showFilterPanel]);
+
+  // ── Search debounce ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 250);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // ── Toast helper ─────────────────────────────────────────────────────────
   function showToast(message: string, type: ToastKind) {
@@ -2455,6 +2461,37 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
     showToast("Deleted ✓", "saved");
   }
 
+  // ─── Export CSV handler ───────────────────────────────────────────────────
+
+  function handleExportCsv() {
+    const cols = isCompanies
+      ? allCompanyColumns.filter(c => (c.key as string) !== "select-row" && !hiddenCompanyKeys.has(c.key as string))
+      : allContactColumns.filter(c => (c.key as string) !== "select-row" && !hiddenContactKeys.has(c.key as string));
+
+    const rows = isCompanies ? filteredCompanies : filteredContacts;
+
+    function escCsv(v: unknown): string {
+      const s = v === null || v === undefined ? "" : Array.isArray(v) ? v.join("; ") : String(v);
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    }
+
+    const header = cols.map(c => escCsv(c.name)).join(",");
+    const dataRows = rows.map(row =>
+      cols.map(c => escCsv((row as unknown as Record<string, unknown>)[c.key as string])).join(",")
+    );
+
+    const csv = [header, ...dataRows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ts = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `${isCompanies ? "companies" : "contacts"}_export_${ts}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // ─── Match All handler ────────────────────────────────────────────────────
 
   const handleMatchAll = useCallback(async () => {
@@ -2623,7 +2660,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         {/* Tab selector */}
         <div className="flex rounded-md border border-slate-200 overflow-hidden text-xs font-medium">
           <button
-            onClick={() => { setActiveTab("companies"); setSearch(""); }}
+            onClick={() => { setActiveTab("companies"); setSearch(""); setSearchInput(""); }}
             className={`px-3 py-1.5 transition-colors ${
               isCompanies
                 ? "bg-blue-600 text-white"
@@ -2633,7 +2670,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
             Companies
           </button>
           <button
-            onClick={() => { setActiveTab("contacts"); setSearch(""); }}
+            onClick={() => { setActiveTab("contacts"); setSearch(""); setSearchInput(""); }}
             className={`px-3 py-1.5 border-l border-slate-200 transition-colors ${
               activeTab === "contacts"
                 ? "bg-blue-600 text-white"
@@ -2643,7 +2680,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
             Contacts
           </button>
           <button
-            onClick={() => { setActiveTab("ai_config"); setSearch(""); }}
+            onClick={() => { setActiveTab("ai_config"); setSearch(""); setSearchInput(""); }}
             className={`px-3 py-1.5 border-l border-slate-200 transition-colors flex items-center gap-1 ${
               isAiConfig
                 ? "bg-blue-600 text-white"
@@ -2653,7 +2690,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
             <Sparkles size={11} /> AI Config
           </button>
           <button
-            onClick={() => { setActiveTab("api"); setSearch(""); }}
+            onClick={() => { setActiveTab("api"); setSearch(""); setSearchInput(""); }}
             className={`px-3 py-1.5 border-l border-slate-200 transition-colors flex items-center gap-1 ${
               activeTab === "api"
                 ? "bg-blue-600 text-white"
@@ -2663,7 +2700,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
             <Rss size={11} /> API
           </button>
           <button
-            onClick={() => { setActiveTab("drive"); setSearch(""); }}
+            onClick={() => { setActiveTab("drive"); setSearch(""); setSearchInput(""); }}
             className={`px-3 py-1.5 border-l border-slate-200 transition-colors flex items-center gap-1 ${
               isDrive
                 ? "bg-blue-600 text-white"
@@ -2680,8 +2717,8 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           <input
             type="text"
             placeholder="Search…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="w-full pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
         </div>
@@ -2836,6 +2873,17 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
             </div>
           )}
         </div>
+
+        {/* Export CSV button */}
+        {!isAiConfig && activeTab !== "api" && !isDrive && (
+          <button
+            onClick={handleExportCsv}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white text-slate-600 border border-slate-200 rounded-md hover:bg-slate-50 transition-colors"
+          >
+            <Download size={13} />
+            Export CSV
+          </button>
+        )}
 
         {/* Delete button — only show when rows selected */}
         {selectedCount > 0 && (

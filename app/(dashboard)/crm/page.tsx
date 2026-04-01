@@ -49,14 +49,27 @@ const SECTIONS = [
     color: "bg-slate-50 text-slate-600 border-slate-200",
     types: ["government", "other"],
   },
+  {
+    href: "/crm/contacts",
+    label: "Contacts",
+    description: "Founders, investors, advisors & LPs",
+    icon: Users,
+    color: "bg-violet-50 text-violet-600 border-violet-100",
+    types: [] as string[],
+  },
 ];
 
 export default async function CrmPage() {
   const supabase = await createClient();
 
-  const [{ data: typeBreakdown }, { count: contactCount }] = await Promise.all([
+  const [{ data: typeBreakdown }, { count: contactCount }, { data: recentActivity }] = await Promise.all([
     supabase.from("companies").select("type").neq("type", null) as unknown as Promise<{ data: { type: string }[] | null; error: unknown }>,
     supabase.from("contacts").select("*", { count: "exact", head: true }),
+    supabase
+      .from("interactions")
+      .select("id, type, subject, date, company:companies(id, name)")
+      .order("date", { ascending: false })
+      .limit(5) as unknown as Promise<{ data: { id: string; type: string; subject: string | null; date: string; company: { id: string; name: string } | null }[] | null; error: unknown }>,
   ]);
 
   const typeCounts: Record<string, number> = {};
@@ -100,19 +113,46 @@ export default async function CrmPage() {
         </div>
 
         {/* Section breakdown */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {SECTIONS.map(({ href, label, description, icon: Icon, color, types }) => (
             <Link key={href} href={href}
               className={`rounded-xl border p-4 hover:shadow-md transition-all group ${color}`}>
               <div className="flex items-center justify-between mb-3">
                 <Icon size={18} />
-                <span className="text-2xl font-bold">{sectionCount(types)}</span>
+                <span className="text-2xl font-bold">
+                  {label === "Contacts" ? (contactCount ?? 0) : sectionCount(types)}
+                </span>
               </div>
               <h3 className="text-sm font-semibold group-hover:opacity-75 transition-opacity">{label}</h3>
               <p className="text-xs opacity-60 mt-0.5 leading-tight">{description}</p>
             </Link>
           ))}
         </div>
+
+        {/* Recent Activity */}
+        {recentActivity && recentActivity.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-slate-800">Recent Activity</h2>
+              <Link href="/meetings" className="text-xs text-blue-600 hover:text-blue-700">View all →</Link>
+            </div>
+            <div className="space-y-2">
+              {recentActivity.map(item => {
+                const TYPE_ICON: Record<string, string> = { meeting: "📅", call: "📞", email: "✉️", note: "📝", intro: "🤝", event: "🎯" };
+                return (
+                  <div key={item.id} className="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0">
+                    <span className="text-base">{TYPE_ICON[item.type] ?? "📝"}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-700 truncate">{item.subject ?? `${item.type} interaction`}</p>
+                      {item.company && <p className="text-xs text-slate-400">{item.company.name}</p>}
+                    </div>
+                    <span className="text-xs text-slate-400 flex-shrink-0">{new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
       </main>
     </div>

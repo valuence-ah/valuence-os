@@ -21,9 +21,10 @@ export function formatCurrency(value: number | null | undefined, compact = false
 }
 
 // Format a date string as "Mar 15, 2025"
+// timeZone: "UTC" ensures server and client render identically (no hydration mismatch)
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 // Format a date as relative time ("2 days ago")

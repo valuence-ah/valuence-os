@@ -57,7 +57,7 @@ async function fetchItems(feedUrl: string): Promise<NormItem[]> {
 
 export async function GET() {
   const supabase = await createClient();
-  const { data: sources, error } = await supabase.from("feed_sources").select("*").eq("active", true);
+  const { data: sources, error } = await supabase.from("feed_sources").select("*").eq("is_active", true);
   if (error || !sources) return NextResponse.json({ error: "Failed to load sources" }, { status: 500 });
 
   const results: { id: string; name: string; inserted: number; error?: string }[] = [];
@@ -83,3 +83,6 @@ export async function GET() {
 
   return NextResponse.json({ ok: true, results, ran_at: new Date().toISOString() });
 }
+
+// Allow POST for manual triggers from the UI
+export const POST = GET;

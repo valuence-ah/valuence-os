@@ -176,12 +176,28 @@ export function MeetingsClient({ meetings: initialMeetings }: MeetingsClientProp
   const [filter, setFilter]         = useState<"all" | "transcript" | "fireflies">("all");
   const [syncing, setSyncing]       = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [dateFrom, setDateFrom]     = useState("");
+  const [dateTo, setDateTo]         = useState("");
+
+  const companyOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    meetings.forEach(m => {
+      if (m.company) seen.set(m.company.id, m.company.name);
+    });
+    return Array.from(seen.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [meetings]);
 
   const filtered = useMemo(() => {
     let rows = meetings;
 
     if (filter === "transcript") rows = rows.filter((m) => m.transcript_text || m.transcript_url);
     if (filter === "fireflies")  rows = rows.filter((m) => !!m.fireflies_id);
+
+    if (companyFilter !== "all") rows = rows.filter(m => m.company?.id === companyFilter);
+
+    if (dateFrom) rows = rows.filter(m => m.date >= dateFrom);
+    if (dateTo)   rows = rows.filter(m => m.date <= dateTo + "T23:59:59");
 
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -194,7 +210,7 @@ export function MeetingsClient({ meetings: initialMeetings }: MeetingsClientProp
     }
 
     return rows;
-  }, [meetings, search, filter]);
+  }, [meetings, search, filter, companyFilter, dateFrom, dateTo]);
 
   const handleSync = useCallback(async () => {
     setSyncing(true);
@@ -220,6 +236,21 @@ export function MeetingsClient({ meetings: initialMeetings }: MeetingsClientProp
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
+      {/* ── Stats bar ── */}
+      <div className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-100 bg-white">
+        {[
+          { label: "Total Meetings",   value: meetings.length },
+          { label: "With Transcripts", value: transcriptCount },
+          { label: "From Fireflies",   value: firefliesCount },
+          { label: "Action Items",     value: meetings.reduce((sum, m) => sum + (m.action_items?.length ?? 0), 0) },
+        ].map(s => (
+          <div key={s.label}>
+            <div className="text-xl font-bold text-slate-900">{s.value}</div>
+            <div className="text-xs text-slate-500">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
       {/* ── Toolbar ── */}
       <div className="border-b border-slate-200 bg-white px-6 py-3 flex items-center gap-3 flex-wrap">
 
@@ -233,6 +264,48 @@ export function MeetingsClient({ meetings: initialMeetings }: MeetingsClientProp
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30"
           />
+        </div>
+
+        {/* Company filter */}
+        {companyOptions.length > 0 && (
+          <select
+            value={companyFilter}
+            onChange={e => setCompanyFilter(e.target.value)}
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white"
+          >
+            <option value="all">All companies</option>
+            {companyOptions.map(([id, name]) => (
+              <option key={id} value={id}>{name}</option>
+            ))}
+          </select>
+        )}
+
+        {/* Date range filter */}
+        <div className="flex items-center gap-1.5">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            title="From date"
+          />
+          <span className="text-xs text-slate-400">–</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            title="To date"
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => { setDateFrom(""); setDateTo(""); }}
+              className="text-slate-400 hover:text-slate-600 p-1"
+              title="Clear dates"
+            >
+              ×
+            </button>
+          )}
         </div>
 
         {/* Filter tabs */}

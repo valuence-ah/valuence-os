@@ -389,6 +389,16 @@ export function CompanyDetailClient({ company, contacts: initContacts, interacti
   const [showContactForm, setShowContactForm] = useState(false);
   const [contactForm, setContactForm] = useState<Partial<Contact>>({ type: "Founder / Mgmt" as Contact["type"] });
   const [savingContact, setSavingContact] = useState(false);
+  const [showInteractionForm, setShowInteractionForm] = useState(false);
+  const [interactionForm, setInteractionForm] = useState({
+    type: "meeting" as "meeting" | "call" | "email" | "note",
+    subject: "",
+    date: new Date().toISOString().slice(0, 10),
+    body: "",
+    sentiment: "" as "" | "positive" | "neutral" | "negative",
+  });
+  const [savingInteraction, setSavingInteraction] = useState(false);
+  const [loadingMoreInteractions, setLoadingMoreInteractions] = useState(false);
 
   async function saveNote() {
     if (!noteText.trim()) return;
@@ -415,6 +425,30 @@ export function CompanyDetailClient({ company, contacts: initContacts, interacti
       setContacts(p => [data, ...p]);
       setShowContactForm(false);
       setContactForm({ type: "Founder / Mgmt" as Contact["type"] });
+    }
+  }
+
+  async function saveInteraction(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingInteraction(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data } = await supabase
+      .from("interactions")
+      .insert({
+        type: interactionForm.type,
+        subject: interactionForm.subject || null,
+        body: interactionForm.body || null,
+        date: new Date(interactionForm.date).toISOString(),
+        company_id: company.id,
+        sentiment: interactionForm.sentiment || null,
+        created_by: user?.id,
+      })
+      .select().single();
+    setSavingInteraction(false);
+    if (data) {
+      setInteractions(p => [data, ...p]);
+      setShowInteractionForm(false);
+      setInteractionForm({ type: "meeting", subject: "", date: new Date().toISOString().slice(0, 10), body: "", sentiment: "" });
     }
   }
 
@@ -657,7 +691,135 @@ export function CompanyDetailClient({ company, contacts: initContacts, interacti
 
       {/* ── INTERACTIONS TAB ── */}
       {tab === "Interactions" && (
-        <InteractionsTab interactions={interactions} />
+        <div className="space-y-4">
+          {/* Action bar */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowInteractionForm(!showInteractionForm)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus size={13} /> Log Interaction
+            </button>
+          </div>
+
+          {/* Log Interaction form */}
+          {showInteractionForm && (
+            <div className="card p-5 border-blue-100 bg-blue-50/30">
+              <h3 className="text-sm font-semibold text-slate-800 mb-4">Log New Interaction</h3>
+              <form onSubmit={saveInteraction} className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Type</label>
+                    <select
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      value={interactionForm.type}
+                      onChange={e => setInteractionForm(p => ({ ...p, type: e.target.value as typeof p.type }))}
+                    >
+                      <option value="meeting">Meeting</option>
+                      <option value="call">Call</option>
+                      <option value="email">Email</option>
+                      <option value="note">Note</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Date</label>
+                    <input
+                      type="date"
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      value={interactionForm.date}
+                      onChange={e => setInteractionForm(p => ({ ...p, date: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">Subject / Title</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Intro call with CEO"
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    value={interactionForm.subject}
+                    onChange={e => setInteractionForm(p => ({ ...p, subject: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">Notes / Summary</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Key points, next steps, context…"
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                    value={interactionForm.body}
+                    onChange={e => setInteractionForm(p => ({ ...p, body: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">Sentiment</label>
+                  <div className="flex gap-2">
+                    {(["positive", "neutral", "negative"] as const).map(s => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setInteractionForm(p => ({ ...p, sentiment: p.sentiment === s ? "" : s }))}
+                        className={cn(
+                          "px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors capitalize",
+                          interactionForm.sentiment === s
+                            ? s === "positive" ? "bg-green-100 text-green-700 border-green-300"
+                              : s === "negative" ? "bg-red-100 text-red-600 border-red-300"
+                              : "bg-slate-100 text-slate-700 border-slate-300"
+                            : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                        )}
+                      >
+                        {s === "positive" ? "😊 Positive" : s === "negative" ? "😟 Negative" : "😐 Neutral"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowInteractionForm(false)}
+                    className="px-3 py-2 text-xs text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingInteraction}
+                    className="px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {savingInteraction ? "Saving…" : "Log Interaction"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Existing interactions */}
+          <InteractionsTab interactions={interactions} />
+
+          {interactions.length >= 50 && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={async () => {
+                  setLoadingMoreInteractions(true);
+                  const { data } = await supabase
+                    .from("interactions")
+                    .select("*")
+                    .eq("company_id", company.id)
+                    .order("date", { ascending: false })
+                    .range(interactions.length, interactions.length + 49);
+                  if (data && data.length > 0) {
+                    setInteractions(prev => [...prev, ...(data as typeof interactions)]);
+                  }
+                  setLoadingMoreInteractions(false);
+                }}
+                disabled={loadingMoreInteractions}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+              >
+                {loadingMoreInteractions ? "Loading…" : "Load more interactions"}
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── MEMOS TAB ── */}
@@ -688,7 +850,7 @@ export function CompanyDetailClient({ company, contacts: initContacts, interacti
                 >
                   <div>
                     <p className="text-sm font-medium text-slate-800">{memo.title}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{new Date(memo.created_at).toLocaleDateString()}</p>
+                    <p className="text-xs text-slate-400 mt-0.5" suppressHydrationWarning>{new Date(memo.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {memo.recommendation && (
