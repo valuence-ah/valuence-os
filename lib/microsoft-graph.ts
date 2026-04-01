@@ -81,8 +81,8 @@ export async function getRecentEmails(
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Graph messages error ${res.status}: ${text}`);
+    const body = await res.text();
+    throw new Error(`Graph API ${res.status} for ${mailbox}/${folder}: ${body.slice(0, 300)}`);
   }
   const json = await res.json();
   return json.value ?? [];

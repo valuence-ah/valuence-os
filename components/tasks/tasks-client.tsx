@@ -6,6 +6,7 @@ import {
   Search, X, AlertCircle, Clock, CheckCircle2, TrendingUp,
   Users, Flag, ChevronRight, AlignLeft, LayoutGrid, GitBranch,
   Minus, ArrowUp, ArrowDown, Circle, Plus, Check, Building2,
+  MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -156,10 +157,11 @@ function ProgressBar({ pct, slim }: { pct: number; slim?: boolean }) {
 }
 
 function DaysChip({ daysLeft }: { daysLeft: number }) {
-  if (daysLeft < 0) return <span className="text-red-600 font-medium">{Math.abs(daysLeft)}d overdue</span>;
-  if (daysLeft === 0) return <span className="text-red-500 font-medium">Due today</span>;
-  if (daysLeft <= 5) return <span className="text-amber-600 font-medium">{daysLeft}d left</span>;
-  return <span className="text-slate-500">{daysLeft}d left</span>;
+  if (daysLeft < 0)  return <span className="text-xs font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{Math.abs(daysLeft)}d overdue</span>;
+  if (daysLeft === 0) return <span className="text-xs font-semibold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">Due today</span>;
+  if (daysLeft <= 3) return <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">{daysLeft}d left</span>;
+  if (daysLeft <= 7) return <span className="text-xs font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{daysLeft}d left</span>;
+  return <span className="text-xs text-slate-500">{daysLeft}d left</span>;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -308,9 +310,55 @@ function CompanyPicker({ cos, onChange }: { cos: string[]; onChange: (cos: strin
   );
 }
 
+// ── MoreMenu (3-dot action menu for table rows) ───────────────────────────────
+
+function MoreMenu({ task, onEdit, onDuplicate, onDelete }: {
+  task: Task;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative" onClick={e => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+      >
+        <MoreHorizontal className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-6 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[120px]">
+          <button onClick={() => { onEdit(); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
+            Edit
+          </button>
+          <button onClick={() => { onDuplicate(); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
+            Duplicate
+          </button>
+          <div className="border-t border-slate-100 my-1" />
+          <button onClick={() => { onDelete(); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50">
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Table view ────────────────────────────────────────────────────────────────
 
-function TableView({ tasks, onSelect, onToggleComplete, onDelete }: { tasks: Task[]; onSelect: (t: Task) => void; onToggleComplete: (t: Task) => void; onDelete: (t: Task) => void }) {
+function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, onStatusChange }: { tasks: Task[]; onSelect: (t: Task) => void; onToggleComplete: (t: Task) => void; onDelete: (t: Task) => void; onDuplicate: (t: Task) => void; onStatusChange: (t: Task, newStatus: string) => void }) {
   const sorted = [...tasks].sort((a, b) => {
     const order: Record<string, number> = { Overdue: 0, "At risk": 1, Blocked: 2, "Not started": 2, "On track": 3, Completed: 4 };
     const oa = order[a.status] ?? 3;
@@ -383,8 +431,18 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete }: { tasks: Tas
                   <span className="text-slate-600">{t.prio}</span>
                 </div>
               </td>
-              <td className="px-3 py-2 whitespace-nowrap">
-                <StatusBadge status={t.status} />
+              <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => {
+                    const idx = STATUSES.indexOf(t.status);
+                    const next = STATUSES[(idx + 1) % STATUSES.length];
+                    onStatusChange(t, next);
+                  }}
+                  className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity", STATUS_STYLES[t.status] ?? "bg-slate-100 text-slate-500")}
+                  title="Click to change status"
+                >
+                  {t.status}
+                </button>
               </td>
               <td className="px-3 py-2">
                 <div className="flex items-center gap-1.5 min-w-[60px]">
@@ -410,14 +468,13 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete }: { tasks: Tas
               <td className="px-3 py-2 whitespace-nowrap">
                 <DaysChip daysLeft={t.daysLeft} />
               </td>
-              <td className="px-3 py-2 w-6" onClick={e => e.stopPropagation()}>
-                <button
-                  onClick={() => onDelete(t)}
-                  className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                  title="Delete task"
-                >
-                  <X className="w-3 h-3" />
-                </button>
+              <td className="px-3 py-2 w-8" onClick={e => e.stopPropagation()}>
+                <MoreMenu
+                  task={t}
+                  onEdit={() => onSelect(t)}
+                  onDuplicate={() => onDuplicate(t)}
+                  onDelete={() => onDelete(t)}
+                />
               </td>
             </tr>
           ))}
@@ -1581,7 +1638,14 @@ export function TasksClient() {
       {/* Content area */}
       <div className={cn("flex flex-1 overflow-hidden transition-all duration-300", selectedTask ? "mr-[480px]" : "")}>
         {view === "table" && (
-          <TableView tasks={filteredTasks} onSelect={setSelectedTask} onToggleComplete={handleToggleComplete} onDelete={handleDeleteTask} />
+          <TableView
+            tasks={filteredTasks}
+            onSelect={setSelectedTask}
+            onToggleComplete={handleToggleComplete}
+            onDelete={handleDeleteTask}
+            onDuplicate={(t) => { const dup = { ...t, id: Date.now(), title: `${t.title} (copy)` }; setTasks(prev => [...prev, dup]); }}
+            onStatusChange={(t, newStatus) => setTasks(prev => prev.map(task => task.id === t.id ? { ...task, status: newStatus } : task))}
+          />
         )}
         {view === "kanban" && (
           <KanbanView tasks={filteredTasks} allTasks={allSearchedTasks} onSelect={setSelectedTask} />

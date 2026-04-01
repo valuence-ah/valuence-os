@@ -57,8 +57,15 @@ export async function GET(req: NextRequest) {
       getRecentEmails(MAILBOX, undefined, 80, "sentItems"),
     ]);
   } catch (err) {
-    console.error("Graph email fetch error:", err);
-    return NextResponse.json({ emails: [], graphError: true });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("Graph email fetch error:", msg);
+
+    // If it's a config error (missing env vars), return 503
+    if (msg.includes("not configured")) {
+      return NextResponse.json({ emails: [], graphError: "not_configured", message: msg }, { status: 200 }); // 200 so UI doesn't break
+    }
+    // Auth/fetch error
+    return NextResponse.json({ emails: [], graphError: "fetch_failed", message: msg }, { status: 200 });
   }
 
   // Merge and deduplicate by subject+date
