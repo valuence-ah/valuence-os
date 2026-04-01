@@ -3,7 +3,7 @@
 
 export type CompanyType = "startup" | "lp" | "limited partner" | "investor" | "strategic partner" | "ecosystem_partner" | "fund" | "corporate" | "government" | "other";
 export type ContactType = "founder" | "lp" | "corporate" | "ecosystem_partner" | "fund_manager" | "government" | "advisor" | "other";
-export type ContactStatus = "active" | "pending";
+export type ContactStatus = "active" | "pending" | "archived";
 export type DealStage = "sourced" | "first_meeting" | "deep_dive" | "ic_memo" | "term_sheet" | "due_diligence" | "closed" | "passed";
 export type DealStatus = "sourced" | "active_deal" | "portfolio" | "passed" | "monitoring" | "exited";
 export type LpStage = "target" | "intro_made" | "meeting_scheduled" | "meeting_done" | "materials_sent" | "soft_commit" | "committed" | "closed" | "passed";
