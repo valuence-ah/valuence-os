@@ -1,16 +1,10 @@
 "use client";
 // ─── Run Agents Button ────────────────────────────────────────────────────────
-// Dropdown button to trigger sourcing agents. Shows spinner while running,
-// last-run timestamp, and new signal counts.
 
 import { useState, useRef, useEffect } from "react";
 import { Loader2, ChevronDown, Sparkles, Clock } from "lucide-react";
 
-type AgentOption = {
-  label: string;
-  value: string;
-  endpoint: string;
-};
+type AgentOption = { label: string; value: string; endpoint: string };
 
 const OPTIONS: AgentOption[] = [
   { label: "Run All",          value: "all",              endpoint: "/api/agents/run-all" },
@@ -43,7 +37,6 @@ export function RunAgentsButton() {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Load last run from localStorage on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem(LAST_RUN_KEY);
@@ -86,6 +79,9 @@ export function RunAgentsButton() {
       setLastRun(now);
       try { localStorage.setItem(LAST_RUN_KEY, now); } catch { /* noop */ }
       setResultMessage(`+${totalSaved} signal${totalSaved !== 1 ? "s" : ""}`);
+
+      // Notify SourcingClient to refresh its signal list
+      window.dispatchEvent(new CustomEvent("agents-ran", { detail: { saved: totalSaved } }));
     } catch {
       setResultMessage("Run failed");
     }
@@ -97,7 +93,6 @@ export function RunAgentsButton() {
 
   return (
     <div className="flex items-center gap-2">
-      {/* Last run indicator */}
       {lastRun && !isRunning && (
         <span className="flex items-center gap-1 text-xs text-slate-400">
           <Clock size={11} /> Last run: {timeAgoShort(lastRun)}
@@ -121,7 +116,6 @@ export function RunAgentsButton() {
             onClick={() => setOpen(o => !o)}
             disabled={isRunning}
             className="flex items-center px-2 py-1.5 bg-blue-600 text-white hover:bg-blue-700 border-l border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            aria-label="Show agent options"
           >
             <ChevronDown size={12} />
           </button>
@@ -130,11 +124,8 @@ export function RunAgentsButton() {
         {open && (
           <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-slate-200 bg-white shadow-lg z-50 py-1">
             {OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => runAgent(opt)}
-                className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
-              >
+              <button key={opt.value} onClick={() => runAgent(opt)}
+                className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors">
                 {opt.label}
               </button>
             ))}
