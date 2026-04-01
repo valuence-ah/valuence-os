@@ -10,13 +10,28 @@ export const metadata = { title: "Contacts" };
 export default async function ContactsPage() {
   const supabase = createAdminClient();
 
-  const [{ data: contacts }, { count: totalCount }, { count: pendingCount }] = await Promise.all([
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const [
+    { data: contacts },
+    { count: totalCount },
+    { count: pendingCount },
+    { count: newThisMonthCount },
+    { count: noLastContactCount },
+  ] = await Promise.all([
     supabase
       .from("contacts")
-      .select("*, company:companies(id, name, type)")
+      .select("*, company:companies(id, name, type, deal_status, website)")
       .eq("status", "active")
       .order("updated_at", { ascending: false })
-      .range(0, 199) as unknown as Promise<{ data: (import("@/lib/types").Contact & { company?: { id: string; name: string; type: string } | null })[] | null; error: unknown }>,
+      .range(0, 199) as unknown as Promise<{
+        data: (import("@/lib/types").Contact & {
+          company?: { id: string; name: string; type: string; deal_status?: string | null; website?: string | null } | null;
+        })[] | null;
+        error: unknown;
+      }>,
     supabase
       .from("contacts")
       .select("*", { count: "exact", head: true })
@@ -25,6 +40,16 @@ export default async function ContactsPage() {
       .from("contacts")
       .select("*", { count: "exact", head: true })
       .eq("status", "pending") as unknown as Promise<{ count: number | null; error: unknown }>,
+    supabase
+      .from("contacts")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "active")
+      .gte("created_at", monthStart.toISOString()) as unknown as Promise<{ count: number | null; error: unknown }>,
+    supabase
+      .from("contacts")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "active")
+      .is("last_contact_date", null) as unknown as Promise<{ count: number | null; error: unknown }>,
   ]);
 
   const PendingBadge = pendingCount && pendingCount > 0 ? (
@@ -46,7 +71,12 @@ export default async function ContactsPage() {
         subtitle={`${totalCount ?? 0} active contacts`}
         actions={PendingBadge}
       />
-      <ContactsClient initialContacts={contacts ?? []} totalCount={totalCount ?? 0} />
+      <ContactsClient
+        initialContacts={contacts ?? []}
+        totalCount={totalCount ?? 0}
+        newThisMonthCount={newThisMonthCount ?? 0}
+        noLastContactCount={noLastContactCount ?? 0}
+      />
     </div>
   );
 }

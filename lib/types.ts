@@ -84,6 +84,9 @@ export interface Contact {
   tags: string[] | null;
   emails: string[] | null;
   status: ContactStatus;
+  relationship_stage: "active" | "warm" | "cold" | "dormant" | null;
+  owner_id: string | null;
+  source: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
