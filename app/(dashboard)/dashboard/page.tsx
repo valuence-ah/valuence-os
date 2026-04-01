@@ -23,6 +23,7 @@ export default async function DashboardPage() {
     { data: deals },
     { data: recentCompanies },
     { data: lpData },
+    { count: portfolioCount },
   ] = await Promise.all([
     supabase.from("companies").select("*", { count: "exact", head: true }).eq("type", "startup"),
     supabase.from("contacts").select("*", { count: "exact", head: true }),
@@ -31,6 +32,7 @@ export default async function DashboardPage() {
     supabase.from("deals").select("*, company:companies(name, sectors)").neq("stage", "passed").order("created_at", { ascending: false }).limit(6) as unknown as Promise<{ data: (Deal & { company?: { name: string; sectors: string[] | null } | null })[] | null; error: unknown }>,
     supabase.from("companies").select("id, name, type, deal_status, sectors, created_at").order("created_at", { ascending: false }).limit(5) as unknown as Promise<{ data: { id: string; name: string; type: string; deal_status: string | null; sectors: string[] | null; created_at: string }[] | null; error: unknown }>,
     supabase.from("lp_relationships").select("committed_amount, stage").neq("stage", "passed") as unknown as Promise<{ data: { committed_amount: number | null; stage: string | null }[] | null; error: unknown }>,
+    supabase.from("deals").select("*", { count: "exact", head: true }).eq("stage", "closed"),
   ]);
 
   // Calculate pipeline stats
@@ -44,7 +46,7 @@ export default async function DashboardPage() {
     { label: "New Signals",         value: signalCount ?? 0,               icon: Radar,        color: "bg-cyan-50 text-cyan-600",   sub: "unreviewed sourcing" },
     { label: "IC Memos",            value: memoCount ?? 0,                 icon: FileText,     color: "bg-orange-50 text-orange-600", sub: "all time" },
     { label: "LP Soft Commits",     value: formatCurrency(softCommits, true), icon: Wallet,   color: "bg-emerald-50 text-emerald-600", sub: `${formatCurrency(totalCommitted, true)} total committed` },
-    { label: "Portfolio Cos.",      value: (companyCount ?? 0),            icon: BarChart3,    color: "bg-pink-50 text-pink-600",   sub: "active portfolio" },
+    { label: "Portfolio Cos.",      value: portfolioCount ?? 0,            icon: BarChart3,    color: "bg-pink-50 text-pink-600",   sub: "active portfolio" },
   ];
 
   // Group deals by stage for pipeline view
@@ -54,7 +56,7 @@ export default async function DashboardPage() {
     <div className="flex flex-col h-full">
       <Header
         title="Dashboard"
-        subtitle={`Good ${getTimeOfDay()} — here's your fund overview`}
+        subtitle="here's your fund overview"
       />
 
       <main className="flex-1 overflow-auto p-6 space-y-6">
@@ -79,12 +81,12 @@ export default async function DashboardPage() {
           <div className="card">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-800">Active Pipeline</h2>
-              <a href="/pipeline" className="text-xs text-blue-600 hover:text-blue-700 font-medium">View all →</a>
+              <a href="/crm/pipeline" className="text-xs text-blue-600 hover:text-blue-700 font-medium">View all →</a>
             </div>
             <div className="divide-y divide-slate-100">
               {activeDeals.length === 0 ? (
                 <div className="px-5 py-8 text-center text-sm text-slate-400">
-                  No active deals — add your pipeline in <a href="/pipeline" className="text-blue-600">Pipeline</a>
+                  No active deals — add your pipeline in <a href="/crm/pipeline" className="text-blue-600">Pipeline</a>
                 </div>
               ) : (
                 activeDeals.slice(0, 6).map((deal) => (
@@ -156,9 +158,3 @@ export default async function DashboardPage() {
   );
 }
 
-function getTimeOfDay() {
-  const h = new Date().getHours();
-  if (h < 12) return "morning";
-  if (h < 17) return "afternoon";
-  return "evening";
-}

@@ -10,11 +10,9 @@ import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  TrendingUp,
   Radar,
   BarChart3,
   FileText,
-  Wallet,
   MessageSquare,
   LogOut,
   ChevronRight,
@@ -53,16 +51,11 @@ const TOP_ITEMS = [
 ];
 
 const INTELLIGENCE_ITEMS = [
-  { href: "/sourcing",  icon: Radar,        label: "Sourcing"    },
-  { href: "/meetings",  icon: Mic,          label: "Meetings"    },
-  { href: "/portfolio", icon: BarChart3,    label: "Portfolio"   },
-  { href: "/memos",     icon: FileText,     label: "IC Memos"    },
-];
-
-const DEALS_ITEMS = [
-  { href: "/pipeline",  icon: TrendingUp,  label: "Deal Flow"   },
-  { href: "/lp",        icon: Wallet,      label: "LP Tracker"  },
-  { href: "/chat",      icon: MessageSquare, label: "AI Chat"   },
+  { href: "/sourcing",  icon: Radar,          label: "Sourcing"   },
+  { href: "/meetings",  icon: Mic,            label: "Meetings"   },
+  { href: "/portfolio", icon: BarChart3,      label: "Portfolio"  },
+  { href: "/memos",     icon: FileText,       label: "IC Memos"   },
+  { href: "/chat",      icon: MessageSquare,  label: "AI Chat"    },
 ];
 
 export function Sidebar() {
@@ -167,15 +160,6 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* Deals & Relations */}
-        <div>
-          <p className="section-label mb-2">Deals & Relations</p>
-          <div className="space-y-0.5">
-            {DEALS_ITEMS.map(({ href, icon, label }) => (
-              <NavLink key={href} href={href} icon={icon} label={label} />
-            ))}
-          </div>
-        </div>
 
       </nav>
 

@@ -125,8 +125,8 @@ const INITIAL_TASKS: Task[] = [
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function calcDaysLeft(dueStr: string): number {
-  // dueStr like "Apr 15, 2026"
-  const today = new Date(2026, 2, 24); // Mar 24, 2026
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const due = new Date(dueStr);
   if (isNaN(due.getTime())) return 0;
   return Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -1179,7 +1179,9 @@ function AddTaskModal({ onClose, onAdd, initiatives }: AddTaskModalProps) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function TasksClient() {
-  const [tasks, setTasks] = useState<Task[]>([...INITIAL_TASKS]);
+  const [tasks, setTasks] = useState<Task[]>(() =>
+    INITIAL_TASKS.map(t => ({ ...t, daysLeft: calcDaysLeft(t.due) }))
+  );
   const [initiatives, setInitiatives] = useState(DEFAULT_INITIATIVES);
   const [newInitLabel, setNewInitLabel] = useState("");
   const [showNewInit, setShowNewInit] = useState(false);
