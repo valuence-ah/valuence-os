@@ -94,6 +94,12 @@ export interface Contact {
   company?: Company;
 }
 
+export interface MeetingAttendee {
+  name: string;
+  email: string;
+  response_status?: string;
+}
+
 export interface Interaction {
   id: string;
   type: "meeting" | "email" | "call" | "note" | "event" | "intro";
@@ -111,6 +117,14 @@ export interface Interaction {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // Fellow integration
+  fellow_id: string | null;
+  attendees: MeetingAttendee[] | null;
+  duration_minutes: number | null;
+  source: "fellow" | "fireflies" | "manual" | "transcript_upload" | null;
+  resolution_status: "resolved" | "partial" | "unresolved" | "no_external" | "deferred" | null;
+  pending_resolutions: import("./meeting-resolution").PendingResolutions | null;
+  ai_summary: string | null;
   // joined
   company?: Company;
 }
