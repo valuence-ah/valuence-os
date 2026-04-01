@@ -19,6 +19,7 @@ export default async function PendingContactsPage() {
       .from("contacts")
       .select("*, company:companies(id, name, type)")
       .or("type.eq.other,location_country.is.null")
+      .neq("status", "archived")
       .order("created_at", { ascending: false })
       .limit(10000) as unknown as Promise<{
         data: (import("@/lib/types").Contact & { company?: { id: string; name: string; type: string; website?: string | null } | null })[] | null;
