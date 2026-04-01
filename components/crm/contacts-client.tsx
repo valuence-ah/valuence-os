@@ -8,7 +8,7 @@ import { cn, formatDate, getInitials, timeAgo } from "@/lib/utils";
 import {
   Search, X, Mail, Phone, Linkedin, Building2, MapPin, Plus, Loader2,
   Check, User, Calendar, MessageSquare, Edit2, Clock, ChevronRight,
-  FileText, Users, Star,
+  FileText, Users, Star, ChevronUp, ChevronDown, SlidersHorizontal, Columns,
 } from "lucide-react";
 
 // ── Type badge colours (Admin→Contacts types + legacy) ────────────────────────
@@ -93,6 +93,33 @@ export function ContactsClient({ initialContacts, totalCount }: Props) {
   const [search, setSearch]           = useState(""); // debounced value
   const [typeFilter, setTypeFilter]   = useState("all");
 
+  // ── Sort state ───────────────────────────────────────────────────────────────
+  const [sortKey, setSortKey] = useState<string>("last_name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // ── Filter panel state ───────────────────────────────────────────────────────
+  const [showFilters, setShowFilters] = useState(false);
+  const [cityFilter, setCityFilter]   = useState("");
+  const [countryFilter, setCountryFilter] = useState("");
+
+  // ── Column visibility (persisted) ────────────────────────────────────────────
+  const DEFAULT_COLS = ["name", "company", "type", "city", "country", "email", "lastContact"];
+  const [visibleCols, setVisibleCols] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("contacts_visible_cols");
+      return saved ? JSON.parse(saved) : DEFAULT_COLS;
+    } catch { return DEFAULT_COLS; }
+  });
+  const [showColMenu, setShowColMenu] = useState(false);
+
+  function toggleCol(col: string) {
+    setVisibleCols(prev => {
+      const next = prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col];
+      localStorage.setItem("contacts_visible_cols", JSON.stringify(next));
+      return next;
+    });
+  }
+
   // ── Debounce search input 300ms ───────────────────────────────────────────────
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), 300);
@@ -129,8 +156,24 @@ export function ContactsClient({ initialContacts, totalCount }: Props) {
       || fullName.includes(q)
       || (c.email ?? "").toLowerCase().includes(q)
       || (c.company?.name ?? "").toLowerCase().includes(q);
-    return matchType && matchSearch;
-  }), [contacts, search, typeFilter]);
+    const matchCity = !cityFilter || (c.location_city ?? "").toLowerCase().includes(cityFilter.toLowerCase());
+    const matchCountry = !countryFilter || (c.location_country ?? "").toLowerCase().includes(countryFilter.toLowerCase());
+    return matchType && matchSearch && matchCity && matchCountry;
+  }).sort((a, b) => {
+    let av: string | number = "";
+    let bv: string | number = "";
+    switch (sortKey) {
+      case "name": av = `${a.last_name} ${a.first_name}`.toLowerCase(); bv = `${b.last_name} ${b.first_name}`.toLowerCase(); break;
+      case "company": av = (a.company?.name ?? "").toLowerCase(); bv = (b.company?.name ?? "").toLowerCase(); break;
+      case "type": av = (a.type ?? "").toLowerCase(); bv = (b.type ?? "").toLowerCase(); break;
+      case "city": av = (a.location_city ?? "").toLowerCase(); bv = (b.location_city ?? "").toLowerCase(); break;
+      case "country": av = (a.location_country ?? "").toLowerCase(); bv = (b.location_country ?? "").toLowerCase(); break;
+      default: av = `${a.last_name} ${a.first_name}`.toLowerCase(); bv = `${b.last_name} ${b.first_name}`.toLowerCase();
+    }
+    if (av < bv) return sortDir === "asc" ? -1 : 1;
+    if (av > bv) return sortDir === "asc" ? 1 : -1;
+    return 0;
+  }), [contacts, search, typeFilter, cityFilter, countryFilter, sortKey, sortDir]);
 
   const meetings = useMemo(
     () => interactions.filter(i => i.type === "meeting" || i.type === "call").slice(0, 3),
@@ -154,6 +197,12 @@ export function ContactsClient({ initialContacts, totalCount }: Props) {
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
+
+  // ── Sort handler ─────────────────────────────────────────────────────────────
+  function handleSort(key: string) {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  }
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   function openContact(id: string) {
@@ -259,49 +308,198 @@ export function ContactsClient({ initialContacts, totalCount }: Props) {
       {/* ── Table area ── */}
       <div className={cn("flex-1 overflow-auto", selectedId ? "mr-[440px]" : "")}>
         {/* Toolbar */}
-        <div className="flex flex-wrap gap-3 items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
-          <div className="flex gap-2 flex-wrap">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg w-56 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                placeholder="Search contacts…"
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-              />
+        <div className="px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
+          <div className="flex flex-wrap gap-3 items-center justify-between">
+            <div className="flex gap-2 flex-wrap items-center">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg w-56 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  placeholder="Search contacts…"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                />
+              </div>
+              {/* Filter button */}
+              <button
+                onClick={() => setShowFilters(f => !f)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2 text-sm border rounded-lg transition-colors",
+                  showFilters
+                    ? "bg-blue-50 border-blue-300 text-blue-600"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                )}
+              >
+                <SlidersHorizontal size={14} /> Filters
+                {(typeFilter !== "all" || cityFilter || countryFilter) && (
+                  <span className="ml-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />
+                )}
+              </button>
+              {/* Columns button */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowColMenu(m => !m)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-2 text-sm border rounded-lg transition-colors",
+                    showColMenu
+                      ? "bg-blue-50 border-blue-300 text-blue-600"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                  )}
+                >
+                  <Columns size={14} /> Columns
+                </button>
+                {showColMenu && (
+                  <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 py-1.5 min-w-[160px]">
+                    {[
+                      { key: "name", label: "Name" },
+                      { key: "company", label: "Company" },
+                      { key: "type", label: "Type" },
+                      { key: "city", label: "City" },
+                      { key: "country", label: "Country" },
+                      { key: "email", label: "Email" },
+                      { key: "lastContact", label: "Last Contact" },
+                    ].map(({ key, label }) => (
+                      <label key={key} className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={visibleCols.includes(key)}
+                          onChange={() => toggleCol(key)}
+                          className="accent-blue-600"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <select
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white"
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
+            <button
+              onClick={() => { setShowModal(true); loadCompanies(); }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
             >
-              <option value="all">All types</option>
-              {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
+              <Plus size={15} /> Add Contact
+            </button>
           </div>
-          <button
-            onClick={() => { setShowModal(true); loadCompanies(); }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            <Plus size={15} /> Add Contact
-          </button>
+
+          {/* Filter bar */}
+          {showFilters && (
+            <div className="flex flex-wrap gap-3 items-end mt-3 pt-3 border-t border-slate-100">
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Contact Type</label>
+                <select
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white"
+                  value={typeFilter}
+                  onChange={e => setTypeFilter(e.target.value)}
+                >
+                  <option value="all">All types</option>
+                  {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">City</label>
+                <input
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 w-36 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  placeholder="Filter by city…"
+                  value={cityFilter}
+                  onChange={e => setCityFilter(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Country</label>
+                <input
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 w-36 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  placeholder="Filter by country…"
+                  value={countryFilter}
+                  onChange={e => setCountryFilter(e.target.value)}
+                />
+              </div>
+              {(typeFilter !== "all" || cityFilter || countryFilter) && (
+                <button
+                  onClick={() => { setTypeFilter("all"); setCityFilter(""); setCountryFilter(""); }}
+                  className="flex items-center gap-1 text-xs text-slate-500 hover:text-red-500 px-2 py-2 transition-colors"
+                >
+                  <X size={12} /> Clear filters
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Table */}
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-[61px] z-10 bg-slate-50">
             <tr>
-              {["Name", "Type", "Company", "Email", "City", "Country", "Last Contact"].map(col => (
-                <th key={col} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap">
-                  {col}
+              {visibleCols.includes("name") && (
+                <th
+                  className="text-left px-4 py-3 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap cursor-pointer select-none hover:text-slate-700"
+                  onClick={() => handleSort("name")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Name
+                    {sortKey === "name" ? (sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : null}
+                  </span>
                 </th>
-              ))}
+              )}
+              {visibleCols.includes("type") && (
+                <th
+                  className="text-left px-4 py-3 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap cursor-pointer select-none hover:text-slate-700"
+                  onClick={() => handleSort("type")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Type
+                    {sortKey === "type" ? (sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : null}
+                  </span>
+                </th>
+              )}
+              {visibleCols.includes("company") && (
+                <th
+                  className="text-left px-4 py-3 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap cursor-pointer select-none hover:text-slate-700"
+                  onClick={() => handleSort("company")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Company
+                    {sortKey === "company" ? (sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : null}
+                  </span>
+                </th>
+              )}
+              {visibleCols.includes("email") && (
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap">
+                  Email
+                </th>
+              )}
+              {visibleCols.includes("city") && (
+                <th
+                  className="text-left px-4 py-3 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap cursor-pointer select-none hover:text-slate-700"
+                  onClick={() => handleSort("city")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    City
+                    {sortKey === "city" ? (sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : null}
+                  </span>
+                </th>
+              )}
+              {visibleCols.includes("country") && (
+                <th
+                  className="text-left px-4 py-3 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap cursor-pointer select-none hover:text-slate-700"
+                  onClick={() => handleSort("country")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Country
+                    {sortKey === "country" ? (sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : null}
+                  </span>
+                </th>
+              )}
+              {visibleCols.includes("lastContact") && (
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap">
+                  Last Contact
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-16 text-slate-400 text-sm">
+                <td colSpan={visibleCols.length} className="text-center py-16 text-slate-400 text-sm">
                   {search ? `No contacts matching "${search}"` : "No contacts yet."}
                 </td>
               </tr>
@@ -319,47 +517,61 @@ export function ContactsClient({ initialContacts, totalCount }: Props) {
                   )}
                 >
                   {/* Name */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={cn("w-8 h-8 rounded-full bg-gradient-to-br flex items-center justify-center text-white text-xs font-bold flex-shrink-0", avatarGradient(fullName))}>
-                        {getInitials(fullName)}
+                  {visibleCols.includes("name") && (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={cn("w-8 h-8 rounded-full bg-gradient-to-br flex items-center justify-center text-white text-xs font-bold flex-shrink-0", avatarGradient(fullName))}>
+                          {getInitials(fullName)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-slate-800 truncate max-w-[160px]">{fullName || "—"}</p>
+                          {c.title && <p className="text-[10px] text-slate-400 truncate max-w-[160px]">{c.title}</p>}
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-slate-800 truncate max-w-[160px]">{fullName || "—"}</p>
-                        {c.title && <p className="text-[10px] text-slate-400 truncate max-w-[160px]">{c.title}</p>}
-                      </div>
-                    </div>
-                  </td>
+                    </td>
+                  )}
                   {/* Type */}
-                  <td className="px-4 py-3">
-                    <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap", typeCls.bg, typeCls.text)}>
-                      {c.type}
-                    </span>
-                  </td>
+                  {visibleCols.includes("type") && (
+                    <td className="px-4 py-3">
+                      <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap", typeCls.bg, typeCls.text)}>
+                        {c.type}
+                      </span>
+                    </td>
+                  )}
                   {/* Company */}
-                  <td className="px-4 py-3 max-w-[150px]">
-                    {c.company ? (
-                      <span className="text-xs text-slate-700 font-medium truncate block max-w-[140px]">{c.company.name}</span>
-                    ) : <span className="text-slate-300 text-xs">—</span>}
-                  </td>
+                  {visibleCols.includes("company") && (
+                    <td className="px-4 py-3 max-w-[150px]">
+                      {c.company ? (
+                        <span className="text-xs text-slate-700 font-medium truncate block max-w-[140px]">{c.company.name}</span>
+                      ) : <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+                  )}
                   {/* Email */}
-                  <td className="px-4 py-3 max-w-[180px]">
-                    {c.email ? (
-                      <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="text-xs text-blue-600 hover:underline truncate block max-w-[170px]">{c.email}</a>
-                    ) : <span className="text-slate-300 text-xs">—</span>}
-                  </td>
+                  {visibleCols.includes("email") && (
+                    <td className="px-4 py-3 max-w-[180px]">
+                      {c.email ? (
+                        <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="text-xs text-blue-600 hover:underline truncate block max-w-[170px]">{c.email}</a>
+                      ) : <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+                  )}
                   {/* City */}
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-slate-500">{c.location_city ?? "—"}</span>
-                  </td>
+                  {visibleCols.includes("city") && (
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-slate-500">{c.location_city ?? "—"}</span>
+                    </td>
+                  )}
                   {/* Country */}
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-slate-500">{c.location_country ?? "—"}</span>
-                  </td>
+                  {visibleCols.includes("country") && (
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-slate-500">{c.location_country ?? "—"}</span>
+                    </td>
+                  )}
                   {/* Last Contact */}
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-slate-500">{c.last_contact_date ? timeAgo(c.last_contact_date) : "—"}</span>
-                  </td>
+                  {visibleCols.includes("lastContact") && (
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-slate-500">{c.last_contact_date ? timeAgo(c.last_contact_date) : "—"}</span>
+                    </td>
+                  )}
                 </tr>
               );
             })}

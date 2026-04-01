@@ -20,14 +20,17 @@ const OWNERS = ["Andrew", "Gene", "Lance"] as const;
 type Owner = typeof OWNERS[number];
 
 const LP_TYPE_OPTIONS = [
-  "Anchor", "Family Office", "Strategic", "Sovereign Wealth",
-  "Financial Institution", "Other",
+  "Anchor", "Family Office", "Fund of Fund", "Strategic", "Sovereign Wealth",
+  "Pension Fund", "Endowment", "Financial Institution", "Other",
 ] as const;
 const LP_TYPE_BADGE: Record<string, string> = {
   "Anchor":               "bg-indigo-100 text-indigo-700",
   "Family Office":        "bg-purple-100 text-purple-700",
+  "Fund of Fund":         "bg-pink-100 text-pink-700",
   "Strategic":            "bg-teal-100 text-teal-700",
   "Sovereign Wealth":     "bg-amber-100 text-amber-700",
+  "Pension Fund":         "bg-orange-100 text-orange-700",
+  "Endowment":            "bg-lime-100 text-lime-700",
   "Financial Institution":"bg-sky-100 text-sky-700",
   "Other":                "bg-slate-100 text-slate-600",
 };
@@ -1369,13 +1372,11 @@ export function LpViewClient({ initialCompanies }: Props) {
           <div className={cn("flex-1 overflow-auto", selected ? "mr-[480px]" : "")}>
             <table className="w-full text-sm border-collapse" style={{ tableLayout: "fixed" }}>
               <colgroup>
-                <col style={{ width: 40 }} />
                 {Object.keys(DEFAULT_COL_WIDTHS).map(col => <col key={col} style={{ width: colWidths[col] }} />)}
                 <col style={{ width: 40 }} />
               </colgroup>
               <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-3 py-2.5"><input type="checkbox" className="rounded border-slate-300" /></th>
                   {Object.keys(DEFAULT_COL_WIDTHS).map(col => {
                     const isSorted = sortCol === col;
                     const SortIcon = isSorted ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
@@ -1397,7 +1398,7 @@ export function LpViewClient({ initialCompanies }: Props) {
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={17} className="px-4 py-16 text-center text-slate-400 text-sm">{search ? `No results for "${search}"` : "No LPs found"}</td></tr>
+                  <tr><td colSpan={16} className="px-4 py-16 text-center text-slate-400 text-sm">{search ? `No results for "${search}"` : "No LPs found"}</td></tr>
                 ) : filtered.map(co => {
                   const isActive = co.id === selectedId;
                   const p = calcProb(co.lp_stage);
@@ -1410,7 +1411,6 @@ export function LpViewClient({ initialCompanies }: Props) {
                   return (
                     <tr key={co.id} onClick={() => selectCompany(co.id)}
                       className={cn("border-b border-slate-100 cursor-pointer transition-colors group", isActive ? "bg-blue-50" : "hover:bg-slate-50 bg-white")}>
-                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}><input type="checkbox" className="rounded border-slate-300" /></td>
                       <td className="px-3 py-2.5"><div className="flex items-center gap-2"><CompanyLogo company={co} size="sm" /><span className={cn("font-medium text-sm truncate", isActive ? "text-blue-700" : "text-slate-800")}>{co.name}</span></div></td>
                       <td className="px-3 py-2.5">{co.lp_type ? <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap", getLpTypeBadge(co.lp_type))}>{co.lp_type}</span> : <span className="text-slate-300 text-xs">—</span>}</td>
                       <td className="px-3 py-2.5 text-xs text-slate-600">{PRIORITY_TO_TIER[co.priority ?? ""] ?? "—"}</td>
@@ -1494,97 +1494,113 @@ export function LpViewClient({ initialCompanies }: Props) {
             </div>
 
             {/* Intelligence tab */}
-            {lpDetailTab === "intelligence" && (
-              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Key Updates · Past 180 Days</p>
-                  <button onClick={fetchLpIntelligence} disabled={lpIntelLoading}
-                    className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1">
-                    {lpIntelLoading ? <><Loader2 size={10} className="animate-spin" />Loading…</> : <><Sparkles size={10} />Refresh</>}
-                  </button>
-                </div>
+            {lpDetailTab === "intelligence" && (() => {
+              const sixMonthsAgo = new Date(Date.now() - 180 * 86_400_000);
+              const starred = (lpStarredIntel[selected?.id ?? ""] ?? []);
 
-                {lpIntelLoading ? (
-                  <div className="space-y-2">
-                    {[1,2,3,4].map(i => <div key={i} className="h-16 bg-slate-50 rounded-lg animate-pulse" />)}
-                  </div>
-                ) : lpIntelError ? (
-                  <p className="text-xs text-red-400 italic">{lpIntelError}</p>
-                ) : lpIntelligence.length === 0 ? (
-                  <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl">
-                    <Sparkles size={24} className="mx-auto mb-2 text-slate-300" />
-                    <p className="text-xs text-slate-400 mb-1">No intelligence loaded</p>
-                    <p className="text-[11px] text-slate-300">Click Refresh to fetch latest signals</p>
-                  </div>
-                ) : (() => {
-                  const cutoff = new Date(Date.now() - 180 * 86_400_000);
-                  const recent  = lpIntelligence.filter(i => !i.date || new Date(i.date) >= cutoff)
-                                    .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
-                  const older   = lpIntelligence.filter(i => i.date && new Date(i.date) < cutoff)
-                                    .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
-                  const starred = (lpStarredIntel[selected?.id ?? ""] ?? []);
-                  const starredItems = lpIntelligence.filter(i => starred.includes(i.headline));
+              // Deduplicate by first 40 chars of headline
+              function dedupe(items: LpIntelItem[]): LpIntelItem[] {
+                const seen = new Set<string>();
+                return items.filter(item => {
+                  const key = item.headline.slice(0, 40).toLowerCase().trim();
+                  if (seen.has(key)) return false;
+                  seen.add(key);
+                  return true;
+                });
+              }
 
-                  function IntelCard({ item }: { item: LpIntelItem }) {
-                    const isStarred = starred.includes(item.headline);
-                    return (
-                      <div className="border border-slate-200 rounded-xl p-3 bg-white hover:bg-slate-50 transition-colors">
-                        <div className="flex items-start gap-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-slate-800 leading-snug mb-1">{item.headline}</p>
-                            {item.summary && <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-3">{item.summary}</p>}
-                          </div>
-                          <button
-                            onClick={() => selected && toggleLpStar(selected.id, item.headline)}
-                            className={cn("flex-shrink-0 mt-0.5 transition-colors", isStarred ? "text-amber-400" : "text-slate-200 hover:text-amber-300")}
-                            title={isStarred ? "Remove from saved" : "Save"}
-                          >
-                            <Star size={13} fill={isStarred ? "currentColor" : "none"} />
-                          </button>
-                        </div>
-                        <div className="flex items-center justify-between mt-2 gap-2">
-                          <span className="text-[10px] text-slate-400">{item.source} · {item.date}</span>
-                          {item.url && (
-                            <a href={item.url} target="_blank" rel="noopener noreferrer"
-                              className="text-[10px] text-blue-500 hover:underline flex items-center gap-0.5 flex-shrink-0">
-                              <ExternalLink size={9} /> View
-                            </a>
-                          )}
-                        </div>
+              // Updates: items within 6 months, OR starred (even if old) — but only show non-starred recent ones here
+              const recentItems = dedupe(
+                lpIntelligence
+                  .filter(i => {
+                    const isStarredItem = starred.includes(i.headline);
+                    const isRecent = !i.date || new Date(i.date) >= sixMonthsAgo;
+                    return isRecent || isStarredItem; // keep starred regardless of age
+                  })
+                  .filter(i => !starred.includes(i.headline)) // exclude starred from Updates (shown in Saved)
+                  .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime())
+              );
+
+              // Saved: all starred items
+              const savedItems = lpIntelligence.filter(i => starred.includes(i.headline))
+                .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+
+              function IntelCard({ item }: { item: LpIntelItem }) {
+                const isStarred = starred.includes(item.headline);
+                return (
+                  <div className="border border-slate-200 rounded-xl p-3 bg-white hover:bg-slate-50 transition-colors">
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-800 leading-snug mb-1">{item.headline}</p>
+                        {item.summary && <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-3">{item.summary}</p>}
                       </div>
-                    );
-                  }
-
-                  return (
-                    <>
-                      {/* Section 1 — Recent (180 days), newest first */}
-                      <div className="space-y-2.5">
-                        {(recent.length > 0 ? recent : older).map((item, i) => (
-                          <IntelCard key={i} item={item} />
-                        ))}
-                        {recent.length === 0 && older.length === 0 && (
-                          <p className="text-xs text-slate-400 italic">No updates found</p>
-                        )}
-                      </div>
-
-                      {/* Section 2 — Starred / Saved */}
-                      {starredItems.length > 0 && (
-                        <div className="pt-3 border-t border-slate-100">
-                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                            <Star size={9} fill="currentColor" className="text-amber-400" /> Saved
-                          </p>
-                          <div className="space-y-2.5">
-                            {starredItems.map((item, i) => (
-                              <IntelCard key={i} item={item} />
-                            ))}
-                          </div>
-                        </div>
+                      <button
+                        onClick={() => selected && toggleLpStar(selected.id, item.headline)}
+                        className={cn("flex-shrink-0 mt-0.5 transition-colors", isStarred ? "text-amber-400" : "text-slate-200 hover:text-amber-300")}
+                        title={isStarred ? "Remove from saved" : "Save"}
+                      >
+                        <Star size={13} fill={isStarred ? "currentColor" : "none"} />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 gap-2">
+                      <span className="text-[10px] text-slate-400">{item.source} · {item.date}</span>
+                      {item.url && (
+                        <a href={item.url} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] text-blue-500 hover:underline flex items-center gap-0.5 flex-shrink-0">
+                          <ExternalLink size={9} /> View
+                        </a>
                       )}
-                    </>
-                  );
-                })()}
-              </div>
-            )}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="flex-1 overflow-hidden flex flex-col">
+                  {/* Top: Updates section — independently scrollable */}
+                  <div className="flex-1 overflow-y-auto px-5 pt-4 pb-2 space-y-3 border-b border-slate-200" style={{ minHeight: 0 }}>
+                    <div className="flex items-center justify-between flex-shrink-0">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Updates · Past 6 Months</p>
+                      <button onClick={fetchLpIntelligence} disabled={lpIntelLoading}
+                        className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1">
+                        {lpIntelLoading ? <><Loader2 size={10} className="animate-spin" />Loading…</> : <><Sparkles size={10} />Refresh</>}
+                      </button>
+                    </div>
+                    {lpIntelLoading ? (
+                      <div className="space-y-2">
+                        {[1,2,3,4].map(i => <div key={i} className="h-16 bg-slate-50 rounded-lg animate-pulse" />)}
+                      </div>
+                    ) : lpIntelError ? (
+                      <p className="text-xs text-red-400 italic">{lpIntelError}</p>
+                    ) : lpIntelligence.length === 0 ? (
+                      <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl">
+                        <Sparkles size={24} className="mx-auto mb-2 text-slate-300" />
+                        <p className="text-xs text-slate-400 mb-1">No intelligence loaded</p>
+                        <p className="text-[11px] text-slate-300">Click Refresh to fetch latest signals</p>
+                      </div>
+                    ) : recentItems.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">No updates in the past 6 months</p>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {recentItems.map((item, i) => <IntelCard key={i} item={item} />)}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bottom: Saved section — independently scrollable */}
+                  <div className="overflow-y-auto px-5 py-3 space-y-2.5 flex-shrink-0" style={{ maxHeight: "40%", minHeight: savedItems.length > 0 ? 120 : 48 }}>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1 sticky top-0 bg-white pb-1">
+                      <Star size={9} fill="currentColor" className="text-amber-400" /> Saved
+                    </p>
+                    {savedItems.length === 0 ? (
+                      <p className="text-xs text-slate-300 italic">Star items above to save them here</p>
+                    ) : (
+                      savedItems.map((item, i) => <IntelCard key={i} item={item} />)
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Overview tab — Body */}
             {lpDetailTab === "overview" && (

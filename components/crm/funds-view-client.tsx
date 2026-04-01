@@ -5,9 +5,9 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
-import { cn, formatDate, timeAgo } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import {
-  Search, X, Building2, TrendingUp, Users, AlertCircle,
+  Search, X, Building2, TrendingUp, Users,
   CheckCircle2, Zap, ChevronRight, ExternalLink, MapPin, Plus, Check, Sparkles,
   Loader2, Link2, Star, User,
 } from "lucide-react";
@@ -150,6 +150,21 @@ const INVESTOR_TYPE_STYLES: Record<string, { background: string; color: string }
   "Family Office":   { background: "#f5f3ff", color: "#7c3aed" },
   "HNW":             { background: "#fdf4ff", color: "#86198f" },
   "Venture Capital": { background: "#eff6ff", color: "#1d4ed8" },
+};
+
+// Human-readable labels for raw investor type values from DB
+const INVESTOR_TYPE_LABELS: Record<string, string> = {
+  "venture_capital": "Venture Capital",
+  "corporate_vc":    "Corporate VC",
+  "family_office":   "Family Office",
+  "fund_of_fund":    "Fund of Fund",
+  "angel":           "Angel",
+  "accelerator":     "Accelerator",
+  "government":      "Government",
+  "other":           "Other",
+  // Also handle values that may already be human-readable
+  "investor":        "Investor",
+  "vc":              "Venture Capital",
 };
 
 function hashColor(name: string): string {
@@ -324,11 +339,15 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [fundContacts, setFundContacts] = useState<Record<string, Contact[]>>({});
 
   // Add Fund modal
-  const [showAddFund, setShowAddFund]   = useState(false);
-  const [addFundName, setAddFundName]   = useState("");
-  const [addFundType, setAddFundType]   = useState("");
-  const [addFundLoc, setAddFundLoc]     = useState("");
-  const [addFundDesc, setAddFundDesc]   = useState("");
+  const [showAddFund, setShowAddFund]         = useState(false);
+  const [addFundName, setAddFundName]         = useState("");
+  const [addFundType, setAddFundType]         = useState("");
+  const [addFundCity, setAddFundCity]         = useState("");
+  const [addFundCountry, setAddFundCountry]   = useState("");
+  const [addFundStage, setAddFundStage]       = useState("");
+  const [addFundOwner, setAddFundOwner]       = useState("");
+  const [addFundContactName, setAddFundContactName] = useState("");
+  const [addFundDesc, setAddFundDesc]         = useState("");
 
   // Tracks which fund IDs are currently having descriptions generated
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
@@ -466,6 +485,17 @@ export function FundsViewClient({ initialCompanies }: Props) {
   // Table quick-filters (stage pill / sector badge click)
   const [stageFilter, setStageFilter]   = useState<string | null>(null);
   const [sectorFilter, setSectorFilter] = useState<string | null>(null);
+
+  // Column widths — persisted to localStorage
+  const COL_KEYS = ["Fund", "Type", "Investor Type", "Stage focus", "Sector", "Thesis alignment", "Check size", "Co-invest status", "Rel. health", "Portfolio overlap", "Deal flow", "Owner", "Last contact", "Next action", "City", "Country"] as const;
+  type ColKey = (typeof COL_KEYS)[number];
+  const [colWidths, setColWidths] = useState<Partial<Record<ColKey, number>>>(() => {
+    try {
+      const raw = localStorage.getItem("funds_col_widths");
+      return raw ? JSON.parse(raw) as Partial<Record<ColKey, number>> : {};
+    } catch { return {}; }
+  });
+  const colResizeRef = useRef<{ key: ColKey; startX: number; startW: number } | null>(null);
 
   // Per-fund user-editable overrides (loaded from localStorage on mount)
   const [fundExtMap, setFundExtMap] = useState<Record<string, Partial<FundData>>>({});
@@ -889,14 +919,6 @@ export function FundsViewClient({ initialCompanies }: Props) {
             <p className="text-xs text-slate-400">active deal flow</p>
           </div>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-red-400"><AlertCircle size={14} className="text-white" /></div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Overdue Follow-ups</p>
-            <p className="text-lg font-bold text-slate-900 leading-tight">{stats.overdue}</p>
-            <p className="text-xs text-slate-400">need attention</p>
-          </div>
-        </div>
       </div>
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
@@ -963,17 +985,39 @@ export function FundsViewClient({ initialCompanies }: Props) {
           <table className="w-full text-sm border-collapse" style={{ minWidth: 1200 }}>
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>
-                {[
-                  "Fund", "Type", "Investor Type", "Stage focus", "Sector",
-                  "Thesis alignment", "Check size", "Co-invest status", "Rel. health",
-                  "Portfolio overlap", "Deal flow", "Owner",
-                  "Last contact", "Next action", "Location",
-                ].map(col => (
+                {COL_KEYS.map(col => (
                   <th
                     key={col}
-                    className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap"
+                    className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap relative select-none"
+                    style={colWidths[col] ? { width: colWidths[col], minWidth: colWidths[col] } : undefined}
                   >
                     {col}
+                    {/* Drag handle on right border */}
+                    <span
+                      onMouseDown={e => {
+                        e.preventDefault();
+                        const th = (e.target as HTMLElement).parentElement as HTMLTableCellElement;
+                        colResizeRef.current = { key: col, startX: e.clientX, startW: th.offsetWidth };
+                        function onMove(ev: MouseEvent) {
+                          if (!colResizeRef.current) return;
+                          const delta = ev.clientX - colResizeRef.current.startX;
+                          const newW = Math.max(60, colResizeRef.current.startW + delta);
+                          setColWidths(prev => {
+                            const next = { ...prev, [colResizeRef.current!.key]: newW };
+                            try { localStorage.setItem("funds_col_widths", JSON.stringify(next)); } catch {}
+                            return next;
+                          });
+                        }
+                        function onUp() {
+                          colResizeRef.current = null;
+                          document.removeEventListener("mousemove", onMove);
+                          document.removeEventListener("mouseup", onUp);
+                        }
+                        document.addEventListener("mousemove", onMove);
+                        document.addEventListener("mouseup", onUp);
+                      }}
+                      style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 5, cursor: "col-resize", zIndex: 1 }}
+                    />
                   </th>
                 ))}
               </tr>
@@ -1199,19 +1243,35 @@ export function FundsViewClient({ initialCompanies }: Props) {
                       </span>
                     </td>
 
-                    {/* Location */}
-                    <td className="px-3 py-2.5 min-w-[130px]">
-                      <div className="flex items-center gap-1">
-                        <MapPin size={10} className="text-slate-300 flex-shrink-0" />
-                        <span className="text-xs text-slate-400">{fund.loc}</span>
-                      </div>
+                    {/* City */}
+                    <td className="px-3 py-2.5 min-w-[110px]">
+                      {(() => {
+                        const city = fund.loc.includes(",") ? fund.loc.split(",")[0].trim() : fund.loc;
+                        return city ? (
+                          <div className="flex items-center gap-1">
+                            <MapPin size={10} className="text-slate-300 flex-shrink-0" />
+                            <span className="text-xs text-slate-400">{city}</span>
+                          </div>
+                        ) : <span className="text-slate-300 text-xs">—</span>;
+                      })()}
+                    </td>
+
+                    {/* Country */}
+                    <td className="px-3 py-2.5 min-w-[110px]">
+                      {(() => {
+                        const parts = fund.loc.split(",");
+                        const country = parts.length > 1 ? parts.slice(1).join(",").trim() : "";
+                        return country ? (
+                          <span className="text-xs text-slate-400">{country}</span>
+                        ) : <span className="text-slate-300 text-xs">—</span>;
+                      })()}
                     </td>
                   </tr>
                 );
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={14} className="text-center py-16 text-sm text-slate-400">
+                  <td colSpan={15} className="text-center py-16 text-sm text-slate-400">
                     No funds found
                   </td>
                 </tr>
@@ -1244,7 +1304,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
                     </div>
                     <div className="min-w-0">
                       <p className="text-base font-semibold text-slate-800 truncate">{selected.co}</p>
-                      <p className="text-xs text-slate-500">{selected.type} · {selected.loc}</p>
+                      <p className="text-xs text-slate-500">{INVESTOR_TYPE_LABELS[selected.type] ?? selected.type} · {selected.loc}</p>
                     </div>
                   </div>
                   <button
@@ -1736,10 +1796,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
-                                      {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
-                                      {(c.location_city || c.location_country) && (
-                                        <p className="text-[10px] text-slate-400 truncate">{[c.location_city, c.location_country].filter(Boolean).join(", ")}</p>
+                                      {c.last_contact_date && (
+                                        <p className="text-[10px] text-blue-500 font-medium truncate">Last contact: {formatDate(c.last_contact_date)}</p>
                                       )}
+                                      {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
                                     </div>
                                     <ChevronRight size={12} className={cn("text-slate-300 flex-shrink-0 transition-transform", selectedContact === c.id && "rotate-90")} />
                                   </button>
@@ -1793,11 +1853,6 @@ export function FundsViewClient({ initialCompanies }: Props) {
                                   )}
                                   {live.location_city && (
                                     <p className="text-[10px] text-blue-400">{live.location_city}{live.location_country ? `, ${live.location_country}` : ""}</p>
-                                  )}
-                                  {live.linkedin_url && (
-                                    <a href={live.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-blue-700 hover:underline">
-                                      <ExternalLink size={9} className="flex-shrink-0" />LinkedIn
-                                    </a>
                                   )}
                                 </div>
                               );
@@ -2333,22 +2388,70 @@ export function FundsViewClient({ initialCompanies }: Props) {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
-                <input
+                <label className="block text-xs font-medium text-slate-700 mb-1">Investor Type</label>
+                <select
                   value={addFundType}
                   onChange={e => setAddFundType(e.target.value)}
-                  placeholder="e.g. Climate VC, Corporate VC"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
-                />
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
+                >
+                  <option value="">Select type…</option>
+                  {["Venture Capital", "Corporate VC", "Family Office", "Fund of Fund", "Angel", "Accelerator", "Government", "Other"].map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">City</label>
+                  <input
+                    value={addFundCity}
+                    onChange={e => setAddFundCity(e.target.value)}
+                    placeholder="e.g. San Francisco"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Country</label>
+                  <input
+                    value={addFundCountry}
+                    onChange={e => setAddFundCountry(e.target.value)}
+                    placeholder="e.g. USA"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                  />
+                </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Location</label>
-                <input
-                  value={addFundLoc}
-                  onChange={e => setAddFundLoc(e.target.value)}
-                  placeholder="e.g. San Francisco, USA"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
-                />
+                <label className="block text-xs font-medium text-slate-700 mb-1">Stage Focus</label>
+                <select
+                  value={addFundStage}
+                  onChange={e => setAddFundStage(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
+                >
+                  <option value="">Select stage…</option>
+                  {["Pre-Seed", "Seed", "Series A", "Series B", "Growth", "Multi-Stage"].map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Owner</label>
+                  <input
+                    value={addFundOwner}
+                    onChange={e => setAddFundOwner(e.target.value)}
+                    placeholder="e.g. Andrew"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Contact</label>
+                  <input
+                    value={addFundContactName}
+                    onChange={e => setAddFundContactName(e.target.value)}
+                    placeholder="Name or email"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
@@ -2365,7 +2468,8 @@ export function FundsViewClient({ initialCompanies }: Props) {
               <button
                 onClick={() => {
                   // Close modal without persisting (hardcoded data)
-                  setAddFundName(""); setAddFundType(""); setAddFundLoc(""); setAddFundDesc("");
+                  setAddFundName(""); setAddFundType(""); setAddFundCity(""); setAddFundCountry("");
+                  setAddFundStage(""); setAddFundOwner(""); setAddFundContactName(""); setAddFundDesc("");
                   setShowAddFund(false);
                 }}
                 disabled={!addFundName.trim()}

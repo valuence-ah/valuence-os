@@ -104,6 +104,19 @@ const CONTACT_TO_COMPANY_TYPE: Partial<Record<ContactTypeStr, CompanyType>> = {
   "Government/Academic": "government",
 };
 
+// Maps display labels back to the DB enum values the contacts table expects
+const CONTACT_DISPLAY_TO_DB_TYPE: Record<string, Contact["type"]> = {
+  "Advisor / KOL":       "advisor",
+  "Ecosystem":           "ecosystem_partner",
+  "Employee":            "other",
+  "Founder / Mgmt":      "founder",
+  "Government/Academic": "government",
+  "Investor":            "fund_manager",
+  "Limited Partner":     "lp",
+  "Other":               "other",
+  "Strategic":           "corporate",
+};
+
 const TYPE_BADGE: Record<string, string> = {
   startup:           "bg-blue-50 text-blue-700 border-blue-200",
   lp:                "bg-purple-50 text-purple-700 border-purple-200",
@@ -781,11 +794,13 @@ const ContactRow = memo(function ContactRow({
     }
     // Dismiss immediately — no waiting for network
     onConfirmed(contact.id);
+    // Map display label back to DB enum value before saving
+    const dbType: Contact["type"] = CONTACT_DISPLAY_TO_DB_TYPE[type] ?? "other";
     // Run DB saves concurrently in background (component may unmount)
     const contactSave = supabase.from("contacts").update({
       first_name: firstName.trim() || contact.first_name,
       last_name:  lastName.trim()  || contact.last_name,
-      type:       type as Contact["type"],
+      type:       dbType,
       title:      resolvedTitle || null,
       company_id: resolvedCompanyId,
       location_city:    city.trim() || null,
@@ -1106,7 +1121,7 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
       {/* Column headers */}
       <div className="flex items-center gap-2 px-3 mb-1">
         <div className="w-7 flex-shrink-0" />
-        <SortHeader label="Name / Contact" sortKey="name"    active={sortKey==="name"}    dir={sortDir} onSort={handleSort} className="w-40 flex-shrink-0" />
+        <SortHeader label="Name / Contact" sortKey="name"    active={sortKey==="name"}    dir={sortDir} onSort={handleSort} className="w-48 flex-shrink-0" />
         <SortHeader label="Email"          sortKey="email"   active={sortKey==="email"}   dir={sortDir} onSort={handleSort} className="w-56 flex-shrink-0" />
         <SortHeader label="Type *"         sortKey="type"    active={sortKey==="type"}    dir={sortDir} onSort={handleSort} className="w-36 flex-shrink-0" />
         <SortHeader label="Title"          sortKey="title"   active={sortKey==="title"}   dir={sortDir} onSort={handleSort} className="w-32 flex-shrink-0" />
