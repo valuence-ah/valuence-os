@@ -11,7 +11,7 @@ import { Bell } from "lucide-react";
 
 interface HeaderProps {
   title: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   actions?: React.ReactNode;
 }
 

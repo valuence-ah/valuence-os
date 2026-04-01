@@ -3,8 +3,10 @@
 // Shows fund-level KPIs: pipeline count, portfolio count, LP commitments, recent activity.
 // v2
 
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
+import { DashboardGreeting } from "@/components/dashboard/dashboard-greeting";
 import { formatCurrency, formatDate, DEAL_STAGE_COLORS, DEAL_STAGE_LABELS } from "@/lib/utils";
 import type { Deal } from "@/lib/types";
 import { TrendingUp, Users, Wallet, Radar, FileText, BarChart3 } from "lucide-react";
@@ -41,12 +43,12 @@ export default async function DashboardPage() {
   const softCommits    = lpData?.filter(r => ["soft_commit","committed","closed"].includes(r.stage ?? "")).reduce((s, r) => s + (r.committed_amount ?? 0), 0) ?? 0;
 
   const stats = [
-    { label: "Startups Tracked",    value: companyCount ?? 0,              icon: TrendingUp,  color: "bg-blue-50 text-blue-600",   sub: `${activeDeals.length} active deals` },
-    { label: "Contacts",            value: contactCount ?? 0,              icon: Users,        color: "bg-violet-50 text-violet-600", sub: "founders & partners" },
-    { label: "New Signals",         value: signalCount ?? 0,               icon: Radar,        color: "bg-cyan-50 text-cyan-600",   sub: "unreviewed sourcing" },
-    { label: "IC Memos",            value: memoCount ?? 0,                 icon: FileText,     color: "bg-orange-50 text-orange-600", sub: "all time" },
-    { label: "LP Soft Commits",     value: formatCurrency(softCommits, true), icon: Wallet,   color: "bg-emerald-50 text-emerald-600", sub: `${formatCurrency(totalCommitted, true)} total committed` },
-    { label: "Portfolio Cos.",      value: portfolioCount ?? 0,            icon: BarChart3,    color: "bg-pink-50 text-pink-600",   sub: "active portfolio" },
+    { label: "Startups Tracked",    value: companyCount ?? 0,              icon: TrendingUp,  color: "bg-blue-50 text-blue-600",   sub: `${activeDeals.length} active deals`,             href: "/crm/pipeline" },
+    { label: "Contacts",            value: contactCount ?? 0,              icon: Users,        color: "bg-violet-50 text-violet-600", sub: "founders & partners",                           href: "/crm/contacts" },
+    { label: "New Signals",         value: signalCount ?? 0,               icon: Radar,        color: "bg-cyan-50 text-cyan-600",   sub: "unreviewed sourcing",                            href: "/sourcing" },
+    { label: "IC Memos",            value: memoCount ?? 0,                 icon: FileText,     color: "bg-orange-50 text-orange-600", sub: "all time",                                     href: "/memos" },
+    { label: "LP Soft Commits",     value: formatCurrency(softCommits, true), icon: Wallet,   color: "bg-emerald-50 text-emerald-600", sub: `${formatCurrency(totalCommitted, true)} total committed`, href: "/crm/lps" },
+    { label: "Portfolio Cos.",      value: portfolioCount ?? 0,            icon: BarChart3,    color: "bg-pink-50 text-pink-600",   sub: "active portfolio",                              href: "/crm/pipeline" },
   ];
 
   // Group deals by stage for pipeline view
@@ -56,7 +58,7 @@ export default async function DashboardPage() {
     <div className="flex flex-col h-full">
       <Header
         title="Dashboard"
-        subtitle="here's your fund overview"
+        subtitle={<DashboardGreeting />}
       />
 
       <main className="flex-1 overflow-auto p-6 space-y-6">
@@ -64,14 +66,14 @@ export default async function DashboardPage() {
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {stats.map((s) => (
-            <div key={s.label} className="card p-4">
+            <Link key={s.label} href={s.href} className="card p-4 block hover:shadow-md transition-shadow cursor-pointer group">
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 ${s.color}`}>
                 <s.icon size={16} />
               </div>
-              <div className="text-2xl font-bold text-slate-900">{s.value}</div>
+              <div className="text-2xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{s.value}</div>
               <div className="text-xs font-medium text-slate-600 mt-0.5">{s.label}</div>
               <div className="text-xs text-slate-400 mt-0.5">{s.sub}</div>
-            </div>
+            </Link>
           ))}
         </div>
 
@@ -90,7 +92,7 @@ export default async function DashboardPage() {
                 </div>
               ) : (
                 activeDeals.slice(0, 6).map((deal) => (
-                  <div key={deal.id} className="px-5 py-3 flex items-center justify-between hover:bg-slate-50/60">
+                  <Link key={deal.id} href="/crm/pipeline" className="px-5 py-3 flex items-center justify-between hover:bg-slate-50/60 transition-colors">
                     <div>
                       <p className="text-sm font-medium text-slate-800">{deal.company?.name ?? "Unknown"}</p>
                       <p className="text-xs text-slate-400">
@@ -100,7 +102,7 @@ export default async function DashboardPage() {
                     <span className={`badge text-xs ${DEAL_STAGE_COLORS[deal.stage] ?? "bg-slate-100 text-slate-600"}`}>
                       {DEAL_STAGE_LABELS[deal.stage] ?? deal.stage}
                     </span>
-                  </div>
+                  </Link>
                 ))
               )}
             </div>

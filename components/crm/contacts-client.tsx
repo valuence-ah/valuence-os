@@ -85,8 +85,15 @@ export function ContactsClient({ initialContacts }: Props) {
 
   // ── List state ───────────────────────────────────────────────────────────────
   const [contacts, setContacts] = useState(initialContacts);
-  const [search, setSearch]     = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [searchInput, setSearchInput] = useState(""); // raw input value
+  const [search, setSearch]           = useState(""); // debounced value
+  const [typeFilter, setTypeFilter]   = useState("all");
+
+  // ── Debounce search input 300ms ───────────────────────────────────────────────
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // ── Panel state ──────────────────────────────────────────────────────────────
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -234,8 +241,8 @@ export function ContactsClient({ initialContacts }: Props) {
               <input
                 className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg w-56 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                 placeholder="Search contacts…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
               />
             </div>
             <select
@@ -245,9 +252,6 @@ export function ContactsClient({ initialContacts }: Props) {
             >
               <option value="all">All types</option>
               {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-              <option value="founder">Founder (legacy)</option>
-              <option value="lp">LP (legacy)</option>
-              <option value="fund_manager">Fund Manager (legacy)</option>
             </select>
           </div>
           <button

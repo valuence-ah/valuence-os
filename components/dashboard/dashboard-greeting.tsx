@@ -3,14 +3,14 @@
 import { useState, useEffect } from "react";
 
 export function DashboardGreeting() {
-  const [greeting, setGreeting] = useState("Good morning");
+  const [text, setText] = useState("Good morning");
 
   useEffect(() => {
     const h = new Date().getHours();
-    if (h < 12) setGreeting("Good morning");
-    else if (h < 17) setGreeting("Good afternoon");
-    else setGreeting("Good evening");
+    const greeting = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+    const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+    setText(`${greeting} · ${today}`);
   }, []);
 
-  return <>{greeting}</>;
+  return <span suppressHydrationWarning>{text}</span>;
 }
