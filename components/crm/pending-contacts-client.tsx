@@ -401,6 +401,7 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
   const [editingField, setEditingField]     = useState<string | null>(null);
   const [fieldDraft, setFieldDraft]         = useState("");
   const [fieldSaving, setFieldSaving]       = useState(false);
+  const [nameError, setNameError]           = useState<string | null>(null);
 
   // Contact sub-panel
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -489,7 +490,15 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
     };
     const { error } = await supabase.from("companies").update(updates).eq("id", company.id);
     setSaving(false);
-    if (error) { console.error("[save company]", error); return; }
+    if (error) {
+      if (error.code === "23505") {
+        setNameError(`A company named "${String(updates.name)}" already exists.`);
+      } else {
+        console.error("[save company]", error);
+      }
+      return;
+    }
+    setNameError(null);
     setCompany({ ...company, ...updates } as Company);
     setEditing(false);
     onUpdated?.(company.id, {
@@ -509,7 +518,19 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
     else if (field === "website") updates.website = value.trim() || null;
     else if (field === "city")    updates.location_city = value.trim() || null;
     else if (field === "country") updates.location_country = value.trim() || null;
-    await supabase.from("companies").update(updates).eq("id", company.id);
+    const { error: fErr } = await supabase.from("companies").update(updates).eq("id", company.id);
+    if (fErr) {
+      setFieldSaving(false);
+      if (field === "name" && fErr.code === "23505") {
+        setNameError(`A company named "${value.trim()}" already exists.`);
+        setEditingField("name"); // re-open inline edit so user can change it
+        setFieldDraft(value);
+      } else {
+        console.error("[saveField]", fErr);
+      }
+      return;
+    }
+    setNameError(null);
     const updated = { ...company, ...updates } as Company;
     setCompany(updated);
     onUpdated?.(company.id, {
@@ -694,7 +715,12 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
                 <div className="space-y-2">
                   <div>
                     <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Name</p>
-                    <input value={editName} onChange={e => setEditName(e.target.value)} className={INPUT_CLS} />
+                    <input value={editName} onChange={e => { setEditName(e.target.value); setNameError(null); }} className={cn(INPUT_CLS, nameError && "border-red-400 focus:ring-red-400")} />
+                    {nameError && (
+                      <p className="text-[10px] text-red-500 mt-0.5 flex items-center gap-1">
+                        <X size={9} /> {nameError}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Type</p>
@@ -742,14 +768,19 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
                 <div>
                   <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Company</p>
                   {editingField === "name" ? (
-                    <input autoFocus value={fieldDraft} onChange={e => setFieldDraft(e.target.value)}
+                    <input autoFocus value={fieldDraft} onChange={e => { setFieldDraft(e.target.value); setNameError(null); }}
                       onBlur={() => void saveField("name", fieldDraft)}
-                      onKeyDown={e => { if (e.key === "Enter") void saveField("name", fieldDraft); if (e.key === "Escape") setEditingField(null); }}
-                      className="text-sm font-medium border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none w-full" />
+                      onKeyDown={e => { if (e.key === "Enter") void saveField("name", fieldDraft); if (e.key === "Escape") { setEditingField(null); setNameError(null); } }}
+                      className={cn("text-sm font-medium border rounded px-1.5 py-0.5 focus:outline-none w-full", nameError ? "border-red-400 focus:ring-1 focus:ring-red-400" : "border-blue-400")} />
                   ) : (
                     <p className="text-sm text-slate-800 font-medium cursor-pointer hover:bg-blue-50 rounded px-1 -mx-1 py-0.5 transition-colors"
-                      onDoubleClick={() => { setEditingField("name"); setFieldDraft(company.name); }}>
+                      onDoubleClick={() => { setEditingField("name"); setFieldDraft(company.name); setNameError(null); }}>
                       {company.name}
+                    </p>
+                  )}
+                  {nameError && editingField === "name" && (
+                    <p className="text-[10px] text-red-500 mt-0.5 flex items-center gap-1">
+                      <X size={9} /> {nameError}
                     </p>
                   )}
                 </div>
