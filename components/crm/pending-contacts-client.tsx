@@ -8,7 +8,7 @@ import { getInitials, formatDate, cn } from "@/lib/utils";
 import {
   Check, X, Mail, ExternalLink, UserPlus, Maximize2, Loader2,
   Search, ChevronDown, ChevronUp, Plus, MapPin, Globe, Users,
-  Tag, ChevronRight, Linkedin, SlidersHorizontal, Trash2, Pencil, Clock,
+  Tag, ChevronRight, Linkedin, SlidersHorizontal, Trash2, Pencil, Clock, ArrowLeft,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -397,6 +397,22 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
   const [confirmDelete, setConfirmDelete]   = useState(false);
   const [deleting, setDeleting]             = useState(false);
 
+  // Inline field editing
+  const [editingField, setEditingField]     = useState<string | null>(null);
+  const [fieldDraft, setFieldDraft]         = useState("");
+  const [fieldSaving, setFieldSaving]       = useState(false);
+
+  // Contact sub-panel
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [ceFirstName, setCeFirstName]       = useState("");
+  const [ceLastName, setCeLastName]         = useState("");
+  const [ceTitle, setCeTitle]               = useState("");
+  const [ceType, setCeType]                 = useState("");
+  const [ceLinkedin, setCeLinkedin]         = useState("");
+  const [ceCity, setCeCity]                 = useState("");
+  const [ceCountry, setCeCountry]           = useState("");
+  const [contactSaving, setContactSaving]   = useState(false);
+
   async function handleDelete() {
     if (!company) return;
     setDeleting(true);
@@ -483,6 +499,59 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
     });
   }
 
+  async function saveField(field: string, value: string) {
+    if (!company) return;
+    setFieldSaving(true);
+    setEditingField(null);
+    const updates: Record<string, unknown> = {};
+    if (field === "name")    updates.name = value.trim() || company.name;
+    else if (field === "type")    updates.type = value;
+    else if (field === "website") updates.website = value.trim() || null;
+    else if (field === "city")    updates.location_city = value.trim() || null;
+    else if (field === "country") updates.location_country = value.trim() || null;
+    await supabase.from("companies").update(updates).eq("id", company.id);
+    const updated = { ...company, ...updates } as Company;
+    setCompany(updated);
+    onUpdated?.(company.id, {
+      name: String(updates.name ?? company.name),
+      type: String(updates.type ?? company.type),
+      website: (updates.website as string | null | undefined) ?? company.website,
+    });
+    setFieldSaving(false);
+  }
+
+  function openContact(c: Contact) {
+    setSelectedContact(c);
+    setCeFirstName(c.first_name ?? "");
+    setCeLastName(c.last_name ?? "");
+    setCeTitle(c.title ?? "");
+    setCeType(mapTypeToAdmin(c.type));
+    setCeLinkedin(c.linkedin_url ?? "");
+    setCeCity(c.location_city ?? "");
+    setCeCountry(c.location_country ?? "");
+  }
+
+  async function saveContact() {
+    if (!selectedContact) return;
+    setContactSaving(true);
+    const dbType: Contact["type"] = CONTACT_DISPLAY_TO_DB_TYPE[ceType] ?? "other";
+    const updates: Partial<Contact> = {
+      first_name: ceFirstName.trim() || selectedContact.first_name,
+      last_name:  ceLastName.trim() || selectedContact.last_name,
+      title:      ceTitle.trim() || selectedContact.title,
+      type:       dbType,
+      linkedin_url: ceLinkedin.trim() || selectedContact.linkedin_url,
+      location_city: ceCity.trim() || selectedContact.location_city,
+      location_country: ceCountry.trim() || selectedContact.location_country,
+    };
+    const { error } = await supabase.from("contacts").update(updates).eq("id", selectedContact.id);
+    if (!error) {
+      setContacts(prev => prev.map(c => c.id === selectedContact.id ? { ...c, ...updates } as Contact : c));
+      setSelectedContact(prev => prev ? { ...prev, ...updates } as Contact : prev);
+    }
+    setContactSaving(false);
+  }
+
   const domain = company?.website ? company.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "") : null;
   const clearbitUrl = domain ? `https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128` : null;
 
@@ -490,43 +559,121 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
     <>
       <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
       <div className="fixed top-0 right-0 h-full w-[420px] bg-white shadow-2xl z-50 flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-          <div className="flex items-center gap-2">
-            {clearbitUrl && !imgError ? (
-              <img src={clearbitUrl} alt={company?.name ?? ""} onError={() => setImgError(true)}
-                className="w-8 h-8 rounded-lg object-contain bg-white border border-slate-200 p-0.5" />
-            ) : (
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-xs font-bold">{company ? getInitials(company.name) : "…"}</span>
-              </div>
-            )}
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">{createMode ? "New Company" : loading ? "Loading…" : company?.name ?? "Company"}</h3>
-              {company && (
-                <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium",
-                  TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
-                  {TYPE_LABEL[company.type] ?? company.type}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {company && !editing && (
-              <button onClick={startEditing}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
-                <Pencil size={11} /> Edit
+        {selectedContact ? (
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setSelectedContact(null)}
+                className="p-1 hover:bg-slate-100 rounded transition-colors text-slate-500 hover:text-slate-700">
+                <ArrowLeft size={16} />
               </button>
-            )}
-            {company && (
-              <a href={`/crm/companies/${company.id}`} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
-                <Maximize2 size={12} /> Full profile
-              </a>
-            )}
+              <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-violet-600 text-[10px] font-bold">
+                  {getInitials(`${selectedContact.first_name} ${selectedContact.last_name ?? ""}`)}
+                </span>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">{selectedContact.first_name} {selectedContact.last_name}</h3>
+                <p className="text-[10px] text-slate-400">{selectedContact.title ?? selectedContact.type}</p>
+              </div>
+            </div>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1"><X size={18} /></button>
           </div>
-        </div>
-        {loading ? (
+        ) : (
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+            <div className="flex items-center gap-2">
+              {clearbitUrl && !imgError ? (
+                <img src={clearbitUrl} alt={company?.name ?? ""} onError={() => setImgError(true)}
+                  className="w-8 h-8 rounded-lg object-contain bg-white border border-slate-200 p-0.5" />
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-xs font-bold">{company ? getInitials(company.name) : "…"}</span>
+                </div>
+              )}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">{createMode ? "New Company" : loading ? "Loading…" : company?.name ?? "Company"}</h3>
+                {company && (
+                  <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium",
+                    TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
+                    {TYPE_LABEL[company.type] ?? company.type}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {company && !editing && (
+                <button onClick={startEditing}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                  <Pencil size={11} /> Edit
+                </button>
+              )}
+              {company && (
+                <a href={`/crm/companies/${company.id}`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                  <Maximize2 size={12} /> Full profile
+                </a>
+              )}
+              <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1"><X size={18} /></button>
+            </div>
+          </div>
+        )}
+        {selectedContact ? (
+          /* ── Contact edit sub-panel ── */
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">First Name</p>
+                <input value={ceFirstName} onChange={e => setCeFirstName(e.target.value)}
+                  className={INPUT_CLS} />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">Last Name</p>
+                <input value={ceLastName} onChange={e => setCeLastName(e.target.value)}
+                  className={INPUT_CLS} />
+              </div>
+              <div className="col-span-2">
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">Email</p>
+                <div className={cn(INPUT_CLS, "flex items-center gap-1 bg-slate-50 text-slate-400 cursor-default")}>
+                  <Mail size={10} className="flex-shrink-0" />
+                  <span className="truncate text-[11px]">{selectedContact.email ?? "—"}</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">Title</p>
+                <select value={ceTitle} onChange={e => setCeTitle(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
+                  <option value="">— Title —</option>
+                  {TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">Type</p>
+                <select value={ceType} onChange={e => setCeType(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
+                  {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">LinkedIn</p>
+                <input value={ceLinkedin} onChange={e => setCeLinkedin(e.target.value)}
+                  placeholder="https://linkedin.com/in/…"
+                  className={INPUT_CLS} />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">City</p>
+                <input value={ceCity} onChange={e => setCeCity(e.target.value)}
+                  placeholder="City" className={INPUT_CLS} />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">Country</p>
+                <input value={ceCountry} onChange={e => setCeCountry(e.target.value)}
+                  placeholder="Country" className={INPUT_CLS} />
+              </div>
+            </div>
+            <button onClick={saveContact} disabled={contactSaving}
+              className="w-full flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors">
+              {contactSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+              {contactSaving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        ) : loading ? (
           <div className="flex-1 flex items-center justify-center"><Loader2 size={24} className="text-slate-300 animate-spin" /></div>
         ) : !company ? (
           <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Company not found.</div>
@@ -585,28 +732,78 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
             ) : (
             <>
             <div className="px-5 py-4 border-b border-slate-100 space-y-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">General Information</p>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">General Information</p>
+                <span className="text-[9px] text-slate-300 italic">double-click to edit</span>
+                {fieldSaving && <Loader2 size={10} className="animate-spin text-blue-400" />}
+              </div>
               <div className="grid grid-cols-2 gap-3">
+                {/* Company name */}
                 <div>
                   <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Company</p>
-                  <p className="text-sm text-slate-800 font-medium">{company.name}</p>
+                  {editingField === "name" ? (
+                    <input autoFocus value={fieldDraft} onChange={e => setFieldDraft(e.target.value)}
+                      onBlur={() => void saveField("name", fieldDraft)}
+                      onKeyDown={e => { if (e.key === "Enter") void saveField("name", fieldDraft); if (e.key === "Escape") setEditingField(null); }}
+                      className="text-sm font-medium border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none w-full" />
+                  ) : (
+                    <p className="text-sm text-slate-800 font-medium cursor-pointer hover:bg-blue-50 rounded px-1 -mx-1 py-0.5 transition-colors"
+                      onDoubleClick={() => { setEditingField("name"); setFieldDraft(company.name); }}>
+                      {company.name}
+                    </p>
+                  )}
                 </div>
+                {/* Type */}
                 <div>
                   <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Type</p>
-                  <span className={cn("inline-flex text-xs px-1.5 py-0.5 rounded border font-medium",
-                    TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
-                    {TYPE_LABEL[company.type] ?? company.type}
-                  </span>
+                  {editingField === "type" ? (
+                    <select autoFocus value={fieldDraft}
+                      onChange={e => void saveField("type", e.target.value)}
+                      onBlur={() => setEditingField(null)}
+                      className="text-xs border border-blue-400 rounded px-1 py-0.5 focus:outline-none bg-white cursor-pointer w-full">
+                      <option value="startup">Startup</option>
+                      <option value="fund">Fund / VC</option>
+                      <option value="lp">LP</option>
+                      <option value="corporate">Corporate</option>
+                      <option value="ecosystem_partner">Ecosystem</option>
+                      <option value="government">Government / Academic</option>
+                      <option value="other">Other</option>
+                    </select>
+                  ) : (
+                    <span
+                      onDoubleClick={() => { setEditingField("type"); setFieldDraft(company.type); }}
+                      className={cn("inline-flex text-xs px-1.5 py-0.5 rounded border font-medium cursor-pointer hover:ring-1 hover:ring-blue-300",
+                        TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
+                      {TYPE_LABEL[company.type] ?? company.type}
+                    </span>
+                  )}
                 </div>
-                {company.website && (
-                  <div>
-                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Website</p>
-                    <a href={company.website} target="_blank" rel="noopener noreferrer"
-                      className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                      <Globe size={11} />{company.website.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}
-                    </a>
-                  </div>
-                )}
+                {/* Website */}
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Website</p>
+                  {editingField === "website" ? (
+                    <input autoFocus value={fieldDraft} onChange={e => setFieldDraft(e.target.value)}
+                      onBlur={() => void saveField("website", fieldDraft)}
+                      onKeyDown={e => { if (e.key === "Enter") void saveField("website", fieldDraft); if (e.key === "Escape") setEditingField(null); }}
+                      placeholder="https://…"
+                      className="text-xs border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none w-full" />
+                  ) : company.website ? (
+                    <div className="flex items-center gap-1 group cursor-pointer"
+                      onDoubleClick={() => { setEditingField("website"); setFieldDraft(company.website ?? ""); }}>
+                      <a href={company.website} target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                        onClick={e => e.stopPropagation()}>
+                        <Globe size={11} />{company.website.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}
+                      </a>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-300 italic cursor-pointer hover:text-slate-400"
+                      onDoubleClick={() => { setEditingField("website"); setFieldDraft(""); }}>
+                      Add website…
+                    </p>
+                  )}
+                </div>
+                {/* LinkedIn */}
                 {company.linkedin_url && (
                   <div>
                     <p className="text-[10px] font-semibold text-slate-400 mb-0.5">LinkedIn</p>
@@ -616,15 +813,37 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
                     </a>
                   </div>
                 )}
-                {(company.location_city || company.location_country) && (
-                  <div className="col-span-2">
-                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Location</p>
-                    <p className="text-sm text-slate-700 flex items-center gap-1">
-                      <MapPin size={11} className="text-slate-400" />
-                      {[company.location_city, company.location_country].filter(Boolean).join(", ")}
-                    </p>
+                {/* Location */}
+                <div className="col-span-2">
+                  <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Location</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {editingField === "city" ? (
+                      <input autoFocus value={fieldDraft} onChange={e => setFieldDraft(e.target.value)}
+                        onBlur={() => void saveField("city", fieldDraft)}
+                        onKeyDown={e => { if (e.key === "Enter") void saveField("city", fieldDraft); if (e.key === "Escape") setEditingField(null); }}
+                        placeholder="City"
+                        className="text-sm border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none" />
+                    ) : (
+                      <p className="text-sm text-slate-700 flex items-center gap-1 cursor-pointer hover:bg-blue-50 rounded px-1 -mx-1 py-0.5 transition-colors"
+                        onDoubleClick={() => { setEditingField("city"); setFieldDraft(company.location_city ?? ""); }}>
+                        <MapPin size={11} className="text-slate-400 flex-shrink-0" />
+                        {company.location_city || <span className="text-slate-300 italic text-xs">City</span>}
+                      </p>
+                    )}
+                    {editingField === "country" ? (
+                      <input autoFocus value={fieldDraft} onChange={e => setFieldDraft(e.target.value)}
+                        onBlur={() => void saveField("country", fieldDraft)}
+                        onKeyDown={e => { if (e.key === "Enter") void saveField("country", fieldDraft); if (e.key === "Escape") setEditingField(null); }}
+                        placeholder="Country"
+                        className="text-sm border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none" />
+                    ) : (
+                      <p className="text-sm text-slate-700 cursor-pointer hover:bg-blue-50 rounded px-1 -mx-1 py-0.5 transition-colors"
+                        onDoubleClick={() => { setEditingField("country"); setFieldDraft(company.location_country ?? ""); }}>
+                        {company.location_country || <span className="text-slate-300 italic text-xs">Country</span>}
+                      </p>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
             {company.description && (
@@ -656,14 +875,15 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
               ) : (
                 <div className="space-y-2">
                   {contacts.map(c => (
-                    <div key={c.id} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-lg">
+                    <button key={c.id} onClick={() => openContact(c)}
+                      className="w-full flex items-center gap-3 p-2.5 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 border border-transparent rounded-lg transition-all text-left group">
                       <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
                         <span className="text-violet-600 text-[10px] font-bold">
                           {getInitials(`${c.first_name} ${c.last_name ?? ""}`)}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-slate-800 truncate">
+                        <p className="text-xs font-semibold text-slate-800 truncate group-hover:text-blue-700">
                           {c.first_name} {c.last_name}
                           {c.is_primary_contact && (
                             <span className="ml-1.5 text-[9px] text-blue-600 bg-blue-50 px-1 py-0.5 rounded">Primary</span>
@@ -678,11 +898,12 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
                           )}
                         </div>
                       </div>
-                      <div className="flex gap-1.5 text-slate-300">
-                        {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-600 transition-colors"><Mail size={12} /></a>}
-                        {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 transition-colors"><ExternalLink size={12} /></a>}
+                      <div className="flex gap-1.5 text-slate-300 items-center">
+                        {c.email && <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="hover:text-blue-600 transition-colors"><Mail size={12} /></a>}
+                        {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="hover:text-blue-600 transition-colors"><ExternalLink size={12} /></a>}
+                        <ChevronRight size={11} className="text-slate-300 group-hover:text-blue-400 transition-colors" />
                       </div>
-                    </div>
+                    </button>
                   ))}
                   {contacts.length >= 5 && (
                     <a href={`/crm/companies/${company.id}`} target="_blank" rel="noopener noreferrer"
@@ -695,7 +916,7 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
             </div>
           </div>
         )}
-        {company && !createMode && (
+        {company && !createMode && !selectedContact && (
           <div className="px-5 py-4 border-t border-slate-200 space-y-2">
             <a href={`/crm/companies/${company.id}`}
               className="flex items-center justify-center gap-2 w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
