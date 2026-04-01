@@ -166,9 +166,19 @@ function genId(): string {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function CompanyAvatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
+function CompanyAvatar({ name, website, size = "md" }: { name: string; website?: string | null; size?: "sm" | "md" | "lg" }) {
+  const [err, setErr] = useState(false);
   const sz = size === "sm" ? "w-7 h-7 text-[9px]" : size === "lg" ? "w-12 h-12 text-sm" : "w-9 h-9 text-xs";
   const grad = hashColor(name);
+  const domain = website ? website.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] : null;
+  const src = domain ? `https://logo.clearbit.com/${domain}` : null;
+  useEffect(() => setErr(false), [src]);
+  if (src && !err) {
+    return (
+      <img src={src} alt={name} onError={() => setErr(true)}
+        className={`${sz} rounded-md object-contain bg-white border border-slate-200 p-0.5 flex-shrink-0`} />
+    );
+  }
   return (
     <div className={`${sz} rounded-md bg-gradient-to-br ${grad} flex items-center justify-center flex-shrink-0`}>
       <span className="text-white font-bold">{getInitials(name)}</span>
@@ -944,7 +954,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     {/* Company */}
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <CompanyAvatar name={co.name} size="sm" />
+                        <CompanyAvatar name={co.name} website={co.website} size="sm" />
                         <div className="min-w-0">
                           <p className="text-xs font-semibold text-slate-800 truncate max-w-[150px]">{co.name}</p>
                           {co.description && <p className="text-[10px] text-slate-400 truncate max-w-[150px]">{co.description}</p>}
@@ -1062,7 +1072,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
             {/* Panel header */}
             <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
               <div className="flex items-start gap-3 min-w-0 flex-1">
-                <CompanyAvatar name={selected.name} size="lg" />
+                <CompanyAvatar name={selected.name} website={selected.website} size="lg" />
                 <div className="min-w-0 flex-1">
                   <h2 className="text-base font-bold text-slate-900 truncate">{selected.name}</h2>
                   {selected.sectors?.[0] && (

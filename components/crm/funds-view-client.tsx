@@ -12,6 +12,28 @@ import {
   Loader2, Link2, Star, User,
 } from "lucide-react";
 
+// ── Logo component — tries Clearbit from website domain, falls back to initials ─
+function FundLogoImg({ name, website, size = "sm" }: { name: string; website?: string | null; size?: "sm" | "md" }) {
+  const [err, setErr] = useState(false);
+  const sz = size === "sm" ? "w-7 h-7 text-[9px]" : "w-9 h-9 text-xs";
+  const domain = website ? website.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] : null;
+  const src = domain ? `https://logo.clearbit.com/${domain}` : null;
+  const initials = name.split(/\s+/).map(w => w[0] ?? "").join("").slice(0, 2).toUpperCase();
+  if (src && !err) {
+    return (
+      <img
+        src={src} alt={name} onError={() => setErr(true)}
+        className={`${sz} rounded-md object-contain bg-white border border-slate-200 p-0.5 flex-shrink-0`}
+      />
+    );
+  }
+  return (
+    <div className={`${sz} rounded-md bg-gradient-to-br ${hashColor(name)} flex items-center justify-center flex-shrink-0`}>
+      <span className="text-white font-bold text-[9px]">{initials}</span>
+    </div>
+  );
+}
+
 // ── Fund Intelligence Types ────────────────────────────────────────────────────
 
 interface FundData {
@@ -1045,14 +1067,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
                     {/* Fund */}
                     <td className="px-3 py-2.5 min-w-[180px]">
                       <div className="flex items-center gap-2 min-w-0">
-                        <div
-                          className={cn(
-                            "w-7 h-7 rounded-md bg-gradient-to-br flex items-center justify-center flex-shrink-0",
-                            hashColor(fund.co)
-                          )}
-                        >
-                          <span className="text-white font-bold text-[9px]">{fund.initials}</span>
-                        </div>
+                        <FundLogoImg name={fund.co} website={fund.website} size="sm" />
                         <div className="min-w-0">
                           <div className="flex items-center gap-1 flex-wrap">
                             <p className="text-sm font-medium text-slate-800 truncate max-w-[140px]">{fund.co}</p>
@@ -1062,7 +1077,6 @@ export function FundsViewClient({ initialCompanies }: Props) {
                               </span>
                             )}
                           </div>
-                          <p className="text-[10px] text-slate-400 truncate max-w-[160px]">{fund.desc}</p>
                         </div>
                       </div>
                     </td>

@@ -20,11 +20,10 @@ const OWNERS = ["Andrew", "Gene", "Lance"] as const;
 type Owner = typeof OWNERS[number];
 
 const LP_TYPE_OPTIONS = [
-  "Anchor", "Family Office", "Fund of Fund", "Strategic", "Sovereign Wealth",
+  "Family Office", "Fund of Fund", "Strategic", "Sovereign Wealth",
   "Pension Fund", "Endowment", "Financial Institution", "Other",
 ] as const;
 const LP_TYPE_BADGE: Record<string, string> = {
-  "Anchor":               "bg-indigo-100 text-indigo-700",
   "Family Office":        "bg-purple-100 text-purple-700",
   "Fund of Fund":         "bg-pink-100 text-pink-700",
   "Strategic":            "bg-teal-100 text-teal-700",
@@ -339,7 +338,6 @@ function MapView({ companies, onSelect, selectedId }: { companies: Company[]; on
 const FILTER_PILLS = [
   { id: "all",      label: "All" },
   { id: "active",   label: "Active" },
-  { id: "anchor",   label: "Anchor" },
   { id: "family",   label: "Family Office" },
   { id: "overdue",  label: "Overdue follow-ups" },
   { id: "coinvest", label: "Co-invest interest" },
@@ -578,7 +576,6 @@ export function LpViewClient({ initialCompanies }: Props) {
       if (filterCity    && c.location_city    !== filterCity)    return false;
       if (filterCountry && c.location_country !== filterCountry) return false;
       if (activeFilter === "active")   return !!(c.lp_stage && c.lp_stage !== "Passed");
-      if (activeFilter === "anchor")   return c.lp_type === "Anchor";
       if (activeFilter === "family")   return c.lp_type === "Family Office";
       if (activeFilter === "overdue") { const last = lastTouchMap[c.id]?.date; return !last || (Date.now() - new Date(last).getTime()) / 86_400_000 > 30; }
       if (activeFilter === "coinvest") return coinvestMap[c.id]?.interest === "Yes";
