@@ -555,20 +555,22 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
   async function saveContact() {
     if (!selectedContact) return;
     setContactSaving(true);
-    const dbType: Contact["type"] = CONTACT_DISPLAY_TO_DB_TYPE[ceType] ?? "other";
+    // ceType is already a display label (e.g. "Advisor / KOL") matching the DB constraint
     const updates: Partial<Contact> = {
-      first_name: ceFirstName.trim() || selectedContact.first_name,
-      last_name:  ceLastName.trim() || selectedContact.last_name,
-      title:      ceTitle.trim() || selectedContact.title,
-      type:       dbType,
-      linkedin_url: ceLinkedin.trim() || selectedContact.linkedin_url,
-      location_city: ceCity.trim() || selectedContact.location_city,
-      location_country: ceCountry.trim() || selectedContact.location_country,
+      first_name:       ceFirstName.trim() || selectedContact.first_name,
+      last_name:        ceLastName.trim()  || selectedContact.last_name,
+      title:            ceTitle.trim()     || selectedContact.title,
+      type:             ceType as Contact["type"],
+      linkedin_url:     ceLinkedin.trim()  || selectedContact.linkedin_url,
+      location_city:    ceCity.trim()      || selectedContact.location_city,
+      location_country: ceCountry.trim()   || selectedContact.location_country,
     };
     const { error } = await supabase.from("contacts").update(updates).eq("id", selectedContact.id);
     if (!error) {
       setContacts(prev => prev.map(c => c.id === selectedContact.id ? { ...c, ...updates } as Contact : c));
       setSelectedContact(prev => prev ? { ...prev, ...updates } as Contact : prev);
+    } else {
+      console.error("[saveContact]", error);
     }
     setContactSaving(false);
   }
@@ -1044,20 +1046,17 @@ const ContactRow = memo(function ContactRow({
     if (country === "__custom__" && customCountry.trim()) {
       onAddCustomCountry(customCountry.trim());
     }
-    // Dismiss immediately — no waiting for network
-    onConfirmed(contact.id);
-    // Map display label back to DB enum value before saving
-    const dbType: Contact["type"] = CONTACT_DISPLAY_TO_DB_TYPE[type] ?? "other";
-    // Run DB saves concurrently in background (component may unmount)
+    // Save contact — type is already the display label (e.g. "Advisor / KOL")
+    // which matches the DB contacts_type_check constraint exactly.
     const contactSave = supabase.from("contacts").update({
-      first_name: firstName.trim() || contact.first_name,
-      last_name:  lastName.trim()  || contact.last_name,
-      type:       dbType,
-      title:      resolvedTitle || null,
-      company_id: resolvedCompanyId,
+      first_name:       firstName.trim() || contact.first_name,
+      last_name:        lastName.trim()  || contact.last_name,
+      type:             type as Contact["type"],
+      title:            resolvedTitle || null,
+      company_id:       resolvedCompanyId,
       location_city:    city.trim() || null,
       location_country: resolvedCountry,
-      status: "active",
+      status:           "active",
     }).eq("id", contact.id);
     const companySave = (resolvedCompanyId && targetType)
       ? (() => {
@@ -1068,8 +1067,16 @@ const ContactRow = memo(function ContactRow({
         })()
       : null;
     const [{ error: ce }, coResult] = await Promise.all([contactSave, companySave ?? Promise.resolve({ error: null })]);
-    if (ce) console.error("[confirm] contact save error:", ce);
-    if ((coResult as { error: unknown } | null)?.error) console.error("[confirm] company save error:", (coResult as { error: unknown }).error);
+    if (ce) {
+      console.error("[confirm] contact save error:", ce);
+      setBusy(false);
+      return; // Don't dismiss — let the user see the row is still there and retry
+    }
+    if ((coResult as { error: unknown } | null)?.error) {
+      console.error("[confirm] company save error:", (coResult as { error: unknown }).error);
+    }
+    // Only dismiss from the queue after a confirmed successful save
+    onConfirmed(contact.id);
   }
 
   async function discard() {

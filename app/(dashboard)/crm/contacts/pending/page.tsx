@@ -1,8 +1,7 @@
 // ─── New Contacts Page /crm/contacts/pending ──────────────────────────────────
-// Shows contacts that are missing Contact Type (type = 'other') OR Location
-// (Country). This catches both Make.com auto-imports and any under-enriched
-// contacts. Once confirmed with a type + country, they auto-route to the right
-// CRM view (Pipeline → Startup, LPs → LP, Funds → Fund, etc.).
+// Shows contacts with status = 'pending'.
+// Status flow: pending (new / needs review) → active (confirmed) | archived (discarded)
+// Make.com imports land with status = 'pending' by default.
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
@@ -14,12 +13,11 @@ export default async function PendingContactsPage() {
   const supabase = createAdminClient();
 
   const [{ data: contacts }, { data: companies }] = await Promise.all([
-    // Fetch contacts missing type (still 'other') OR missing country
+    // Fetch all contacts awaiting review
     supabase
       .from("contacts")
       .select("*, company:companies(id, name, type)")
-      .or("type.eq.other,location_country.is.null")
-      .neq("status", "archived")
+      .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(10000) as unknown as Promise<{
         data: (import("@/lib/types").Contact & { company?: { id: string; name: string; type: string; website?: string | null } | null })[] | null;
