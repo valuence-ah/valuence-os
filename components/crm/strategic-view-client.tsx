@@ -2,6 +2,7 @@
 // ─── Strategic Partners CRM — metrics · table · detail panel ─────────────────
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact, Interaction, ContactType } from "@/lib/types";
 import { cn, formatDate, getInitials, timeAgo } from "@/lib/utils";
@@ -221,6 +222,61 @@ function ScoreBar({ label, value, onChange }: { label: string; value: number; on
   );
 }
 
+// ── InlinePickerCell ──────────────────────────────────────────────────────────
+
+function InlinePickerCell({
+  value, options, styles, onPick,
+}: {
+  value: string;
+  options: string[];
+  styles: Record<string, { background: string; color: string }>;
+  onPick: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  function toggle(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 4, left: rect.left });
+    setOpen(o => !o);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handler() { setOpen(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <>
+      <span ref={ref} onClick={toggle} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center" }}>
+        {value ? (
+          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 9999, fontWeight: 500, ...(styles[value] ?? { background: "#f1f5f9", color: "#475569" }) }}>
+            {value}
+          </span>
+        ) : (
+          <span style={{ fontSize: 11, color: "#cbd5e1" }}>— Add</span>
+        )}
+      </span>
+      {open && pos && createPortal(
+        <div style={{ position: "fixed", top: pos.top, left: pos.left, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 99999, minWidth: 180, overflow: "hidden", fontFamily: "inherit" }} onMouseDown={e => e.stopPropagation()}>
+          <div onMouseDown={() => { onPick(""); setOpen(false); }} style={{ padding: "7px 12px", fontSize: 12, color: "#94a3b8", cursor: "pointer", borderBottom: "1px solid #f8fafc" }}>— Clear</div>
+          {options.map(opt => (
+            <div key={opt} onMouseDown={() => { onPick(opt); setOpen(false); }} style={{ padding: "7px 12px", fontSize: 12, cursor: "pointer" }}>
+              <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 9999, fontWeight: 500, ...(styles[opt] ?? {}) }}>{opt}</span>
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 interface Props { initialCompanies: Company[] }
@@ -230,6 +286,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
   // Core state
   const [companies, setCompanies]         = useState<Company[]>(initialCompanies);
+  const [strategicTypeMap, setStrategicTypeMap] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId]       = useState<string | null>(null);
   const [search, setSearch]               = useState("");
   const [activeFilter, setActiveFilter]   = useState<FilterId>("all");
@@ -895,17 +952,17 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                       </div>
                     </td>
                     {/* Strategic Type */}
-                    <td className="px-3 py-2.5">
-                      {(co as unknown as Record<string, string>).strategic_type ? (
-                        <span
-                          className="text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
-                          style={STRATEGIC_TYPE_STYLES[(co as unknown as Record<string, string>).strategic_type] ?? { background: "#f8fafc", color: "#64748b" }}
-                        >
-                          {(co as unknown as Record<string, string>).strategic_type}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300 text-xs">—</span>
-                      )}
+                    <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                      <InlinePickerCell
+                        value={(strategicTypeMap[co.id] !== undefined ? strategicTypeMap[co.id] : (co as unknown as Record<string, string>).strategic_type) ?? ""}
+                        options={["Corporate","Foundation","Government","Other"]}
+                        styles={STRATEGIC_TYPE_STYLES}
+                        onPick={async (val) => {
+                          setStrategicTypeMap(prev => ({ ...prev, [co.id]: val }));
+                          const sb = createClient();
+                          await sb.from("companies").update({ strategic_type: val || null }).eq("id", co.id);
+                        }}
+                      />
                     </td>
                     {/* Sector */}
                     <td className="px-3 py-2.5">

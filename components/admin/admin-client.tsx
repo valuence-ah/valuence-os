@@ -665,6 +665,16 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
   const [saveError, setSaveError] = useState<string | null>(null);
   const displayName = row.company_name ?? "";
 
+  // Create panel state
+  const [showCreatePanel, setShowCreatePanel] = useState(false);
+  const [createPanelName, setCreatePanelName] = useState("");
+  const [panelType, setPanelType] = useState("other");
+  const [panelWebsite, setPanelWebsite] = useState("");
+  const [panelDesc, setPanelDesc] = useState("");
+  const [panelCity, setPanelCity] = useState("");
+  const [panelCountry, setPanelCountry] = useState("");
+  const [panelSaving, setPanelSaving] = useState(false);
+
   const filtered = useMemo(() => {
     const all = companiesRef.current ?? [];
     if (!search.trim()) return all.slice(0, 50);
@@ -748,6 +758,31 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
     setSaving(false);
   }
 
+  async function handlePanelCreate() {
+    if (!createPanelName.trim() || !row.id) return;
+    setPanelSaving(true);
+    const sb = createClient();
+    const { data: nc, error } = await sb
+      .from("companies")
+      .insert({
+        name: createPanelName,
+        type: panelType,
+        website: panelWebsite || null,
+        description: panelDesc || null,
+        location_city: panelCity || null,
+        location_country: panelCountry || null,
+      })
+      .select()
+      .single();
+    if (!error && nc) {
+      setCompanies(prev => [nc as CompanyRow, ...prev]);
+      await sb.from("contacts").update({ company_id: nc.id }).eq("id", row.id);
+      onSaved(row.id, nc.id, nc.name);
+      setShowCreatePanel(false);
+    }
+    setPanelSaving(false);
+  }
+
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
@@ -790,19 +825,16 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
               — No company
             </div>
             {search.trim() && !filtered.some(c => c.name.toLowerCase() === search.trim().toLowerCase()) && (
-              <div onMouseDown={async (e) => {
+              <div onMouseDown={(e) => {
                 e.stopPropagation();
-                if (!search.trim() || !row.id) return;
+                setCreatePanelName(search.trim());
+                setPanelType("other");
+                setPanelWebsite("");
+                setPanelDesc("");
+                setPanelCity("");
+                setPanelCountry("");
                 setOpen(false);
-                setSaving(true);
-                const sb = createClient();
-                const { data: nc, error: ce } = await sb.from("companies").insert({ name: search.trim(), type: "other", status: "active" }).select().single();
-                if (!ce && nc) {
-                  setCompanies(prev => [nc as CompanyRow, ...prev]);
-                  const { error: ue } = await sb.from("contacts").update({ company_id: nc.id }).eq("id", row.id);
-                  if (!ue) onSaved(row.id, nc.id, nc.name);
-                }
-                setSaving(false);
+                setShowCreatePanel(true);
               }}
                 style={{ padding: "8px 14px", cursor: "pointer", fontSize: 12, color: "#2563eb", fontWeight: 600, borderBottom: "1px solid #f1f5f9", background: "#f0f9ff" }}>
                 + Create &quot;{search.trim()}&quot;
@@ -840,6 +872,70 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
               )}
             </div>
           )}
+        </div>,
+        document.body
+      )}
+      {showCreatePanel && createPortal(
+        <div style={{ position: "fixed", inset: 0, zIndex: 100000 }} onMouseDown={() => setShowCreatePanel(false)}>
+          <div style={{ position: "fixed", right: 0, top: 0, bottom: 0, width: 380, background: "#fff", boxShadow: "-4px 0 32px rgba(0,0,0,0.15)", zIndex: 100001, display: "flex", flexDirection: "column", fontFamily: "inherit" }} onMouseDown={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <p style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", margin: 0 }}>Create Company</p>
+                <p style={{ fontSize: 12, color: "#94a3b8", margin: "2px 0 0" }}>Fill in the details below</p>
+              </div>
+              <button onClick={() => setShowCreatePanel(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 20, lineHeight: 1 }}>×</button>
+            </div>
+            {/* Form */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Name */}
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Name *</label>
+                <input value={createPanelName} onChange={e => setCreatePanelName(e.target.value)} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} autoFocus />
+              </div>
+              {/* Type */}
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Type</label>
+                <select value={panelType} onChange={e => setPanelType(e.target.value)} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", background: "#fff", boxSizing: "border-box" as const }}>
+                  <option value="startup">Startup</option>
+                  <option value="fund">Fund / VC</option>
+                  <option value="lp">LP</option>
+                  <option value="corporate">Corporate</option>
+                  <option value="ecosystem_partner">Ecosystem</option>
+                  <option value="government">Government / Academic</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              {/* Website */}
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Website</label>
+                <input value={panelWebsite} onChange={e => setPanelWebsite(e.target.value)} placeholder="https://..." style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} />
+              </div>
+              {/* Description */}
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Description</label>
+                <textarea value={panelDesc} onChange={e => setPanelDesc(e.target.value)} rows={3} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", resize: "vertical", boxSizing: "border-box" as const }} />
+              </div>
+              {/* City / Country */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>City</label>
+                  <input value={panelCity} onChange={e => setPanelCity(e.target.value)} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Country</label>
+                  <input value={panelCountry} onChange={e => setPanelCountry(e.target.value)} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} />
+                </div>
+              </div>
+            </div>
+            {/* Footer */}
+            <div style={{ padding: "16px 24px", borderTop: "1px solid #f1f5f9", display: "flex", gap: 10 }}>
+              <button onClick={() => setShowCreatePanel(false)} style={{ flex: 1, padding: "9px", border: "1px solid #e2e8f0", borderRadius: 8, background: "#fff", fontSize: 13, color: "#64748b", cursor: "pointer", fontWeight: 500 }}>Cancel</button>
+              <button onClick={handlePanelCreate} disabled={panelSaving || !createPanelName.trim()} style={{ flex: 1, padding: "9px", border: "none", borderRadius: 8, background: panelSaving || !createPanelName.trim() ? "#94a3b8" : "#2563eb", fontSize: 13, color: "#fff", cursor: panelSaving || !createPanelName.trim() ? "not-allowed" : "pointer", fontWeight: 600 }}>
+                {panelSaving ? "Creating…" : "Create Company"}
+              </button>
+            </div>
+          </div>
         </div>,
         document.body
       )}

@@ -2,6 +2,7 @@
 // ─── Funds & Co-investors CRM — metrics · table · detail panel ────────────────
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
 import { cn, formatDate, timeAgo } from "@/lib/utils";
@@ -242,6 +243,61 @@ const OPP_TYPE_COLORS: Record<string, string> = {
   "Value-add":    "bg-slate-100 text-slate-600",
 };
 
+// ── InlinePickerCell ───────────────────────────────────────────────────────────
+
+function InlinePickerCell({
+  value, options, styles, onPick,
+}: {
+  value: string;
+  options: string[];
+  styles: Record<string, { background: string; color: string }>;
+  onPick: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  function toggle(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 4, left: rect.left });
+    setOpen(o => !o);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handler() { setOpen(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <>
+      <span ref={ref} onClick={toggle} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center" }}>
+        {value ? (
+          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 9999, fontWeight: 500, ...(styles[value] ?? { background: "#f1f5f9", color: "#475569" }) }}>
+            {value}
+          </span>
+        ) : (
+          <span style={{ fontSize: 11, color: "#cbd5e1" }}>— Add</span>
+        )}
+      </span>
+      {open && pos && createPortal(
+        <div style={{ position: "fixed", top: pos.top, left: pos.left, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 99999, minWidth: 180, overflow: "hidden", fontFamily: "inherit" }} onMouseDown={e => e.stopPropagation()}>
+          <div onMouseDown={() => { onPick(""); setOpen(false); }} style={{ padding: "7px 12px", fontSize: 12, color: "#94a3b8", cursor: "pointer", borderBottom: "1px solid #f8fafc" }}>— Clear</div>
+          {options.map(opt => (
+            <div key={opt} onMouseDown={() => { onPick(opt); setOpen(false); }} style={{ padding: "7px 12px", fontSize: 12, cursor: "pointer" }}>
+              <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 9999, fontWeight: 500, ...(styles[opt] ?? {}) }}>{opt}</span>
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 // ── Props ──────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -255,6 +311,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
   const [search, setSearch]             = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
+  const [investorTypeMap, setInvestorTypeMap] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId]     = useState<string | null>(null);
 
   // Panel animation
@@ -422,8 +479,12 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
   // Map DB companies → FundData, applying any user overrides from localStorage
   const fundList = useMemo<FundData[]>(
-    () => initialCompanies.map(c => ({ ...companyToFundData(c), ...(fundExtMap[c.id] ?? {}) })),
-    [initialCompanies, fundExtMap]
+    () => initialCompanies.map(c => ({
+      ...companyToFundData(c),
+      ...(fundExtMap[c.id] ?? {}),
+      ...(investorTypeMap[c.id] !== undefined ? { investorType: investorTypeMap[c.id] } : {}),
+    })),
+    [initialCompanies, fundExtMap, investorTypeMap]
   );
 
   // Ref so the selectedId useEffect always reads the latest fundList (avoids stale closure)
@@ -970,17 +1031,17 @@ export function FundsViewClient({ initialCompanies }: Props) {
                     </td>
 
                     {/* Investor Type */}
-                    <td className="px-3 py-2.5 min-w-[130px]">
-                      {fund.investorType ? (
-                        <span
-                          className="text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
-                          style={INVESTOR_TYPE_STYLES[fund.investorType] ?? { background: "#f1f5f9", color: "#475569" }}
-                        >
-                          {fund.investorType}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300 text-xs">—</span>
-                      )}
+                    <td className="px-3 py-2.5 min-w-[130px]" onClick={e => e.stopPropagation()}>
+                      <InlinePickerCell
+                        value={fund.investorType}
+                        options={["Accelerator","Corporate","Family Office","HNW","Venture Capital"]}
+                        styles={INVESTOR_TYPE_STYLES}
+                        onPick={async (val) => {
+                          setInvestorTypeMap(prev => ({ ...prev, [fund.id]: val }));
+                          const sb = createClient();
+                          await sb.from("companies").update({ investor_type: val || null }).eq("id", fund.id);
+                        }}
+                      />
                     </td>
 
                     {/* Stage focus */}
