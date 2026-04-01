@@ -484,7 +484,7 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
   }
 
   const domain = company?.website ? company.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "") : null;
-  const clearbitUrl = domain ? `https://logo.clearbit.com/${domain}` : null;
+  const clearbitUrl = domain ? `https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128` : null;
 
   return (
     <>

@@ -104,7 +104,7 @@ function CompanyLogo({ company, size = "md" }: { company: Company; size?: "sm" |
   const [err, setErr] = useState(false);
   const sz = size === "sm" ? "w-7 h-7 text-[9px]" : size === "lg" ? "w-12 h-12 text-sm" : "w-9 h-9 text-xs";
   const domain = company.website?.replace(/^https?:\/\//, "").split("/")[0];
-  const src = company.logo_url ?? (domain ? `https://logo.clearbit.com/${domain}` : null);
+  const src = company.logo_url ?? (domain ? `https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128` : null);
   useEffect(() => setErr(false), [src]);
   if (src && !err) return <img src={src} alt={company.name} onError={() => setErr(true)} className={`${sz} rounded-md object-contain bg-white border border-slate-200 p-0.5 flex-shrink-0`} />;
   return <div className={`${sz} rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0`}><span className="text-white font-bold">{getInitials(company.name)}</span></div>;

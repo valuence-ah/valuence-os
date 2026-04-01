@@ -12,12 +12,12 @@ import {
   Loader2, Link2, Star, User,
 } from "lucide-react";
 
-// ── Logo component — tries Clearbit from website domain, falls back to initials ─
+// ── Logo component — tries logo.dev from website domain, falls back to initials ─
 function FundLogoImg({ name, website, size = "sm" }: { name: string; website?: string | null; size?: "sm" | "md" }) {
   const [err, setErr] = useState(false);
   const sz = size === "sm" ? "w-7 h-7 text-[9px]" : "w-9 h-9 text-xs";
   const domain = website ? website.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] : null;
-  const src = domain ? `https://logo.clearbit.com/${domain}` : null;
+  const src = domain ? `https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128` : null;
   const initials = name.split(/\s+/).map(w => w[0] ?? "").join("").slice(0, 2).toUpperCase();
   if (src && !err) {
     return (

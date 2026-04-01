@@ -171,7 +171,7 @@ function CompanyAvatar({ name, website, size = "md" }: { name: string; website?:
   const sz = size === "sm" ? "w-7 h-7 text-[9px]" : size === "lg" ? "w-12 h-12 text-sm" : "w-9 h-9 text-xs";
   const grad = hashColor(name);
   const domain = website ? website.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] : null;
-  const src = domain ? `https://logo.clearbit.com/${domain}` : null;
+  const src = domain ? `https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128` : null;
   useEffect(() => setErr(false), [src]);
   if (src && !err) {
     return (
