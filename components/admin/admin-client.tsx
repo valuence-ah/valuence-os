@@ -1362,6 +1362,9 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive">("companies");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<ToastState>(null);
+  const [companyPage, setCompanyPage] = useState(0);
+  const [contactPage, setContactPage] = useState(0);
+  const PAGE_SIZE = 50;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Companies state ──────────────────────────────────────────────────────
@@ -2281,6 +2284,22 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
     });
   }, [contacts, search, contactFilters, contactSortColumns]);
 
+  // ─── Pagination ───────────────────────────────────────────────────────────
+
+  const pagedCompanies = useMemo(() => {
+    const start = companyPage * PAGE_SIZE;
+    return filteredCompanies.slice(start, start + PAGE_SIZE);
+  }, [filteredCompanies, companyPage, PAGE_SIZE]);
+
+  const pagedContacts = useMemo(() => {
+    const start = contactPage * PAGE_SIZE;
+    return filteredContacts.slice(start, start + PAGE_SIZE);
+  }, [filteredContacts, contactPage, PAGE_SIZE]);
+
+  // Reset to page 0 when filter results change
+  useEffect(() => { setCompanyPage(0); }, [filteredCompanies.length]);
+  useEffect(() => { setContactPage(0); }, [filteredContacts.length]);
+
   // ─── Row change handlers ──────────────────────────────────────────────────
 
   const handleCompanyRowsChange = useCallback(
@@ -2855,65 +2874,109 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         ) : isAiConfig ? (
           <AiConfigPanel />
         ) : isCompanies ? (
-          <DataGrid<CompanyRow, unknown, string>
-            columns={finalCompanyColumns}
-            rows={filteredCompanies}
-            onRowsChange={handleCompanyRowsChange}
-            rowKeyGetter={(row: CompanyRow) => row.id}
-            selectedRows={selectedCompanyRows}
-            onSelectedRowsChange={setSelectedCompanyRows}
-            sortColumns={companySortColumns}
-            onSortColumnsChange={setCompanySortColumns}
-            onColumnResize={(col, width) => {
-              const key = col.key as string;
-              setCompanyColWidths(prev => {
-                const next = { ...prev, [key]: width };
-                localStorage.setItem("admin_company_col_widths", JSON.stringify(next));
-                return next;
-              });
-            }}
-            onCellCopy={(args, event) => {
-              const val = (args.row as unknown as Record<string, unknown>)[args.column.key] ?? "";
-              event.clipboardData.setData("text/plain", String(val));
-              event.preventDefault();
-            }}
-            onCellPaste={(args) => ({
-              ...args.row,
-              [args.column.key]: args.row[args.column.key as keyof CompanyRow],
-            })}
-            className="rdg-light"
-            style={{ height: "calc(100vh - 108px)", blockSize: "calc(100vh - 108px)" }}
-          />
+          <div className="flex flex-col h-full">
+            <DataGrid<CompanyRow, unknown, string>
+              columns={finalCompanyColumns}
+              rows={pagedCompanies}
+              onRowsChange={handleCompanyRowsChange}
+              rowKeyGetter={(row: CompanyRow) => row.id}
+              selectedRows={selectedCompanyRows}
+              onSelectedRowsChange={setSelectedCompanyRows}
+              sortColumns={companySortColumns}
+              onSortColumnsChange={setCompanySortColumns}
+              onColumnResize={(col, width) => {
+                const key = col.key as string;
+                setCompanyColWidths(prev => {
+                  const next = { ...prev, [key]: width };
+                  localStorage.setItem("admin_company_col_widths", JSON.stringify(next));
+                  return next;
+                });
+              }}
+              onCellCopy={(args, event) => {
+                const val = (args.row as unknown as Record<string, unknown>)[args.column.key] ?? "";
+                event.clipboardData.setData("text/plain", String(val));
+                event.preventDefault();
+              }}
+              onCellPaste={(args) => ({
+                ...args.row,
+                [args.column.key]: args.row[args.column.key as keyof CompanyRow],
+              })}
+              className="rdg-light"
+              style={{ height: "calc(100vh - 140px)", blockSize: "calc(100vh - 140px)" }}
+            />
+            <div className="flex items-center justify-between px-4 py-2 border-t border-slate-200 bg-slate-50 text-xs text-slate-500">
+              <span>{filteredCompanies.length} total · showing {filteredCompanies.length === 0 ? 0 : companyPage * PAGE_SIZE + 1}–{Math.min((companyPage + 1) * PAGE_SIZE, filteredCompanies.length)}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCompanyPage(p => Math.max(0, p - 1))}
+                  disabled={companyPage === 0}
+                  className="px-2 py-1 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ← Prev
+                </button>
+                <span>Page {companyPage + 1} of {Math.max(1, Math.ceil(filteredCompanies.length / PAGE_SIZE))}</span>
+                <button
+                  onClick={() => setCompanyPage(p => Math.min(Math.ceil(filteredCompanies.length / PAGE_SIZE) - 1, p + 1))}
+                  disabled={(companyPage + 1) * PAGE_SIZE >= filteredCompanies.length}
+                  className="px-2 py-1 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          </div>
         ) : (
-          <DataGrid<ContactRow, unknown, string>
-            columns={finalContactColumns}
-            rows={filteredContacts}
-            onRowsChange={handleContactRowsChange}
-            rowKeyGetter={(row: ContactRow) => row.id}
-            selectedRows={selectedContactRows}
-            onSelectedRowsChange={setSelectedContactRows}
-            sortColumns={contactSortColumns}
-            onSortColumnsChange={setContactSortColumns}
-            onColumnResize={(col, width) => {
-              const key = col.key as string;
-              setContactColWidths(prev => {
-                const next = { ...prev, [key]: width };
-                localStorage.setItem("admin_contact_col_widths", JSON.stringify(next));
-                return next;
-              });
-            }}
-            onCellCopy={(args, event) => {
-              const val = (args.row as unknown as Record<string, unknown>)[args.column.key] ?? "";
-              event.clipboardData.setData("text/plain", String(val));
-              event.preventDefault();
-            }}
-            onCellPaste={(args) => ({
-              ...args.row,
-              [args.column.key]: args.row[args.column.key as keyof ContactRow],
-            })}
-            className="rdg-light"
-            style={{ height: "calc(100vh - 108px)", blockSize: "calc(100vh - 108px)" }}
-          />
+          <div className="flex flex-col h-full">
+            <DataGrid<ContactRow, unknown, string>
+              columns={finalContactColumns}
+              rows={pagedContacts}
+              onRowsChange={handleContactRowsChange}
+              rowKeyGetter={(row: ContactRow) => row.id}
+              selectedRows={selectedContactRows}
+              onSelectedRowsChange={setSelectedContactRows}
+              sortColumns={contactSortColumns}
+              onSortColumnsChange={setContactSortColumns}
+              onColumnResize={(col, width) => {
+                const key = col.key as string;
+                setContactColWidths(prev => {
+                  const next = { ...prev, [key]: width };
+                  localStorage.setItem("admin_contact_col_widths", JSON.stringify(next));
+                  return next;
+                });
+              }}
+              onCellCopy={(args, event) => {
+                const val = (args.row as unknown as Record<string, unknown>)[args.column.key] ?? "";
+                event.clipboardData.setData("text/plain", String(val));
+                event.preventDefault();
+              }}
+              onCellPaste={(args) => ({
+                ...args.row,
+                [args.column.key]: args.row[args.column.key as keyof ContactRow],
+              })}
+              className="rdg-light"
+              style={{ height: "calc(100vh - 140px)", blockSize: "calc(100vh - 140px)" }}
+            />
+            <div className="flex items-center justify-between px-4 py-2 border-t border-slate-200 bg-slate-50 text-xs text-slate-500">
+              <span>{filteredContacts.length} total · showing {filteredContacts.length === 0 ? 0 : contactPage * PAGE_SIZE + 1}–{Math.min((contactPage + 1) * PAGE_SIZE, filteredContacts.length)}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setContactPage(p => Math.max(0, p - 1))}
+                  disabled={contactPage === 0}
+                  className="px-2 py-1 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ← Prev
+                </button>
+                <span>Page {contactPage + 1} of {Math.max(1, Math.ceil(filteredContacts.length / PAGE_SIZE))}</span>
+                <button
+                  onClick={() => setContactPage(p => Math.min(Math.ceil(filteredContacts.length / PAGE_SIZE) - 1, p + 1))}
+                  disabled={(contactPage + 1) * PAGE_SIZE >= filteredContacts.length}
+                  className="px-2 py-1 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

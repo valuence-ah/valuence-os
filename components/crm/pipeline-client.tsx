@@ -65,6 +65,17 @@ const SECTOR_COLORS: Record<string, string> = {
   other:     "bg-slate-100 text-slate-600",
 };
 
+const STAGE_BORDER: Record<string, string> = {
+  identified_introduced: "border-l-slate-300",
+  first_meeting:         "border-l-blue-400",
+  discussion_in_process: "border-l-indigo-500",
+  due_diligence:         "border-l-violet-500",
+  passed:                "border-l-red-300",
+  portfolio:             "border-l-green-500",
+  tracking_hold:         "border-l-amber-500",
+  exited:                "border-l-gray-300",
+};
+
 const PRIORITY_COLORS: Record<string, string> = {
   High:   "bg-emerald-100 text-emerald-700",
   Medium: "bg-orange-100 text-orange-700",
@@ -1171,7 +1182,8 @@ export function PipelineClient({ initialCompanies }: Props) {
                   key={c.id}
                   onClick={() => { setSelectedId(c.id); setEditing(false); setConfirmDelete(false); }}
                   className={cn(
-                    "w-full flex items-start gap-3 px-4 py-3 text-left border-b border-slate-100 hover:bg-slate-50 transition-colors relative",
+                    "w-full flex items-start gap-3 px-4 py-3 text-left border-b border-slate-100 hover:bg-slate-50 transition-colors relative border-l-2",
+                    STAGE_BORDER[c.deal_status ?? ""] ?? "border-l-slate-200",
                     isActive && "bg-blue-50 hover:bg-blue-50"
                   )}
                 >

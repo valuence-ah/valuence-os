@@ -1270,6 +1270,34 @@ export function LpViewClient({ initialCompanies }: Props) {
         })()}
       </div>
 
+      {/* ── Fundraising Summary Bar ─────────────────────────────────────── */}
+      <div className="flex items-center gap-6 px-6 py-3 bg-slate-50 border-b border-slate-200 text-xs">
+        <div className="flex items-center gap-1.5">
+          <span className="font-semibold text-slate-700">{companies.length}</span>
+          <span className="text-slate-500">Total LPs</span>
+        </div>
+        <div className="w-px h-4 bg-slate-200" />
+        {Object.entries(
+          companies.reduce((acc, lp) => {
+            const stage = lp.lp_stage ?? "Lead";
+            acc[stage] = (acc[stage] ?? 0) + 1;
+            return acc;
+          }, {} as Record<string, number>)
+        )
+          .sort(([a], [b]) => {
+            const order = LP_STAGE_OPTIONS as readonly string[];
+            return (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b));
+          })
+          .slice(0, 6)
+          .map(([stage, count]) => (
+            <div key={stage} className="flex items-center gap-1">
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STAGE_DOT[stage] ?? "bg-slate-300"}`} />
+              <span className="font-medium text-slate-700">{count}</span>
+              <span className="text-slate-400">{stage}</span>
+            </div>
+          ))}
+      </div>
+
       {/* ── Toolbar ────────────────────────────────────────────────────────── */}
       <div className="px-5 py-3 border-b border-slate-200 bg-white flex items-center gap-3 flex-wrap">
         <div className="relative">
