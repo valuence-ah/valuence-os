@@ -632,6 +632,22 @@ const InvestorTypeCell = makePortalSingleSelectCell<CompanyRow>(
   INVESTOR_TYPE_COLORS
 );
 
+const LP_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
+  "Corporate":          { bg: "#fff7ed", color: "#c2410c" },
+  "Endowment":          { bg: "#f0fdf4", color: "#15803d" },
+  "Family Office":      { bg: "#f5f3ff", color: "#7c3aed" },
+  "Financial Institution": { bg: "#eff6ff", color: "#1d4ed8" },
+  "Fund of Fund":       { bg: "#fdf4ff", color: "#86198f" },
+  "Other":              { bg: "#f8fafc", color: "#64748b" },
+  "Pension Fund":       { bg: "#fff1f2", color: "#be123c" },
+  "Sovereign Wealth":   { bg: "#f0f9ff", color: "#0369a1" },
+};
+const LpTypeCell = makePortalSingleSelectCell<CompanyRow>(
+  "companies", "lp_type",
+  ["Corporate","Endowment","Family Office","Financial Institution","Fund of Fund","Other","Pension Fund","Sovereign Wealth"],
+  LP_TYPE_COLORS
+);
+
 const STRATEGIC_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   "Corporate":   { bg: "#fff7ed", color: "#c2410c" },
   "Foundation":  { bg: "#f0fdf4", color: "#15803d" },
@@ -1770,10 +1786,15 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       {
         key: "lp_type",
         name: "LP Type",
-        width: 120,
+        width: 150,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<CompanyRow>(["Lead","Initial Meeting","Discussion in Process","Due Diligence","Committed","Passed"]),
+        editable: false,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <LpTypeCell row={row} onSaved={(id, val) => {
+            setCompanies(prev => prev.map(c => c.id === id ? { ...c, lp_type: val || null } : c));
+          }} />
+        ),
       },
       {
         key: "fund_focus",

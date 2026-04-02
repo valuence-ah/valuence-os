@@ -20,18 +20,18 @@ const OWNERS = ["Andrew", "Gene", "Lance"] as const;
 type Owner = typeof OWNERS[number];
 
 const LP_TYPE_OPTIONS = [
-  "Family Office", "Fund of Fund", "Strategic", "Sovereign Wealth",
-  "Pension Fund", "Endowment", "Financial Institution", "Other",
+  "Corporate", "Endowment", "Family Office", "Financial Institution",
+  "Fund of Fund", "Other", "Pension Fund", "Sovereign Wealth",
 ] as const;
 const LP_TYPE_BADGE: Record<string, string> = {
-  "Family Office":        "bg-purple-100 text-purple-700",
-  "Fund of Fund":         "bg-pink-100 text-pink-700",
-  "Strategic":            "bg-teal-100 text-teal-700",
-  "Sovereign Wealth":     "bg-amber-100 text-amber-700",
-  "Pension Fund":         "bg-orange-100 text-orange-700",
+  "Corporate":            "bg-orange-100 text-orange-700",
   "Endowment":            "bg-lime-100 text-lime-700",
+  "Family Office":        "bg-purple-100 text-purple-700",
   "Financial Institution":"bg-sky-100 text-sky-700",
+  "Fund of Fund":         "bg-pink-100 text-pink-700",
   "Other":                "bg-slate-100 text-slate-600",
+  "Pension Fund":         "bg-red-100 text-red-700",
+  "Sovereign Wealth":     "bg-amber-100 text-amber-700",
 };
 function getLpTypeBadge(t: string | null) { return LP_TYPE_BADGE[t ?? ""] ?? "bg-gray-100 text-gray-600"; }
 
