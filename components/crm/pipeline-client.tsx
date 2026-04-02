@@ -2133,7 +2133,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                 // Merge interactions + document uploads into a single timeline
                 type TEvent = { id: string; kind: string; title: string; body?: string | null; date: string; url?: string | null; meta?: string | null; contact_ids?: string[] | null };
                 const events: TEvent[] = [
-                  ...interactions.map(i => ({
+                  ...interactions.filter(i => (i.type as string) !== "deck_upload").map(i => ({
                     id: i.id,
                     kind: i.type,
                     title: i.subject ?? (i.type === "note" ? "Note" : i.type === "meeting" ? "Meeting" : i.type === "email" ? "Email" : "Interaction"),
@@ -2144,13 +2144,14 @@ export function PipelineClient({ initialCompanies }: Props) {
                     contact_ids: (i as { contact_ids?: string[] }).contact_ids ?? null,
                   })),
                   // Drive-synced docs (google_drive_url set) are shown in Data Room only — not here
-                  ...documents.filter(d => !d.google_drive_url).map(d => ({
+                  // Deck documents are shown in the Documents section only — not here
+                  ...documents.filter(d => !d.google_drive_url && d.type !== "deck").map(d => ({
                     id: d.id,
-                    kind: d.type === "deck" ? "deck" : "document",
+                    kind: "document",
                     title: d.name,
                     body: null,
                     date: d.created_at,
-                    url: d.storage_path ? supabase.storage.from(d.type === "deck" ? "decks" : "transcripts").getPublicUrl(d.storage_path).data.publicUrl : null,
+                    url: d.storage_path ? supabase.storage.from("transcripts").getPublicUrl(d.storage_path).data.publicUrl : null,
                     meta: null,
                   })),
                   ...emailEvents.map(e => ({
@@ -2168,7 +2169,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl">
                     <Calendar size={24} className="mx-auto mb-2 text-slate-300" />
                     <p className="text-sm text-slate-400 mb-1">No activity yet</p>
-                    <p className="text-xs text-slate-300">Upload a deck, add a note, or connect Outlook & Fireflies</p>
+                    <p className="text-xs text-slate-300">Add a note or connect Outlook & Fireflies to see activity here</p>
                   </div>
                 );
 

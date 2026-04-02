@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
+import { useColumnPrefs } from "@/lib/use-column-prefs";
 import {
   Search, X, Building2, TrendingUp, Users,
   CheckCircle2, Zap, ChevronRight, ExternalLink, MapPin, Plus, Check, Sparkles,
@@ -508,16 +509,30 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [stageFilter, setStageFilter]   = useState<string | null>(null);
   const [sectorFilter, setSectorFilter] = useState<string | null>(null);
 
-  // Column widths — persisted to localStorage
+  // Column widths — persisted to Supabase via useColumnPrefs
   const COL_KEYS = ["Fund", "Type", "Investor Type", "Stage focus", "Sector", "Thesis alignment", "Check size", "Co-invest status", "Rel. health", "Portfolio overlap", "Deal flow", "Owner", "Last contact", "Next action", "City", "Country"] as const;
   type ColKey = (typeof COL_KEYS)[number];
-  const [colWidths, setColWidths] = useState<Partial<Record<ColKey, number>>>(() => {
-    try {
-      const raw = localStorage.getItem("funds_col_widths");
-      return raw ? JSON.parse(raw) as Partial<Record<ColKey, number>> : {};
-    } catch { return {}; }
-  });
-  const colResizeRef = useRef<{ key: ColKey; startX: number; startW: number } | null>(null);
+  const { columnWidths, setColumnWidth } = useColumnPrefs("crm_funds");
+  // Derive colWidths from hook (keyed by column name)
+  const colWidths = columnWidths as Partial<Record<ColKey, number>>;
+
+  function startResize(colName: string, currentWidth: number) {
+    return (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startW = currentWidth;
+      function onMove(ev: MouseEvent) {
+        setColumnWidth(colName, Math.max(60, Math.min(500, startW + (ev.clientX - startX))));
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    };
+  }
 
   // Per-fund user-editable overrides (loaded from localStorage on mount)
   const [fundExtMap, setFundExtMap] = useState<Record<string, Partial<FundData>>>({});
@@ -1011,34 +1026,14 @@ export function FundsViewClient({ initialCompanies }: Props) {
                   <th
                     key={col}
                     className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap relative select-none"
-                    style={colWidths[col] ? { width: colWidths[col], minWidth: colWidths[col] } : undefined}
+                    style={{ width: colWidths[col] ?? 140, minWidth: 60 }}
                   >
                     {col}
-                    {/* Drag handle on right border */}
-                    <span
-                      onMouseDown={e => {
-                        e.preventDefault();
-                        const th = (e.target as HTMLElement).parentElement as HTMLTableCellElement;
-                        colResizeRef.current = { key: col, startX: e.clientX, startW: th.offsetWidth };
-                        function onMove(ev: MouseEvent) {
-                          if (!colResizeRef.current) return;
-                          const delta = ev.clientX - colResizeRef.current.startX;
-                          const newW = Math.max(60, colResizeRef.current.startW + delta);
-                          setColWidths(prev => {
-                            const next = { ...prev, [colResizeRef.current!.key]: newW };
-                            try { localStorage.setItem("funds_col_widths", JSON.stringify(next)); } catch {}
-                            return next;
-                          });
-                        }
-                        function onUp() {
-                          colResizeRef.current = null;
-                          document.removeEventListener("mousemove", onMove);
-                          document.removeEventListener("mouseup", onUp);
-                        }
-                        document.addEventListener("mousemove", onMove);
-                        document.addEventListener("mouseup", onUp);
-                      }}
-                      style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 5, cursor: "col-resize", zIndex: 1 }}
+                    {/* Resize handle on right border */}
+                    <div
+                      onMouseDown={startResize(col, colWidths[col] ?? 140)}
+                      style={{ position: "absolute", right: 0, top: 0, height: "100%", width: 4, cursor: "col-resize" }}
+                      className="hover:bg-teal-400 active:bg-teal-600"
                     />
                   </th>
                 ))}

@@ -13,12 +13,32 @@ export type FormattedSummary = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Strip bullet/numbered prefixes and filter blank lines. */
+/** Strip common markdown formatting from a string, leaving plain readable text. */
+function stripMarkdown(text: string): string {
+  return text
+    // Remove **bold** and __bold__
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    // Remove *italic* and _italic_
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/_(.*?)_/g, "$1")
+    // Remove ### headings (keep the text)
+    .replace(/^#{1,6}\s+/gm, "")
+    // Remove leading "- " bullet characters (keep the text)
+    .replace(/^[-*•]\s+/gm, "")
+    // Collapse 3+ newlines into 2
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Strip bullet/numbered prefixes, filter blank lines, and strip markdown from each item. */
 function parseBullets(text: string): string[] {
   return text
     .split("\n")
     .map(l => l.replace(/^[\s\t]*[-*•\u2022]|\d+[.)]\s*/, "").trim())
-    .filter(l => l.length > 2);
+    .filter(l => l.length > 2)
+    .map(stripMarkdown)
+    .filter(l => l.length > 0);
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -43,12 +63,14 @@ export function formatMeetingSummary(raw: string | null | undefined): FormattedS
 
     if (bulletLines.length >= 3) {
       const firstBlank = raw.indexOf("\n\n");
-      const overview = firstBlank > 0 ? raw.slice(0, firstBlank).trim() : null;
+      const overviewRaw = firstBlank > 0 ? raw.slice(0, firstBlank).trim() : null;
       const topics = bulletLines
         .map(l => l.replace(/^[\s\t]*[-*•\u2022]|\d+[.)]\s*/, "").trim())
+        .filter(Boolean)
+        .map(stripMarkdown)
         .filter(Boolean);
       return {
-        overview,
+        overview: overviewRaw ? stripMarkdown(overviewRaw) : null,
         keyDiscussionTopics: topics,
         decisionsMade: [],
         nextSteps: [],
@@ -58,7 +80,7 @@ export function formatMeetingSummary(raw: string | null | undefined): FormattedS
     }
 
     // No recognisable structure — return as raw fallback
-    return { ...empty, rawFallback: raw };
+    return { ...empty, rawFallback: stripMarkdown(raw) };
   }
 
   // ── Step 2 — split on headers, extract section text ───────────────────────
@@ -87,7 +109,7 @@ export function formatMeetingSummary(raw: string | null | undefined): FormattedS
     const header    = matches[i].header.toLowerCase();
 
     if (/overview|summary|about/i.test(header)) {
-      result.overview = text || null;
+      result.overview = text ? stripMarkdown(text) : null;
     } else if (/discussion|topic|talked|covered/i.test(header)) {
       result.keyDiscussionTopics = parseBullets(text);
     } else if (/decision|agreed|conclusion/i.test(header)) {

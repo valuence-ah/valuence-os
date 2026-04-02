@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact, Interaction } from "@/lib/types";
 import { cn, formatDate, formatCurrency, getInitials, timeAgo } from "@/lib/utils";
+import { useColumnPrefs } from "@/lib/use-column-prefs";
 import {
   Search, X, ExternalLink, Mail, Phone, User, MapPin, ChevronRight,
   Download, Plus, Target, TrendingUp, DollarSign,
@@ -506,18 +507,28 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [showAddLPContact, setShowAddLPContact] = useState(false);
   const [savingLP, setSavingLP]         = useState(false);
 
-  // Resizable columns
-  const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_COL_WIDTHS);
-  const resizingCol = useRef<{ col: string; startX: number; startW: number } | null>(null);
+  // Resizable columns — persisted to Supabase via useColumnPrefs
+  const { columnWidths, setColumnWidth } = useColumnPrefs("crm_lps");
+  const colWidths: Record<string, number> = { ...DEFAULT_COL_WIDTHS, ...columnWidths };
   const activityFormRef = useRef<HTMLDivElement>(null);
   const linkSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function onResizeStart(col: string, e: React.MouseEvent) {
-    e.preventDefault();
-    resizingCol.current = { col, startX: e.clientX, startW: colWidths[col] };
-    function onMove(ev: MouseEvent) { if (!resizingCol.current) return; const diff = ev.clientX - resizingCol.current.startX; setColWidths(prev => ({ ...prev, [resizingCol.current!.col]: Math.max(50, resizingCol.current!.startW + diff) })); }
-    function onUp() { resizingCol.current = null; document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); }
-    document.addEventListener("mousemove", onMove); document.addEventListener("mouseup", onUp);
+  function startResize(colName: string, currentWidth: number) {
+    return (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startW = currentWidth;
+      function onMove(ev: MouseEvent) {
+        setColumnWidth(colName, Math.max(60, Math.min(500, startW + (ev.clientX - startX))));
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    };
   }
 
   // Remote data
@@ -1414,14 +1425,14 @@ export function LpViewClient({ initialCompanies }: Props) {
                     const isSorted = sortCol === col;
                     const SortIcon = isSorted ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
                     return (
-                      <th key={col} className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 relative select-none">
+                      <th key={col} className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 relative select-none" style={{ width: colWidths[col] ?? 120, minWidth: 60 }}>
                         <button className="flex items-center gap-1 hover:text-slate-800 transition-colors truncate"
                           onClick={() => { if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortCol(col); setSortDir("asc"); } }}>
                           <span className="truncate">{col}</span>
                           <SortIcon size={10} className={isSorted ? "text-blue-500 flex-shrink-0" : "text-slate-300 flex-shrink-0"} />
                         </button>
-                        <div className="absolute right-0 top-0 h-full w-2 cursor-col-resize group flex items-center justify-center" onMouseDown={e => onResizeStart(col, e)}>
-                          <div className="w-px h-4 bg-slate-300 group-hover:bg-blue-400 transition-colors" />
+                        <div className="absolute right-0 top-0 h-full w-2 cursor-col-resize group flex items-center justify-center" onMouseDown={startResize(col, colWidths[col] ?? 120)}>
+                          <div className="w-px h-4 bg-slate-300 group-hover:bg-teal-400 transition-colors" />
                         </div>
                       </th>
                     );

@@ -5,7 +5,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import {
   X, FileText, Building2, Users, Search,
-  ChevronRight, Clock, Pencil, Plus, Trash2, CheckSquare,
+  ChevronRight, Clock, Pencil, Plus, Trash2,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
@@ -157,7 +157,7 @@ function SummaryTab({ meeting }: { meeting: MeetingRow }) {
           <div>
             <SectionLabel>Meeting Overview</SectionLabel>
             {fmt.overview ? (
-              <p className="text-sm font-semibold text-gray-700 leading-relaxed whitespace-pre-wrap">
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
                 {fmt.overview}
               </p>
             ) : (
@@ -169,13 +169,11 @@ function SummaryTab({ meeting }: { meeting: MeetingRow }) {
           {fmt.keyDiscussionTopics.length > 0 && (
             <div>
               <SectionLabel>Key Discussion Topics</SectionLabel>
-              <div className="space-y-1.5">
+              <ul className="list-disc list-inside space-y-1">
                 {fmt.keyDiscussionTopics.map((topic, i) => (
-                  <div key={i} className="bg-white rounded-lg border border-gray-100 shadow-sm p-3">
-                    <p className="text-sm text-gray-700">{topic}</p>
-                  </div>
+                  <li key={i} className="text-sm text-gray-700 leading-relaxed">{topic}</li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
 
@@ -183,14 +181,11 @@ function SummaryTab({ meeting }: { meeting: MeetingRow }) {
           {fmt.decisionsMade.length > 0 && (
             <div>
               <SectionLabel>Decisions Made</SectionLabel>
-              <div className="space-y-1">
+              <ul className="list-disc list-inside space-y-1">
                 {fmt.decisionsMade.map((d, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="text-emerald-500 font-bold text-sm flex-shrink-0">✓</span>
-                    <p className="text-sm text-gray-700 leading-snug">{d}</p>
-                  </div>
+                  <li key={i} className="text-sm text-gray-700 leading-relaxed">{d}</li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
 
@@ -198,14 +193,11 @@ function SummaryTab({ meeting }: { meeting: MeetingRow }) {
           <div>
             <SectionLabel>Next Steps</SectionLabel>
             {displayNextSteps.length > 0 ? (
-              <div className="space-y-1.5">
+              <ol className="list-decimal list-inside space-y-1">
                 {displayNextSteps.map((item, i) => (
-                  <div key={i} className="flex items-start gap-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
-                    <CheckSquare size={13} className="mt-0.5 text-amber-500 flex-shrink-0" />
-                    <p className="text-sm text-slate-700 leading-snug">{item}</p>
-                  </div>
+                  <li key={i} className="text-sm text-gray-700 leading-relaxed">{item}</li>
                 ))}
-              </div>
+              </ol>
             ) : (
               <p className="text-sm text-slate-400 italic">No next steps recorded.</p>
             )}

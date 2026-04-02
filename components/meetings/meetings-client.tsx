@@ -1,11 +1,11 @@
 "use client";
 // ─── Meetings Client (Fireflies Integration) ──────────────────────────────────
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   Search, RefreshCw, ChevronDown, ChevronRight,
   Building2, Calendar, CheckSquare, Users,
-  AlertCircle, X, Clock, Trash2, Archive,
+  AlertCircle, X, Clock, Archive,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
@@ -78,22 +78,35 @@ function AttendeeChips({ attendees }: { attendees: unknown[] | null }) {
 
 interface MeetingCardProps {
   meeting: MeetingRow;
+  selected: boolean;
+  onToggle: (id: string, checked: boolean) => void;
   onResolve: (m: MeetingRow) => void;
   onOpenPanel: (m: MeetingRow) => void;
-  onDelete: (id: string) => void;
   onArchive: (id: string) => void;
 }
 
-function MeetingCard({ meeting, onResolve, onOpenPanel, onDelete, onArchive }: MeetingCardProps) {
+function MeetingCard({ meeting, selected, onToggle, onResolve, onOpenPanel, onArchive }: MeetingCardProps) {
   const [expanded, setExpanded] = useState(false);
   const hasTranscript = !!(meeting.transcript_text || meeting.transcript_url);
   const actionCount   = meeting.action_items?.length ?? 0;
   const needsResolve  = meeting.resolution_status === "partial" || meeting.resolution_status === "unresolved";
 
   return (
-    <div className="group border border-slate-200 rounded-xl overflow-hidden bg-white hover:border-slate-300 transition-colors">
+    <div className={cn(
+      "group border rounded-xl overflow-hidden bg-white hover:border-slate-300 transition-colors",
+      selected ? "border-teal-300 bg-teal-50/30" : "border-slate-200"
+    )}>
       {/* Summary row */}
       <div className="px-4 py-3 flex items-center gap-3">
+        {/* Row checkbox */}
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={e => onToggle(meeting.id, e.target.checked)}
+          onClick={e => e.stopPropagation()}
+          className="w-4 h-4 rounded border-gray-300 text-teal-600 cursor-pointer flex-shrink-0"
+        />
+
         {/* Expand */}
         <button onClick={() => setExpanded(e => !e)} className="text-slate-400 flex-shrink-0 hover:text-slate-600">
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -157,22 +170,9 @@ function MeetingCard({ meeting, onResolve, onOpenPanel, onDelete, onArchive }: M
             if (!confirm("Archive this meeting? It will be hidden and won't reappear when synced.")) return;
             onArchive(meeting.id);
           }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-amber-500 transition-colors flex-shrink-0 p-1"
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-amber-500 flex-shrink-0 p-1"
         >
           <Archive size={13} />
-        </button>
-
-        {/* Delete button — visible on row hover */}
-        <button
-          title="Delete meeting"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!confirm("Delete this meeting? This cannot be undone.")) return;
-            onDelete(meeting.id);
-          }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 transition-colors flex-shrink-0 p-1"
-        >
-          <Trash2 size={13} />
         </button>
 
         {/* Resolve button */}
@@ -243,7 +243,7 @@ function MeetingCard({ meeting, onResolve, onOpenPanel, onDelete, onArchive }: M
   );
 }
 
-// ── Simple message toast (deletion) ──────────────────────────────────────────
+// ── Simple message toast ──────────────────────────────────────────────────────
 
 function MessageToast({ message, onClose }: { message: string; onClose: () => void }) {
   useEffect(() => {
@@ -309,7 +309,11 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
   const [toast, setToast]             = useState<ToastData | null>(null);
   const [resolveMeeting, setResolveMeeting] = useState<MeetingRow | null>(null);
   const [panelMeeting, setPanelMeeting]     = useState<MeetingRow | null>(null);
-  const [deleteToast, setDeleteToast]       = useState<string | null>(null);
+  const [statusToast, setStatusToast]       = useState<string | null>(null);
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   // Stats
   const totalMeetings   = meetings.length;
@@ -358,6 +362,15 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
     return rows;
   }, [meetings, search, sourceFilter, resolutionFilter, companyFilter, dateFrom, dateTo, hasActionItems, hasTranscript]);
 
+  // Keep selectAll checkbox indeterminate state in sync
+  useEffect(() => {
+    const el = selectAllRef.current;
+    if (!el) return;
+    const visibleIds = filtered.map(m => m.id);
+    const selectedVisible = visibleIds.filter(id => selectedIds.has(id));
+    el.indeterminate = selectedVisible.length > 0 && selectedVisible.length < visibleIds.length;
+  }, [selectedIds, filtered]);
+
   // Time since last sync
   function timeSince(iso: string): string {
     const ms = Date.now() - new Date(iso).getTime();
@@ -401,25 +414,58 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
     );
   }
 
-  const handleDelete = useCallback(async (id: string) => {
-    const res = await fetch(`/api/meetings/${id}`, { method: "DELETE" });
-    if (!res.ok) { alert("Failed to delete meeting"); return; }
-    setMeetings(prev => prev.filter(m => m.id !== id));
-    if (panelMeeting?.id === id) setPanelMeeting(null);
-    setDeleteToast("Meeting deleted");
-  }, [panelMeeting]);
-
   const handleArchive = useCallback(async (id: string) => {
     const res = await fetch(`/api/meetings/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ archived: true }),
     });
-    if (!res.ok) { setDeleteToast("Failed to archive meeting"); return; }
+    if (!res.ok) { setStatusToast("Failed to archive meeting"); return; }
     setMeetings(prev => prev.filter(m => m.id !== id));
     if (panelMeeting?.id === id) setPanelMeeting(null);
-    setDeleteToast("Meeting archived");
+    // Deselect if was selected
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setStatusToast("Meeting archived");
   }, [panelMeeting]);
+
+  const handleToggleSelect = useCallback((id: string, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback((checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(filtered.map(m => m.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  }, [filtered]);
+
+  const handleBulkArchive = useCallback(async () => {
+    const count = selectedIds.size;
+    if (!confirm(`Archive ${count} meeting${count > 1 ? "s" : ""}? They will be hidden and won't reappear when synced.`)) return;
+
+    await Promise.all([...selectedIds].map(id =>
+      fetch(`/api/meetings/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived: true }),
+      })
+    ));
+
+    setMeetings(prev => prev.filter(m => !selectedIds.has(m.id)));
+    if (panelMeeting && selectedIds.has(panelMeeting.id)) setPanelMeeting(null);
+    setSelectedIds(new Set());
+    setStatusToast(`${count} meeting${count > 1 ? "s" : ""} archived`);
+  }, [selectedIds, panelMeeting]);
 
   function handlePanelUpdate(patch: Partial<MeetingRow> & { id: string }) {
     setMeetings(prev =>
@@ -443,6 +489,9 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
       onClick: needsReviewCount > 0 ? () => setResolutionFilter("review") : undefined,
     },
   ];
+
+  // Determine "select all" checked state for visible rows
+  const allVisibleSelected = filtered.length > 0 && filtered.every(m => selectedIds.has(m.id));
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
@@ -533,6 +582,28 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
         </button>
       </div>
 
+      {/* Bulk action bar — only when meetings are selected */}
+      {selectedIds.size > 0 && (
+        <div className="bg-teal-50 border-b border-teal-200 px-6 py-2 flex items-center gap-3 text-sm">
+          <span className="text-teal-800 font-medium text-xs">
+            {selectedIds.size} meeting{selectedIds.size > 1 ? "s" : ""} selected
+          </span>
+          <button
+            onClick={handleBulkArchive}
+            className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            <Archive size={11} />
+            Archive Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-xs text-teal-600 hover:text-teal-800 font-medium"
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {/* Meeting list */}
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
         {filtered.length === 0 ? (
@@ -544,16 +615,30 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
             </p>
           </div>
         ) : (
-          filtered.map(m => (
-            <MeetingCard
-              key={m.id}
-              meeting={m}
-              onResolve={setResolveMeeting}
-              onOpenPanel={setPanelMeeting}
-              onDelete={handleDelete}
-              onArchive={handleArchive}
-            />
-          ))
+          <>
+            {/* Select all row */}
+            <div className="flex items-center gap-3 px-4 py-1">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={e => handleSelectAll(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-teal-600 cursor-pointer flex-shrink-0"
+              />
+              <span className="text-xs text-slate-400">Select all</span>
+            </div>
+            {filtered.map(m => (
+              <MeetingCard
+                key={m.id}
+                meeting={m}
+                selected={selectedIds.has(m.id)}
+                onToggle={handleToggleSelect}
+                onResolve={setResolveMeeting}
+                onOpenPanel={setPanelMeeting}
+                onArchive={handleArchive}
+              />
+            ))}
+          </>
         )}
       </div>
 
@@ -575,9 +660,9 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
         />
       )}
 
-      {/* Delete toast */}
-      {deleteToast && (
-        <MessageToast message={deleteToast} onClose={() => setDeleteToast(null)} />
+      {/* Status toast */}
+      {statusToast && (
+        <MessageToast message={statusToast} onClose={() => setStatusToast(null)} />
       )}
 
       {/* Sync toast */}

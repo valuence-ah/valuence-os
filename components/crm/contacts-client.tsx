@@ -130,6 +130,169 @@ function getRelStage(lastContactDate: string | null | undefined): RelStage {
   return "dormant";
 }
 
+// ── CompanyCell ───────────────────────────────────────────────────────────────
+
+interface CompanyCellProps {
+  contactId: string;
+  companyId: string | null;
+  companyName: string | null;
+  onSaved: (newCompanyId: string, newCompanyName: string) => void;
+}
+
+function CompanyCell({ contactId, companyId: _companyId, companyName, onSaved }: CompanyCellProps) {
+  const [editing, setEditing] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Array<{ id: string; name: string; type: string | null }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [flash, setFlash] = useState<"saved" | "failed" | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Click outside to close
+  useEffect(() => {
+    if (!editing) return;
+    function handle(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setEditing(false);
+        setQuery("");
+        setResults([]);
+      }
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [editing]);
+
+  // Debounced search
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!query.trim()) { setResults([]); return; }
+    timerRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/search/companies?q=${encodeURIComponent(query)}&limit=8`);
+        const data = await r.json() as Array<{ id: string; name: string; type: string | null }>;
+        setResults(Array.isArray(data) ? data.slice(0, 8) : []);
+      } catch { setResults([]); }
+      finally { setLoading(false); }
+    }, 200);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [query]);
+
+  // Auto-focus when editing opens
+  useEffect(() => {
+    if (editing) {
+      setQuery("");
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [editing]);
+
+  async function selectCompany(id: string, name: string) {
+    setEditing(false);
+    setQuery("");
+    setResults([]);
+    try {
+      const res = await fetch(`/api/contacts/${contactId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: id }),
+      });
+      if (!res.ok) throw new Error("failed");
+      onSaved(id, name);
+      setFlash("saved");
+    } catch {
+      setFlash("failed");
+    }
+    setTimeout(() => setFlash(null), 1500);
+  }
+
+  async function createAndSelect(name: string) {
+    setEditing(false);
+    setQuery("");
+    setResults([]);
+    try {
+      const res = await fetch("/api/companies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, type: "startup" }),
+      });
+      if (!res.ok) throw new Error("failed");
+      const co = await res.json() as { id: string; name: string };
+      await selectCompany(co.id, co.name);
+    } catch {
+      setFlash("failed");
+      setTimeout(() => setFlash(null), 1500);
+    }
+  }
+
+  const exactMatch = results.some(r => r.name.toLowerCase() === query.toLowerCase());
+
+  return (
+    <div ref={containerRef} className="relative min-w-0">
+      {flash === "saved" && (
+        <span className="absolute inset-0 flex items-center px-2 text-xs text-emerald-600 font-medium bg-emerald-50 rounded z-10">Saved</span>
+      )}
+      {flash === "failed" && (
+        <span className="absolute inset-0 flex items-center px-2 text-xs text-red-600 font-medium bg-red-50 rounded z-10">Failed</span>
+      )}
+      {!flash && !editing && (
+        <button
+          onClick={() => setEditing(true)}
+          className="w-full text-left text-xs text-slate-700 hover:text-blue-600 truncate cursor-pointer px-1 py-0.5 rounded hover:bg-blue-50 transition-colors"
+          title={companyName ?? "Click to assign company"}
+        >
+          {companyName ?? <span className="text-slate-300 italic">—</span>}
+        </button>
+      )}
+      {!flash && editing && (
+        <>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === "Escape") { setEditing(false); setQuery(""); setResults([]); } }}
+            placeholder={companyName ?? "Search company…"}
+            className="w-full border border-teal-400 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
+          />
+          {(results.length > 0 || (query.trim() && !loading)) && (
+            <div className="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto mt-1 w-64 min-w-full">
+              {results.map(co => (
+                <button
+                  key={co.id}
+                  onMouseDown={e => { e.preventDefault(); void selectCompany(co.id, co.name); }}
+                  className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-xs w-full text-left"
+                >
+                  <img
+                    src={`https://img.logo.dev/${co.name.toLowerCase().replace(/\s+/g, "")}.com?token=pk_HB0fMSZ0SZO9X3jdNFBfGg`}
+                    alt=""
+                    className="w-4 h-4 rounded object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                  <span className="flex-1 truncate text-slate-800">{co.name}</span>
+                  {co.type && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">{co.type}</span>
+                  )}
+                </button>
+              ))}
+              {!exactMatch && query.trim() && (
+                <button
+                  onMouseDown={e => { e.preventDefault(); void createAndSelect(query.trim()); }}
+                  className="flex items-center gap-2 px-3 py-2 hover:bg-teal-50 cursor-pointer text-xs w-full text-left text-teal-700 border-t border-gray-100"
+                >
+                  <span>+ Create New: {query.trim()}</span>
+                </button>
+              )}
+              {loading && (
+                <div className="px-3 py-2 text-xs text-slate-400">Searching…</div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function ContactsClient({
@@ -677,10 +840,18 @@ export function ContactsClient({
                   )}
                   {/* Company */}
                   {visibleCols.includes("company") && (
-                    <td className="px-4 py-2.5 max-w-[140px]">
-                      {c.company
-                        ? <span className="text-[12px] text-slate-700 font-medium truncate block max-w-[130px]">{c.company.name}</span>
-                        : <span className="text-slate-300 text-xs">—</span>}
+                    <td className="px-4 py-2.5 max-w-[140px]" onClick={e => e.stopPropagation()}>
+                      <CompanyCell
+                        contactId={c.id}
+                        companyId={c.company_id ?? null}
+                        companyName={c.company?.name ?? null}
+                        onSaved={(newId, newName) => {
+                          setContacts(prev => prev.map(ct => ct.id === c.id
+                            ? { ...ct, company_id: newId, company: { ...(ct.company ?? {} as import("@/lib/types").Company), id: newId, name: newName } as import("@/lib/types").Company }
+                            : ct
+                          ));
+                        }}
+                      />
                     </td>
                   )}
                   {/* Email */}
