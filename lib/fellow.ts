@@ -1,8 +1,25 @@
 // ─── Fellow API Client ─────────────────────────────────────────────────────────
-// Base URL: https://api.fellow.app/v2
-// Auth: Authorization: Bearer {FELLOW_API_KEY}
+// Base URL: https://{FELLOW_WORKSPACE}.fellow.app/api/v1
+// Auth: X-API-KEY: {FELLOW_API_KEY}
+// Docs: https://developers.fellow.ai/reference/introduction
 
-const FELLOW_BASE = "https://api.fellow.app/v2";
+function fellowBase(): string {
+  const ws = process.env.FELLOW_WORKSPACE;
+  if (!ws) throw new Error("FELLOW_WORKSPACE not configured");
+  return `https://${ws}.fellow.app/api/v1`;
+}
+
+function fellowHeaders(): HeadersInit {
+  const key = process.env.FELLOW_API_KEY;
+  if (!key) throw new Error("FELLOW_API_KEY not configured");
+  return {
+    "X-API-KEY": key,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+}
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface FellowAttendee {
   name: string;
@@ -26,6 +43,36 @@ export interface FellowNote {
   type?: string;
 }
 
+// Internal recording shape returned by Fellow API
+interface FellowRecording {
+  id: string;
+  title?: string;
+  scheduled_start?: string;
+  scheduled_end?: string;
+  recording_start?: string;
+  recording_end?: string;
+  note_id?: string;
+  event_guid?: string;
+  virtual_call_url?: string;
+  // Transcript returned when include.transcript = true
+  transcript?: {
+    language?: string;
+    speech_segments?: Array<{
+      speaker_name?: string;
+      text?: string;
+      start_timestamp?: number;
+      end_timestamp?: number;
+    }>;
+  } | string | null;
+  // Sometimes attendees come back on the recording
+  event_attendees?: string[];
+  duration_minutes?: number;
+  ai_summary?: string;
+  summary?: string;
+  action_items?: FellowActionItem[];
+}
+
+// Normalised shape used across the app
 export interface FellowMeeting {
   id: string;
   title?: string;
@@ -41,27 +88,56 @@ export interface FellowMeeting {
   ai_summary?: string;
   summary?: string;
   action_items?: FellowActionItem[];
-  duration_minutes?: number;
+  duration_minutes?: number | null;
   updated_at?: string;
 }
 
-function fellowHeaders(): HeadersInit {
-  const key = process.env.FELLOW_API_KEY;
-  if (!key) throw new Error("FELLOW_API_KEY not configured");
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/** Format the structured transcript object into plain text. */
+function formatTranscript(raw: FellowRecording["transcript"]): string | null {
+  if (!raw) return null;
+  if (typeof raw === "string") return raw;
+  const segments = raw.speech_segments ?? [];
+  if (!segments.length) return null;
+  return segments
+    .map(s => (s.speaker_name ? `${s.speaker_name}: ${s.text ?? ""}` : s.text ?? ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Map a Fellow recording to our normalised FellowMeeting shape. */
+function mapRecording(r: FellowRecording): FellowMeeting {
   return {
-    Authorization: `Bearer ${key}`,
-    "Content-Type": "application/json",
-    Accept: "application/json",
+    id: r.id,
+    title: r.title,
+    start_datetime: r.scheduled_start ?? r.recording_start,
+    end_datetime: r.scheduled_end ?? r.recording_end,
+    attendees: (r.event_attendees ?? []).map(email => ({ email, name: email })),
+    transcript: formatTranscript(r.transcript) ?? undefined,
+    ai_summary: r.ai_summary,
+    summary: r.summary,
+    action_items: r.action_items ?? [],
+    duration_minutes: r.duration_minutes ?? null,
   };
 }
 
-/** List meetings updated in the last `lookbackDays` days. */
+// ── Public API ─────────────────────────────────────────────────────────────────
+
+/**
+ * List recordings updated in the last `lookbackDays` days.
+ * Uses POST /recordings (Fellow's list endpoint) with transcript included.
+ */
 export async function fellowListMeetings(lookbackDays = 30): Promise<FellowMeeting[]> {
   const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
-  const params = new URLSearchParams({ updated_since: since, limit: "100" });
 
-  const res = await fetch(`${FELLOW_BASE}/meetings?${params}`, {
+  const res = await fetch(`${fellowBase()}/recordings`, {
+    method: "POST",
     headers: fellowHeaders(),
+    body: JSON.stringify({
+      updated_at_start: since,
+      include: { transcript: true },
+    }),
     cache: "no-store",
   });
 
@@ -71,38 +147,53 @@ export async function fellowListMeetings(lookbackDays = 30): Promise<FellowMeeti
   }
 
   const json = await res.json() as unknown;
-  if (Array.isArray(json)) return json as FellowMeeting[];
-  const obj = json as Record<string, unknown>;
-  return (obj.data ?? obj.meetings ?? obj.results ?? []) as FellowMeeting[];
+  const recordings: FellowRecording[] = Array.isArray(json)
+    ? json
+    : ((json as Record<string, unknown>).data ??
+       (json as Record<string, unknown>).recordings ??
+       (json as Record<string, unknown>).results ??
+       []) as FellowRecording[];
+
+  return recordings.map(mapRecording);
 }
 
+/**
+ * Get a single recording by ID (transcript included).
+ */
 export async function fellowGetMeeting(id: string): Promise<FellowMeeting> {
-  const res = await fetch(`${FELLOW_BASE}/meetings/${id}`, {
+  const res = await fetch(`${fellowBase()}/recordings/${id}?include[transcript]=true`, {
     headers: fellowHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Fellow API ${res.status}`);
-  return res.json() as Promise<FellowMeeting>;
+  const r = await res.json() as FellowRecording;
+  return mapRecording(r);
 }
 
+/**
+ * Get transcript for a recording.
+ * The transcript is already embedded when listing with include.transcript=true;
+ * this is a fallback for individual fetch.
+ */
 export async function fellowGetTranscript(id: string): Promise<string | null> {
   try {
-    const res = await fetch(`${FELLOW_BASE}/meetings/${id}/transcript`, {
-      headers: fellowHeaders(),
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json() as Record<string, unknown>;
-    return (data.transcript ?? data.content ?? data.text ?? null) as string | null;
+    const meeting = await fellowGetMeeting(id);
+    return meeting.transcript ?? null;
   } catch {
     return null;
   }
 }
 
+/**
+ * List action items.
+ * Fellow's action items are returned via POST /action_items.
+ */
 export async function fellowGetActionItems(id: string): Promise<FellowActionItem[]> {
   try {
-    const res = await fetch(`${FELLOW_BASE}/meetings/${id}/action_items`, {
+    const res = await fetch(`${fellowBase()}/action_items`, {
+      method: "POST",
       headers: fellowHeaders(),
+      body: JSON.stringify({ recording_id: id }),
       cache: "no-store",
     });
     if (!res.ok) return [];
@@ -115,28 +206,45 @@ export async function fellowGetActionItems(id: string): Promise<FellowActionItem
   }
 }
 
+/**
+ * Get note content for a recording via POST /notes filtered by recording_id.
+ */
 export async function fellowGetNotes(id: string): Promise<FellowNote[]> {
   try {
-    const res = await fetch(`${FELLOW_BASE}/meetings/${id}/notes`, {
+    const res = await fetch(`${fellowBase()}/notes`, {
+      method: "POST",
       headers: fellowHeaders(),
+      body: JSON.stringify({
+        recording_id: id,
+        include: { content_markdown: true },
+      }),
       cache: "no-store",
     });
     if (!res.ok) return [];
     const data = await res.json() as unknown;
-    if (Array.isArray(data)) return data as FellowNote[];
-    const obj = data as Record<string, unknown>;
-    return (obj.data ?? obj.notes ?? obj.results ?? []) as FellowNote[];
+    // Notes come back as objects with content_markdown — normalise to FellowNote[]
+    const notes = Array.isArray(data)
+      ? data
+      : ((data as Record<string, unknown>).data ??
+         (data as Record<string, unknown>).notes ??
+         (data as Record<string, unknown>).results ??
+         []) as Array<Record<string, unknown>>;
+    return notes.map(n => ({
+      id: n.id as string | undefined,
+      content: (n.content_markdown ?? n.content ?? n.text) as string | undefined,
+      text: (n.content_markdown ?? n.text) as string | undefined,
+    }));
   } catch {
     return [];
   }
 }
 
-/** Get the meeting title, normalizing across field name variants. */
+// ── Field accessors ────────────────────────────────────────────────────────────
+
 export function getMeetingTitle(m: FellowMeeting): string {
   return m.title ?? m.subject ?? "Untitled Meeting";
 }
 
-/** Get duration in minutes from a Fellow meeting. */
 export function getMeetingDuration(m: FellowMeeting): number | null {
   if (m.duration_minutes) return m.duration_minutes;
   const start = m.start_datetime ?? m.start_time;
@@ -148,7 +256,6 @@ export function getMeetingDuration(m: FellowMeeting): number | null {
   return null;
 }
 
-/** Get the ISO string for meeting start. */
 export function getMeetingDate(m: FellowMeeting): string {
   return m.start_datetime ?? m.start_time ?? new Date().toISOString();
 }

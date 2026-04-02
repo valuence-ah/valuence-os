@@ -7,19 +7,25 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (!process.env.FELLOW_WORKSPACE) {
+    return NextResponse.json({ configured: false, message: "FELLOW_WORKSPACE is not set." });
+  }
   if (!process.env.FELLOW_API_KEY) {
     return NextResponse.json({ configured: false, message: "FELLOW_API_KEY is not set." });
   }
 
-  // Try a lightweight call — fetch just 1 meeting to verify the key works
+  // Try a lightweight call — fetch just 1 recording to verify the key + workspace work
   try {
     await fellowListMeetings(1);
-    return NextResponse.json({ configured: true, message: "Connected to Fellow API." });
+    return NextResponse.json({
+      configured: true,
+      message: `Connected to Fellow workspace: ${process.env.FELLOW_WORKSPACE}.fellow.app`,
+    });
   } catch (err) {
     return NextResponse.json({
       configured: true,
       error: true,
-      message: `Key is set but API call failed: ${String(err)}`,
+      message: `Credentials set but API call failed: ${String(err)}`,
     });
   }
 }
