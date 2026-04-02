@@ -25,12 +25,14 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  // ── Load from cache if not forcing ───────────────────────────────────────────
+  // ── Load from cache if not forcing (only serve rows updated in the last 90 days) ─
   if (!body.force) {
+    const cutoff90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
     const { data: cached } = await supabase
       .from("fund_investments")
       .select("company_name, round, sector, year, updated_at")
       .eq("fund_id", body.company_id)
+      .gte("updated_at", cutoff90)
       .order("company_name");
 
     if (cached && cached.length > 0) {
@@ -72,11 +74,16 @@ export async function POST(req: NextRequest) {
 
   const context = contextParts.length ? `(${contextParts.join("; ")})` : "";
 
+  const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+    .toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+
   const prompt =
-    `List 4 real or highly plausible recent portfolio investments made by ${name} ${context}.\n` +
-    `For each, provide: company name, funding round (e.g. Seed, Series A), primary sector (2-3 words), and year.\n` +
+    `Find investments made in the last 90 days (since ${cutoffDate}) by ${name} ${context}.\n` +
+    `Only include investments from ${name} where the investment date is confirmed to be within the past 90 days.\n` +
+    `If no investments were made in the last 90 days, return an empty array [].\n` +
+    `For each investment, provide: company name, funding round (e.g. Seed, Series A), primary sector (2-3 words), and year.\n` +
     `Return ONLY a JSON array — no markdown, no explanation:\n` +
-    `[{"name":"Company","round":"Series A","sector":"Energy Storage","date":"2023"}, ...]`;
+    `[{"name":"Company","round":"Series A","sector":"Energy Storage","date":"2025"}, ...]`;
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

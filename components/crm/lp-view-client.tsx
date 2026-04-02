@@ -16,6 +16,108 @@ import {
   Clock, Star, Building2,
 } from "lucide-react";
 
+// ── LP Type bubble picker — same interaction pattern as StagePicker ────────────
+function LpTypePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onMouse(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("mousedown", onMouse);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onMouse); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  const colorClass = LP_TYPE_BADGE[value] ?? "bg-gray-100 text-gray-500";
+  const dotClass   = LP_TYPE_DOT[value]   ?? "bg-gray-300";
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className={cn(
+          "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
+          colorClass
+        )}
+      >
+        <span className={cn("w-2 h-2 rounded-full flex-shrink-0", dotClass)} />
+        {value || "Not set"}
+        <ChevronDown size={10} />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30 py-1 overflow-hidden min-w-[180px]">
+          <button onClick={() => { onChange(""); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 text-left">
+            <span className="w-2 h-2 rounded-full bg-gray-300 flex-shrink-0" />
+            <span className="text-xs text-slate-400">Not set</span>
+            {!value && <Check size={10} className="ml-auto text-blue-600" />}
+          </button>
+          {LP_TYPE_OPTIONS.map(t => (
+            <button key={t} onClick={() => { onChange(t); setOpen(false); }}
+              className={cn("w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 text-left", value === t ? (LP_TYPE_BADGE[t] ?? "") : "")}>
+              <span className={cn("w-2 h-2 rounded-full flex-shrink-0", LP_TYPE_DOT[t] ?? "bg-gray-300")} />
+              <span className="text-xs text-slate-700">{t}</span>
+              {value === t && <Check size={10} className="ml-auto text-blue-600" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tier bubble picker — same interaction pattern as StagePicker / LpTypePicker ─
+function TierPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onMouse(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("mousedown", onMouse);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onMouse); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  const colorClass = TIER_BADGE[value] ?? "bg-gray-50 text-gray-400";
+  const dotClass   = TIER_DOT[value]   ?? "bg-gray-300";
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className={cn(
+          "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
+          colorClass
+        )}
+      >
+        <span className={cn("w-2 h-2 rounded-full flex-shrink-0", dotClass)} />
+        {value || "Not set"}
+        <ChevronDown size={10} />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30 py-1 overflow-hidden min-w-[140px]">
+          <button onClick={() => { onChange(""); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 text-left">
+            <span className="w-2 h-2 rounded-full bg-gray-300 flex-shrink-0" />
+            <span className="text-xs text-slate-400">Not set</span>
+            {!value && <Check size={10} className="ml-auto text-blue-600" />}
+          </button>
+          {TIER_OPTIONS.map(t => (
+            <button key={t} onClick={() => { onChange(t); setOpen(false); }}
+              className={cn("w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 text-left", value === t ? (TIER_BADGE[t] ?? "") : "")}>
+              <span className={cn("w-2 h-2 rounded-full flex-shrink-0", TIER_DOT[t] ?? "bg-gray-300")} />
+              <span className="text-xs text-slate-700">{t}</span>
+              {value === t && <Check size={10} className="ml-auto text-blue-600" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const OWNERS = ["Andrew", "Gene", "Lance"] as const;
@@ -34,6 +136,16 @@ const LP_TYPE_BADGE: Record<string, string> = {
   "Other":                "bg-slate-100 text-slate-600",
   "Pension Fund":         "bg-red-100 text-red-700",
   "Sovereign Wealth":     "bg-amber-100 text-amber-700",
+};
+const LP_TYPE_DOT: Record<string, string> = {
+  "Corporate":            "bg-orange-400",
+  "Endowment":            "bg-lime-500",
+  "Family Office":        "bg-purple-500",
+  "Financial Institution":"bg-sky-500",
+  "Fund of Fund":         "bg-pink-500",
+  "Other":                "bg-slate-400",
+  "Pension Fund":         "bg-red-400",
+  "Sovereign Wealth":     "bg-amber-500",
 };
 function getLpTypeBadge(t: string | null) { return LP_TYPE_BADGE[t ?? ""] ?? "bg-gray-100 text-gray-600"; }
 
@@ -62,6 +174,16 @@ const STAGE_BG: Record<string, string> = {
 const TIER_OPTIONS = ["Tier 1", "Tier 2", "Tier 3"] as const;
 const TIER_TO_PRIORITY: Record<string, "High" | "Medium" | "Low"> = { "Tier 1": "High", "Tier 2": "Medium", "Tier 3": "Low" };
 const PRIORITY_TO_TIER: Record<string, string> = { High: "Tier 1", Medium: "Tier 2", Low: "Tier 3" };
+const TIER_BADGE: Record<string, string> = {
+  "Tier 1": "bg-amber-100 text-amber-700",
+  "Tier 2": "bg-sky-100 text-sky-700",
+  "Tier 3": "bg-gray-100 text-gray-500",
+};
+const TIER_DOT: Record<string, string> = {
+  "Tier 1": "bg-amber-500",
+  "Tier 2": "bg-sky-500",
+  "Tier 3": "bg-gray-400",
+};
 
 const COINVEST_SECTORS = ["Cleantech", "Techbio", "Other"] as const;
 
@@ -146,10 +268,10 @@ function StagePicker({ value, onChange }: { value: string; onChange: (s: string)
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg bg-white hover:border-blue-300 transition-colors text-left">
+        className="w-full flex items-center gap-2 px-2 py-1.5 border border-slate-200 rounded-md bg-white hover:border-blue-300 transition-colors text-left">
         {value ? (
-          <><span className={cn("w-2 h-2 rounded-full flex-shrink-0", STAGE_DOT[value])} /><span className={cn("text-sm flex-1", STAGE_TEXT[value])}>{value}</span></>
-        ) : <span className="text-sm text-slate-400 flex-1">Not set</span>}
+          <><span className={cn("w-2 h-2 rounded-full flex-shrink-0", STAGE_DOT[value])} /><span className={cn("text-xs flex-1", STAGE_TEXT[value])}>{value}</span></>
+        ) : <span className="text-xs text-slate-400 flex-1">Not set</span>}
         <ChevronDown size={12} className="text-slate-400 flex-shrink-0" />
       </button>
       {open && (
@@ -1730,98 +1852,96 @@ export function LpViewClient({ initialCompanies }: Props) {
               <div className="pt-2 border-t border-slate-100">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">LP Engagement</h3>
                 <div className="space-y-3">
-                  {/* Row 1: LP Type | Stage */}
+                  {/* Row 1: LP Type (bubble) | Stage (bubble) */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">LP Type</p>
-                      <select className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">LP Type</p>
+                      <LpTypePicker
                         value={editLpType}
-                        onChange={async e => { const v = e.target.value; setEditLpType(v); await saveField(selected.id, { lp_type: v || null }); }}>
-                        <option value="">Not set</option>
-                        {LP_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
+                        onChange={async v => { setEditLpType(v); await saveField(selected.id, { lp_type: v || null }); }}
+                      />
                     </div>
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Stage</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Stage</p>
                       <StagePicker value={editStage} onChange={async s => { setEditStage(s); await saveField(selected.id, { lp_stage: s || null }); }} />
                     </div>
                   </div>
                   {/* Row 2: Commitment Goal | Expected % */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Commitment Goal</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Commitment Goal</p>
                       <input type="number" placeholder="e.g. 5000000" value={editGoal}
                         onChange={e => setEditGoal(e.target.value)}
                         onBlur={async () => { const n = parseFloat(editGoal); await saveField(selected.id, { commitment_goal: isNaN(n) ? null : n }); }}
                         className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700" />
                     </div>
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Expected</p>
-                      <p className="text-sm font-bold text-slate-800">{expectedCommitment != null ? fmt(expectedCommitment) : "—"}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${prob * 100}%` }} /></div>
-                        <span className={cn("text-[10px] font-semibold", prob > 0 ? "text-emerald-600" : "text-slate-400")}>{pct(prob)}</span>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Expected</p>
+                      <div className="px-2 py-1.5">
+                        <p className="text-xs font-bold text-slate-800 leading-tight">{expectedCommitment != null ? fmt(expectedCommitment) : "—"}</p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${prob * 100}%` }} /></div>
+                          <span className={cn("text-[10px] font-semibold", prob > 0 ? "text-emerald-600" : "text-slate-400")}>{pct(prob)}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                  {/* Row 3: Tier (Anchor/Core/Other) | DDQ Status */}
+                  {/* Row 3: Tier (bubble) | DDQ Status */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
-                        Tier <span className="font-normal normal-case text-slate-300">(Anchor / Core / Other)</span>
-                      </p>
-                      <select className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Tier</p>
+                      <TierPicker
                         value={PRIORITY_TO_TIER[selected.priority ?? ""] ?? ""}
-                        onChange={async e => { const t = e.target.value; const priority = TIER_TO_PRIORITY[t] ?? null; await saveField(selected.id, { priority }); }}>
-                        <option value="">—</option>
-                        {TIER_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
+                        onChange={async t => { const priority = TIER_TO_PRIORITY[t] ?? null; await saveField(selected.id, { priority }); }}
+                      />
                     </div>
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">DDQ Status</p>
-                      <span className={cn("text-xs px-2 py-1 rounded-full font-medium inline-block mt-0.5", getDdqColor(getDdqLabel(selected.lp_stage)))}>
-                        {getDdqLabel(selected.lp_stage)}
-                      </span>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">DDQ Status</p>
+                      <div className="px-2 py-1.5 flex items-center">
+                        <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", getDdqColor(getDdqLabel(selected.lp_stage)))}>
+                          {getDdqLabel(selected.lp_stage)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   {/* Row 4: Co-invest Interest | Co-invest Sector */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Co-invest Interest</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Co-invest Interest</p>
                       <div className="flex gap-1.5">
                         {(["Yes", "No"] as const).map(v => (
                           <button key={v} onClick={() => saveCoinvest(selected.id, coinvestMap[selected.id]?.interest === v ? "" : v, coinvestMap[selected.id]?.sector ?? "")}
-                            className={cn("flex-1 py-1 text-xs font-medium rounded border transition-colors", coinvestMap[selected.id]?.interest === v ? (v === "Yes" ? "bg-emerald-100 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-600 border-slate-300") : "bg-white text-slate-500 border-slate-200 hover:border-blue-300")}>
+                            className={cn("flex-1 py-1.5 text-xs font-medium rounded-md border transition-colors", coinvestMap[selected.id]?.interest === v ? (v === "Yes" ? "bg-emerald-100 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-600 border-slate-300") : "bg-white text-slate-500 border-slate-200 hover:border-blue-300")}>
                             {v}
                           </button>
                         ))}
                       </div>
                     </div>
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Co-invest Sector</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Co-invest Sector</p>
                       {coinvestMap[selected.id]?.interest === "Yes" ? (
-                        <select className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+                        <select className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700 appearance-none"
                           value={coinvestMap[selected.id]?.sector ?? ""}
                           onChange={e => saveCoinvest(selected.id, "Yes", e.target.value)}>
                           <option value="">Select…</option>
                           {COINVEST_SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       ) : (
-                        <p className="text-xs text-slate-300 py-1.5">—</p>
+                        <div className="px-2 py-1.5"><p className="text-xs text-slate-300">—</p></div>
                       )}
                     </div>
                   </div>
                   {/* Location row */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">City</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">City</p>
                       <input type="text" placeholder="e.g. Seoul" value={editCity}
                         onChange={e => setEditCity(e.target.value)}
                         onBlur={async () => { await saveField(selected.id, { location_city: editCity.trim() || null }); }}
                         className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700" />
                     </div>
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Country</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Country</p>
                       <input type="text" placeholder="e.g. South Korea" value={editCountry}
                         onChange={e => setEditCountry(e.target.value)}
                         onBlur={async () => { await saveField(selected.id, { location_country: editCountry.trim() || null }); }}
@@ -1830,7 +1950,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                   </div>
                   {/* Website row */}
                   <div>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Website</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Website</p>
                     <input type="text" placeholder="e.g. temasek.com.sg" value={editWebsite}
                       onChange={e => setEditWebsite(e.target.value)}
                       onBlur={async () => { await saveField(selected.id, { website: editWebsite.trim() || null }); }}

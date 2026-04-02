@@ -585,6 +585,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [newOverlapName, setNewOverlapName]   = useState("");
   const [newOverlapRole, setNewOverlapRole]   = useState("Co-investor");
   const [confirmRemoveOverlap, setConfirmRemoveOverlap] = useState<string | null>(null);
+  // Overlap company search (pipeline-only)
+  const [overlapSearchResults, setOverlapSearchResults] = useState<{ id: string; name: string }[]>([]);
+  const [overlapSearchOpen, setOverlapSearchOpen] = useState(false);
+  const overlapSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Key contacts
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
@@ -949,6 +953,18 @@ export function FundsViewClient({ initialCompanies }: Props) {
       [selectedId]: { ...(prev[selectedId] ?? {}), portfolioOverlap: updated },
     }));
     setNewOverlapName(""); setNewOverlapRole("Co-investor"); setShowAddOverlap(false);
+  }
+
+  async function searchPipelineCompanies(q: string) {
+    if (!q.trim()) { setOverlapSearchResults([]); setOverlapSearchOpen(false); return; }
+    try {
+      const res = await fetch(`/api/search/companies?q=${encodeURIComponent(q)}&type=startup`);
+      if (res.ok) {
+        const data = await res.json() as { id: string; name: string }[];
+        setOverlapSearchResults(data);
+        setOverlapSearchOpen(data.length > 0);
+      }
+    } catch { /* silent */ }
   }
 
   function removeOverlapItem(name: string) {
@@ -1752,12 +1768,39 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
                       {showAddOverlap && (
                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-2 space-y-2">
-                          <input
-                            value={newOverlapName}
-                            onChange={e => setNewOverlapName(e.target.value)}
-                            placeholder="Company name"
-                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
-                          />
+                          {/* Search input — restricted to pipeline (startup) companies */}
+                          <div className="relative">
+                            <input
+                              value={newOverlapName}
+                              onChange={e => {
+                                setNewOverlapName(e.target.value);
+                                if (overlapSearchTimer.current) clearTimeout(overlapSearchTimer.current);
+                                overlapSearchTimer.current = setTimeout(() => searchPipelineCompanies(e.target.value), 300);
+                              }}
+                              onFocus={() => { if (overlapSearchResults.length > 0) setOverlapSearchOpen(true); }}
+                              onBlur={() => setTimeout(() => setOverlapSearchOpen(false), 150)}
+                              placeholder="Search pipeline companies..."
+                              className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                            />
+                            {overlapSearchOpen && overlapSearchResults.length > 0 && (
+                              <div className="absolute top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-36 overflow-y-auto">
+                                {overlapSearchResults.map(r => (
+                                  <button
+                                    key={r.id}
+                                    onMouseDown={() => {
+                                      setNewOverlapName(r.name);
+                                      setOverlapSearchResults([]);
+                                      setOverlapSearchOpen(false);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 text-left"
+                                  >
+                                    <span className="text-xs text-slate-700">{r.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-gray-400 italic -mt-1">Only showing pipeline companies (startups)</p>
                           <select
                             value={newOverlapRole}
                             onChange={e => setNewOverlapRole(e.target.value)}
@@ -1769,7 +1812,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
                           </select>
                           <div className="flex gap-2">
                             <button onClick={addOverlapItem} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
-                            <button onClick={() => { setShowAddOverlap(false); setNewOverlapName(""); }} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
+                            <button onClick={() => { setShowAddOverlap(false); setNewOverlapName(""); setOverlapSearchResults([]); setOverlapSearchOpen(false); }} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
                           </div>
                         </div>
                       )}
@@ -1820,7 +1863,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
                     {/* 4. Recent Investments */}
                     <div className="px-4 py-3">
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
                           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Recent Investments</p>
                           {selectedId && fundInvestmentsUpdatedAt[selectedId] && (
@@ -1842,31 +1885,42 @@ export function FundsViewClient({ initialCompanies }: Props) {
                           )}
                         </button>
                       </div>
-                      {selected.recentInvest.length > 0 ? (
-                        <div className="flex flex-col gap-1.5">
-                          {selected.recentInvest.map(inv => (
-                            <div
-                              key={inv.name}
-                              className="flex items-start justify-between gap-2 rounded-lg border border-slate-100 px-2.5 py-2 bg-slate-50"
-                            >
-                              <div className="min-w-0">
-                                <p className="text-xs font-medium text-slate-800 truncate">{inv.name}</p>
-                                <p className="text-[10px] text-slate-500">{inv.round}</p>
+                      <p className="text-[10px] text-gray-400 italic mb-2">Last 90 days</p>
+                      {(() => {
+                        const cutoff = new Date();
+                        cutoff.setDate(cutoff.getDate() - 90);
+                        const updatedAt = selectedId ? (fundInvestmentsUpdatedAt[selectedId] ?? null) : null;
+                        const filtered = selected.recentInvest.filter(inv => {
+                          if (updatedAt) return new Date(updatedAt) >= cutoff;
+                          if (inv.date) return parseInt(inv.date) >= new Date().getFullYear() - 1;
+                          return false;
+                        });
+                        return filtered.length > 0 ? (
+                          <div className="flex flex-col gap-1.5">
+                            {filtered.map(inv => (
+                              <div
+                                key={inv.name}
+                                className="flex items-start justify-between gap-2 rounded-lg border border-slate-100 px-2.5 py-2 bg-slate-50"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-xs font-medium text-slate-800 truncate">{inv.name}</p>
+                                  <p className="text-[10px] text-slate-500">{inv.round}</p>
+                                </div>
+                                <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium whitespace-nowrap">
+                                    {inv.sector}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">{inv.date}</span>
+                                </div>
                               </div>
-                              <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium whitespace-nowrap">
-                                  {inv.sector}
-                                </span>
-                                <span className="text-[10px] text-slate-400">{inv.date}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-slate-400">
-                          {selectedId && generatingRecentIds.has(selectedId) ? "Generating…" : "No recent investments on record"}
-                        </p>
-                      )}
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400">
+                            {selectedId && generatingRecentIds.has(selectedId) ? "Generating…" : "No investments in the last 90 days."}
+                          </p>
+                        );
+                      })()}
                     </div>
 
                     {/* 5. Intelligence Feed — compact preview in Overview */}
