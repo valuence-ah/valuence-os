@@ -5,8 +5,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
   const supabaseUser = await createClient();
   const { data: { user } } = await supabaseUser.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -29,7 +31,7 @@ export async function PATCH(
   const { data, error } = await supabase
     .from("interactions")
     .update(patch)
-    .eq("id", params.id)
+    .eq("id", id)
     .select("id, subject, company_id, contact_ids")
     .single();
 
