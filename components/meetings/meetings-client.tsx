@@ -459,7 +459,7 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
         <button onClick={handleSync} disabled={syncing}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
           <RefreshCw size={12} className={cn(syncing && "animate-spin")} />
-          {syncing ? "Syncing…" : "Sync Fellow"}
+          {syncing ? "Syncing…" : "Sync"}
         </button>
       </div>
 
@@ -470,7 +470,7 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
             <Users size={32} className="mb-3 opacity-30" />
             <p className="text-sm font-medium">No meetings found</p>
             <p className="text-xs mt-1">
-              {search ? "Try clearing your search" : "Click \"Sync Fellow\" to pull recent meetings"}
+              {search ? "Try clearing your search" : "Click \"Sync\" to pull recent meetings"}
             </p>
           </div>
         ) : (

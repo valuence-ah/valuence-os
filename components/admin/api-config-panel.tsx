@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { FeedsManager } from "@/components/admin/feeds-manager";
 import {
   Loader2, Save, Check, Rss, Search, BookOpen, Award, FlaskConical,
-  Plus, Trash2, Mail, Wifi, WifiOff, AlertCircle,
+  Plus, Trash2, Mail, Wifi, WifiOff, AlertCircle, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +62,14 @@ const TABS = [
     color:       "text-blue-600",
     bg:          "bg-blue-50",
     description: "Microsoft Graph API — reads Outlook emails from the fund mailbox and surfaces them on company pages.",
+  },
+  {
+    id:          "fellow",
+    label:       "Fellow",
+    icon:        Users,
+    color:       "text-violet-600",
+    bg:          "bg-violet-50",
+    description: "Fellow meeting notes API — syncs meetings, transcripts, and action items into Valuence OS.",
   },
 ] as const;
 
@@ -587,6 +595,120 @@ function OutlookPanel() {
   );
 }
 
+// ── Fellow API status panel ───────────────────────────────────────────────────
+function FellowPanel() {
+  const [status, setStatus]   = useState<"idle" | "checking" | "ok" | "error" | "not_configured">("idle");
+  const [message, setMessage] = useState("");
+
+  async function checkConnection() {
+    setStatus("checking");
+    setMessage("");
+    try {
+      const res  = await fetch("/api/fellow/status");
+      const data = await res.json() as { configured: boolean; error?: boolean; message?: string };
+      if (!data.configured) {
+        setStatus("not_configured");
+        setMessage(data.message ?? "FELLOW_API_KEY is not set.");
+      } else if (data.error) {
+        setStatus("error");
+        setMessage(data.message ?? "API call failed.");
+      } else {
+        setStatus("ok");
+        setMessage(data.message ?? "Connected to Fellow API.");
+      }
+    } catch (err) {
+      setStatus("error");
+      setMessage(err instanceof Error ? err.message : "Network error.");
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">Fellow API</h3>
+        <p className="text-xs text-slate-500">
+          Syncs meeting notes, transcripts, and action items from Fellow into Valuence OS.
+          Click <strong>Sync</strong> on the Meetings page to pull the latest meetings.
+        </p>
+      </div>
+
+      {/* Connection status */}
+      <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Connection Status</p>
+          <button
+            onClick={checkConnection}
+            disabled={status === "checking"}
+            className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+          >
+            {status === "checking" ? <Loader2 size={12} className="animate-spin" /> : <Wifi size={12} />}
+            {status === "checking" ? "Checking…" : "Test Connection"}
+          </button>
+        </div>
+
+        {status === "idle" && (
+          <p className="text-xs text-slate-400">Click "Test Connection" to verify your Fellow API key.</p>
+        )}
+        {status === "ok" && (
+          <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
+            <Wifi size={14} />
+            <span className="text-xs font-medium">{message}</span>
+          </div>
+        )}
+        {status === "not_configured" && (
+          <div className="flex items-start gap-2 text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+            <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-semibold">Not configured</p>
+              <p className="text-xs mt-0.5 font-mono opacity-80">{message}</p>
+            </div>
+          </div>
+        )}
+        {status === "error" && (
+          <div className="flex items-start gap-2 text-red-700 bg-red-50 rounded-lg px-3 py-2">
+            <WifiOff size={14} className="mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-semibold">Connection failed</p>
+              <p className="text-xs mt-0.5 opacity-80">{message}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Required env var */}
+      <div className="space-y-3">
+        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Required Environment Variable</p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-200">
+          {[
+            { name: "FELLOW_API_KEY", desc: "Your Fellow API key — found in Fellow → Settings → API" },
+          ].map(({ name, desc }) => (
+            <div key={name} className="px-4 py-2.5 flex items-center justify-between gap-4">
+              <code className="text-xs font-mono text-blue-700">{name}</code>
+              <span className="text-xs text-slate-500 text-right">{desc}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-slate-400">
+          Set this in <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">.env.local</code> for local dev,
+          and in <strong>Vercel → Settings → Environment Variables</strong> for production.
+        </p>
+      </div>
+
+      {/* Setup guide */}
+      <div className="rounded-xl border border-violet-100 bg-violet-50 p-4">
+        <p className="text-xs font-semibold text-violet-800 mb-1">Setup Guide</p>
+        <ol className="text-xs text-violet-700 space-y-1 list-decimal list-inside">
+          <li>Log in to <strong>Fellow</strong> and go to <strong>Settings → API</strong></li>
+          <li>Generate or copy your API key</li>
+          <li>Add <code className="bg-violet-100 px-1 rounded">FELLOW_API_KEY=your_key</code> to Vercel env vars</li>
+          <li>Redeploy (Vercel → Deployments → Redeploy) for the variable to take effect</li>
+          <li>Click "Test Connection" above to verify</li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
 // ── Main panel ────────────────────────────────────────────────────────────────
 export function ApiConfigPanel() {
   const [activeTab, setActiveTab] = useState<TabId>("feeds");
@@ -624,6 +746,7 @@ export function ApiConfigPanel() {
       <div className="flex-1 overflow-y-auto p-6">
         {activeTab === "feeds"   ? <FeedsManager /> :
          activeTab === "outlook" ? <OutlookPanel /> :
+         activeTab === "fellow"  ? <FellowPanel /> :
          <AgentEditor agentName={activeTab as "exa" | "arxiv" | "sbir" | "nsf"} tab={tab} />
         }
       </div>
