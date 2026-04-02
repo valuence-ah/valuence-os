@@ -15,6 +15,7 @@ export default async function MeetingsPage() {
     .from("interactions")
     .select("*, company:companies(id, name, type)")
     .eq("type", "meeting")
+    .eq("archived", false)
     .order("date", { ascending: false })
     .limit(300) as unknown as { data: MeetingRow[] | null };
 
@@ -22,7 +23,7 @@ export default async function MeetingsPage() {
     <div className="flex flex-col h-full">
       <Header
         title="Meetings"
-        subtitle="Fellow-synced meetings with CRM intelligence"
+        subtitle="Fireflies-synced meetings with CRM intelligence"
       />
       <MeetingsClient meetings={meetings ?? []} />
     </div>

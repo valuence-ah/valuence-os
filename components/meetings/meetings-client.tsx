@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Search, RefreshCw, ChevronDown, ChevronRight,
   Building2, Calendar, CheckSquare, Users,
-  AlertCircle, X, Clock, Trash2
+  AlertCircle, X, Clock, Trash2, Archive,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
@@ -81,9 +81,10 @@ interface MeetingCardProps {
   onResolve: (m: MeetingRow) => void;
   onOpenPanel: (m: MeetingRow) => void;
   onDelete: (id: string) => void;
+  onArchive: (id: string) => void;
 }
 
-function MeetingCard({ meeting, onResolve, onOpenPanel, onDelete }: MeetingCardProps) {
+function MeetingCard({ meeting, onResolve, onOpenPanel, onDelete, onArchive }: MeetingCardProps) {
   const [expanded, setExpanded] = useState(false);
   const hasTranscript = !!(meeting.transcript_text || meeting.transcript_url);
   const actionCount   = meeting.action_items?.length ?? 0;
@@ -147,6 +148,19 @@ function MeetingCard({ meeting, onResolve, onOpenPanel, onDelete }: MeetingCardP
             </span>
           )}
         </div>
+
+        {/* Archive button — visible on row hover */}
+        <button
+          title="Archive meeting"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!confirm("Archive this meeting? It will be hidden and won't reappear when synced.")) return;
+            onArchive(meeting.id);
+          }}
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-amber-500 transition-colors flex-shrink-0 p-1"
+        >
+          <Archive size={13} />
+        </button>
 
         {/* Delete button — visible on row hover */}
         <button
@@ -395,6 +409,18 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
     setDeleteToast("Meeting deleted");
   }, [panelMeeting]);
 
+  const handleArchive = useCallback(async (id: string) => {
+    const res = await fetch(`/api/meetings/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: true }),
+    });
+    if (!res.ok) { setDeleteToast("Failed to archive meeting"); return; }
+    setMeetings(prev => prev.filter(m => m.id !== id));
+    if (panelMeeting?.id === id) setPanelMeeting(null);
+    setDeleteToast("Meeting archived");
+  }, [panelMeeting]);
+
   function handlePanelUpdate(patch: Partial<MeetingRow> & { id: string }) {
     setMeetings(prev =>
       prev.map(m => m.id === patch.id ? { ...m, ...patch } : m)
@@ -525,6 +551,7 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
               onResolve={setResolveMeeting}
               onOpenPanel={setPanelMeeting}
               onDelete={handleDelete}
+              onArchive={handleArchive}
             />
           ))
         )}

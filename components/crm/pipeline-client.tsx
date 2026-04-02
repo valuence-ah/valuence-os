@@ -14,6 +14,7 @@ import {
   List, LayoutGrid, Eye, Download, CheckSquare, Clock,
 } from "lucide-react";
 import { PdfCover } from "@/components/ui/pdf-cover";
+import { formatMeetingSummary } from "@/lib/format-meeting-summary";
 
 // ── Strategic partnerships (portco ↔ strategic) ───────────────────────────────
 const PARTNER_STATUS_COLORS: Record<string, string> = {
@@ -2289,12 +2290,16 @@ export function PipelineClient({ initialCompanies }: Props) {
             {/* ── Meeting Summary Modal ── */}
             {selectedTimelineMeeting && (() => {
               const m = selectedTimelineMeeting;
-              const raw = m.ai_summary ?? m.summary ?? m.body;
-              const { summary: parsedSummary, nextSteps } = parseAINotes(raw);
-              const allNextSteps = nextSteps.length > 0 ? nextSteps : (m.action_items ?? []);
+              const fmt = formatMeetingSummary(m.ai_summary ?? m.summary ?? m.body);
+              const displayNextSteps = fmt.nextSteps.length > 0 ? fmt.nextSteps : (m.action_items ?? []);
               const attendees = m.attendees as Array<{ name?: string; email?: string }> | null;
               const isExporting = exportingPdf === m.id;
               const justExported = exportSuccess === m.id;
+              const totallyEmpty =
+                !fmt.overview && !fmt.rawFallback &&
+                fmt.keyDiscussionTopics.length === 0 &&
+                fmt.decisionsMade.length === 0 &&
+                displayNextSteps.length === 0;
               return (
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
                   onClick={() => { setSelectedTimelineMeeting(null); setExportSuccess(null); }}>
@@ -2331,15 +2336,78 @@ export function PipelineClient({ initialCompanies }: Props) {
 
                     {/* Modal body — scrollable */}
                     <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-                      {/* AI Summary */}
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Summary</p>
-                        {parsedSummary ? (
-                          <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{parsedSummary}</p>
-                        ) : (
-                          <p className="text-sm text-slate-400 italic">No AI summary available for this meeting.</p>
-                        )}
-                      </div>
+                      {totallyEmpty ? (
+                        <p className="text-sm text-slate-400 italic">Fireflies did not return a summary for this meeting.</p>
+                      ) : (
+                        <>
+                          {/* Overview */}
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Meeting Overview</p>
+                            {fmt.overview ? (
+                              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{fmt.overview}</p>
+                            ) : (
+                              <p className="text-sm text-slate-400 italic">No overview available.</p>
+                            )}
+                          </div>
+
+                          {/* Key Discussion Topics */}
+                          {fmt.keyDiscussionTopics.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Key Discussion Topics</p>
+                              <div className="space-y-1.5">
+                                {fmt.keyDiscussionTopics.map((topic, i) => (
+                                  <div key={i} className="bg-white rounded-lg border border-gray-100 shadow-sm p-3">
+                                    <p className="text-sm text-gray-700">{topic}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Decisions Made */}
+                          {fmt.decisionsMade.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Decisions Made</p>
+                              <div className="space-y-1">
+                                {fmt.decisionsMade.map((d, i) => (
+                                  <div key={i} className="flex items-start gap-2">
+                                    <span className="text-emerald-500 font-bold text-sm flex-shrink-0">✓</span>
+                                    <p className="text-sm text-gray-700 leading-snug">{d}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Next Steps */}
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Next Steps</p>
+                            {displayNextSteps.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {displayNextSteps.map((step, i) => (
+                                  <div key={i} className="flex items-start gap-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
+                                    <CheckSquare size={13} className="mt-0.5 text-amber-500 flex-shrink-0" />
+                                    <p className="text-sm text-slate-700 leading-snug">{step}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-slate-400 italic">No next steps recorded.</p>
+                            )}
+                          </div>
+
+                          {/* Raw fallback */}
+                          {!fmt.hasStructure && fmt.rawFallback && (
+                            <details className="group">
+                              <summary className="cursor-pointer text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1 list-none">
+                                <ChevronRight size={11} className="group-open:rotate-90 transition-transform" />
+                                Summary (unformatted)
+                              </summary>
+                              <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap mt-2">{fmt.rawFallback}</p>
+                            </details>
+                          )}
+                        </>
+                      )}
 
                       {/* Attendees */}
                       {attendees && attendees.length > 0 && (
@@ -2353,21 +2421,6 @@ export function PipelineClient({ initialCompanies }: Props) {
                                 </span>
                                 {a.name ?? a.email ?? "Unknown"}
                               </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Next Steps */}
-                      {allNextSteps.length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Next Steps</p>
-                          <div className="space-y-1.5">
-                            {allNextSteps.map((step, i) => (
-                              <div key={i} className="flex items-start gap-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
-                                <CheckSquare size={13} className="mt-0.5 text-amber-500 flex-shrink-0" />
-                                <p className="text-sm text-slate-700 leading-snug">{step}</p>
-                              </div>
                             ))}
                           </div>
                         </div>

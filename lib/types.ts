@@ -126,6 +126,7 @@ export interface Interaction {
   resolution_status: "resolved" | "partial" | "unresolved" | "no_external" | "deferred" | null;
   pending_resolutions: import("./meeting-resolution").PendingResolutions | null;
   ai_summary: string | null;
+  archived: boolean;
   // joined
   company?: Company;
 }

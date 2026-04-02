@@ -10,6 +10,7 @@ import {
 import { cn, formatDate } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
 import Link from "next/link";
+import { formatMeetingSummary } from "@/lib/format-meeting-summary";
 
 type MeetingRow = Interaction & { company: Pick<Company, "id" | "name" | "type"> | null };
 
@@ -95,12 +96,26 @@ function TabButton({ active, children, onClick }: {
 
 // ── Summary Tab ──────────────────────────────────────────────────────────────
 
-function SummaryTab({ meeting }: { meeting: MeetingRow }) {
-  const rawNotes = meeting.ai_summary ?? meeting.summary ?? meeting.body;
-  const { summary, nextSteps } = parseAINotes(rawNotes);
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+      {children}
+    </p>
+  );
+}
 
-  // Use parsed next steps if available; fall back to stored action_items
-  const displayNextSteps = nextSteps.length > 0 ? nextSteps : (meeting.action_items ?? []);
+function SummaryTab({ meeting }: { meeting: MeetingRow }) {
+  const raw = meeting.ai_summary ?? meeting.summary ?? meeting.body;
+  const fmt = formatMeetingSummary(raw);
+  const displayNextSteps = fmt.nextSteps.length > 0 ? fmt.nextSteps : (meeting.action_items ?? []);
+
+  // Nothing at all
+  const totallyEmpty =
+    !fmt.overview && !fmt.rawFallback &&
+    fmt.keyDiscussionTopics.length === 0 &&
+    fmt.decisionsMade.length === 0 &&
+    fmt.nextSteps.length === 0 &&
+    (meeting.action_items ?? []).length === 0;
 
   return (
     <div className="space-y-5">
@@ -132,35 +147,89 @@ function SummaryTab({ meeting }: { meeting: MeetingRow }) {
         </div>
       </div>
 
-      {/* AI Summary */}
-      {summary ? (
-        <div>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Summary</p>
-          <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{summary}</p>
-        </div>
+      {totallyEmpty ? (
+        <p className="text-sm text-slate-400 italic">
+          Fireflies did not return a summary for this meeting.
+        </p>
       ) : (
-        <p className="text-sm text-slate-400 italic">No summary available</p>
-      )}
-
-      {/* Next Steps */}
-      {displayNextSteps.length > 0 && (
-        <div>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Next Steps</p>
-          <div className="space-y-1.5">
-            {displayNextSteps.map((item, i) => (
-              <div key={i} className="flex items-start gap-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
-                <CheckSquare size={13} className="mt-0.5 text-amber-500 flex-shrink-0" />
-                <p className="text-sm text-slate-700 leading-snug">{item}</p>
-              </div>
-            ))}
+        <>
+          {/* Overview */}
+          <div>
+            <SectionLabel>Meeting Overview</SectionLabel>
+            {fmt.overview ? (
+              <p className="text-sm font-semibold text-gray-700 leading-relaxed whitespace-pre-wrap">
+                {fmt.overview}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-400 italic">No overview available.</p>
+            )}
           </div>
-        </div>
+
+          {/* Key Discussion Topics */}
+          {fmt.keyDiscussionTopics.length > 0 && (
+            <div>
+              <SectionLabel>Key Discussion Topics</SectionLabel>
+              <div className="space-y-1.5">
+                {fmt.keyDiscussionTopics.map((topic, i) => (
+                  <div key={i} className="bg-white rounded-lg border border-gray-100 shadow-sm p-3">
+                    <p className="text-sm text-gray-700">{topic}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Decisions Made */}
+          {fmt.decisionsMade.length > 0 && (
+            <div>
+              <SectionLabel>Decisions Made</SectionLabel>
+              <div className="space-y-1">
+                {fmt.decisionsMade.map((d, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="text-emerald-500 font-bold text-sm flex-shrink-0">✓</span>
+                    <p className="text-sm text-gray-700 leading-snug">{d}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Next Steps */}
+          <div>
+            <SectionLabel>Next Steps</SectionLabel>
+            {displayNextSteps.length > 0 ? (
+              <div className="space-y-1.5">
+                {displayNextSteps.map((item, i) => (
+                  <div key={i} className="flex items-start gap-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
+                    <CheckSquare size={13} className="mt-0.5 text-amber-500 flex-shrink-0" />
+                    <p className="text-sm text-slate-700 leading-snug">{item}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 italic">No next steps recorded.</p>
+            )}
+          </div>
+
+          {/* Raw fallback — no structure detected */}
+          {!fmt.hasStructure && fmt.rawFallback && (
+            <details className="group">
+              <summary className="cursor-pointer text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1 list-none">
+                <ChevronRight size={11} className="group-open:rotate-90 transition-transform" />
+                Summary (unformatted)
+              </summary>
+              <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap mt-2">
+                {fmt.rawFallback}
+              </p>
+            </details>
+          )}
+        </>
       )}
 
       {/* Attendees */}
       {meeting.attendees && meeting.attendees.length > 0 && (
         <div>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Attendees</p>
+          <SectionLabel>Attendees</SectionLabel>
           <div className="flex flex-wrap gap-1.5">
             {(meeting.attendees as Array<{ name?: string; email?: string }>).map((a, i) => (
               <span key={i} className="inline-flex items-center gap-1 text-xs bg-white border border-slate-200 rounded-full px-2 py-0.5">
