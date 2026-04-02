@@ -359,6 +359,15 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
     );
   }
 
+  function handlePanelUpdate(patch: Partial<MeetingRow> & { id: string }) {
+    setMeetings(prev =>
+      prev.map(m => m.id === patch.id ? { ...m, ...patch } : m)
+    );
+    setPanelMeeting(prev =>
+      prev && prev.id === patch.id ? { ...prev, ...patch } : prev
+    );
+  }
+
   const tiles = [
     { label: "Total Meetings",    value: totalMeetings, color: "text-slate-900" },
     { label: "With Transcripts",  value: transcriptCount, color: "text-slate-900" },
@@ -499,6 +508,7 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
         <MeetingPanel
           meeting={panelMeeting}
           onClose={() => setPanelMeeting(null)}
+          onUpdate={handlePanelUpdate}
         />
       )}
 
