@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact, Interaction } from "@/lib/types";
 import { cn, formatDate, formatCurrency, getInitials, timeAgo } from "@/lib/utils";
 import { useColumnPrefs } from "@/lib/use-column-prefs";
+import { MeetingTranscripts } from "@/components/crm/meeting-transcripts";
 import {
   Search, X, ExternalLink, Mail, Phone, User, MapPin, ChevronRight,
   Download, Plus, Target, TrendingUp, DollarSign,
@@ -2120,6 +2121,11 @@ export function LpViewClient({ initialCompanies }: Props) {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Meeting Transcripts */}
+              <div className="pt-4 border-t border-slate-100">
+                <MeetingTranscripts companyId={selected.id} />
               </div>
 
               <a href={`/crm/companies/${selected.id}`} className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline pt-2">

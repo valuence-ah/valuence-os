@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   Search, RefreshCw, ChevronDown, ChevronRight,
   Building2, Calendar, CheckSquare, Users,
-  AlertCircle, X, Clock, Archive, ArchiveRestore, Trash2,
+  AlertCircle, X, Clock, Archive, ArchiveRestore, Trash2, FileText,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
@@ -308,6 +308,7 @@ export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: in
   const [hasActionItems, setHasActionItems] = useState(false);
   const [hasTranscript, setHasTranscript]   = useState(false);
   const [syncing, setSyncing]         = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const [lastSynced, setLastSynced]   = useState<string | null>(initialLastSynced ?? null);
   const [toast, setToast]             = useState<ToastData | null>(null);
   const [resolveMeeting, setResolveMeeting] = useState<MeetingRow | null>(null);
@@ -409,6 +410,19 @@ export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: in
       alert("Sync failed");
     }
     setSyncing(false);
+  }, []);
+
+  const handleBackfill = useCallback(async () => {
+    setBackfilling(true);
+    try {
+      const res = await fetch("/api/meetings/backfill-transcripts", { method: "POST" });
+      const data = await res.json() as { saved?: number; skipped?: number; errors?: number; message?: string; error?: string };
+      if (data.error) { alert(data.error); }
+      else { alert(data.message ?? `Backfill complete: ${data.saved ?? 0} PDFs saved`); }
+    } catch {
+      alert("Backfill failed");
+    }
+    setBackfilling(false);
   }, []);
 
   function handleResolved(meetingId: string) {
@@ -608,6 +622,14 @@ export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: in
         >
           <Archive size={12} />
           Archived {archivedMeetings.length > 0 && `(${archivedMeetings.length})`}
+        </button>
+
+        {/* Backfill Transcripts button */}
+        <button onClick={handleBackfill} disabled={backfilling || syncing}
+          title="Generate PDFs for all resolved meetings that don't have a transcript saved yet"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors">
+          <FileText size={12} className={cn(backfilling && "animate-pulse")} />
+          {backfilling ? "Backfilling…" : "Backfill PDFs"}
         </button>
 
         {/* Sync button */}

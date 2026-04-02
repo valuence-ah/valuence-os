@@ -53,6 +53,7 @@ interface RawTranscript {
   organizer_email?: string | null;
   participants?: string[] | null;
   meeting_attendees?: Array<{ displayName?: string | null; email?: string | null }> | null;
+  transcript_url?: string | null; // Link to Fireflies web page
   summary?: {
     overview?: string | null;
     bullet_gist?: string | null;
@@ -78,6 +79,8 @@ export interface FirefliesMeeting {
   transcript: string | null;
   ai_summary: string | null;
   action_items: string[];
+  transcript_url: string | null;   // Fireflies web page URL
+  keywords: string | null;         // comma-separated keywords from Fireflies
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -133,6 +136,8 @@ function mapTranscript(r: RawTranscript): FirefliesMeeting {
     transcript: formatTranscript(r.sentences),
     ai_summary: aiSummary,
     action_items: actionItems,
+    transcript_url: r.transcript_url ?? null,
+    keywords: r.summary?.keywords ?? null,
   };
 }
 
@@ -148,6 +153,7 @@ const LIST_QUERY = `
       organizer_email
       participants
       meeting_attendees { displayName email }
+      transcript_url
       summary { overview bullet_gist action_items keywords short_overview }
       sentences { speaker_name text start_time end_time }
     }
@@ -164,6 +170,7 @@ const SINGLE_QUERY = `
       organizer_email
       participants
       meeting_attendees { displayName email }
+      transcript_url
       summary { overview bullet_gist action_items keywords short_overview }
       sentences { speaker_name text start_time end_time }
     }

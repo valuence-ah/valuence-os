@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact, Interaction, ContactType } from "@/lib/types";
 import { cn, formatDate, getInitials, timeAgo } from "@/lib/utils";
 import { useColumnPrefs } from "@/lib/use-column-prefs";
+import { MeetingTranscripts } from "@/components/crm/meeting-transcripts";
 import {
   Search, Plus, X, Check, Loader2, Mail, Video, Phone, FileText,
   Building2, Target, TrendingUp, AlertCircle, Users, User, Shield,
@@ -1757,6 +1758,11 @@ export function StrategicViewClient({ initialCompanies }: Props) {
               )}
 
 
+            </div>
+
+            {/* Meeting Transcripts */}
+            <div className="px-4 py-3 border-t border-slate-100">
+              <MeetingTranscripts companyId={selected?.id} />
             </div>
 
             {/* Panel footer */}

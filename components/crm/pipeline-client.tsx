@@ -543,7 +543,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [selectedTimelineMeeting, setSelectedTimelineMeeting] = useState<Interaction | null>(null);
-  const [companyDocuments, setCompanyDocuments] = useState<Array<{ id: string; meeting_id: string | null; file_name: string; storage_path: string; uploaded_at: string }>>([]);
+  const [companyDocuments, setCompanyDocuments] = useState<Array<{ id: string; meeting_id: string | null; file_name: string; storage_path: string; uploaded_at: string; fireflies_url: string | null }>>([]);
   const [exportingPdf, setExportingPdf] = useState<string | null>(null); // meeting id being exported
   const [exportSuccess, setExportSuccess] = useState<string | null>(null); // meeting id just exported
 
@@ -658,7 +658,7 @@ export function PipelineClient({ initialCompanies }: Props) {
     // Load company_documents (meeting transcripts)
     supabase
       .from("company_documents" as "documents")
-      .select("id, meeting_id, file_name, storage_path, uploaded_at")
+      .select("id, meeting_id, file_name, storage_path, uploaded_at, fireflies_url")
       .eq("company_id", id)
       .eq("document_type", "meeting_transcript")
       .order("uploaded_at", { ascending: false })
@@ -2460,7 +2460,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                                 // Refresh company documents list
                                 const { data } = await supabase
                                   .from("company_documents" as "documents")
-                                  .select("id, meeting_id, file_name, storage_path, uploaded_at")
+                                  .select("id, meeting_id, file_name, storage_path, uploaded_at, fireflies_url")
                                   .eq("company_id", selected.id)
                                   .eq("document_type", "meeting_transcript")
                                   .order("uploaded_at", { ascending: false });
@@ -2700,6 +2700,17 @@ export function PipelineClient({ initialCompanies }: Props) {
                         >
                           <Download size={13} />
                         </a>
+                        {doc.fireflies_url && (
+                          <a
+                            href={doc.fireflies_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="View in Fireflies"
+                            className="text-slate-400 hover:text-orange-500 transition-colors p-1 flex-shrink-0"
+                          >
+                            <ExternalLink size={13} />
+                          </a>
+                        )}
                       </div>
                     ))
                   )}

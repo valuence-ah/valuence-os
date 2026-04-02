@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
 import { useColumnPrefs } from "@/lib/use-column-prefs";
+import { MeetingTranscripts } from "@/components/crm/meeting-transcripts";
 import {
   Search, X, Building2, TrendingUp, Users,
   CheckCircle2, Zap, ChevronRight, ExternalLink, MapPin, Plus, Check, Sparkles,
@@ -2343,6 +2344,11 @@ export function FundsViewClient({ initialCompanies }: Props) {
                           );
                         })}
                       </div>
+                    </div>
+
+                    {/* 9. Meeting Transcripts */}
+                    <div className="px-4 py-3 border-t border-slate-100">
+                      <MeetingTranscripts companyId={selectedId} />
                     </div>
                   </>
                 )}

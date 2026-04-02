@@ -53,7 +53,7 @@ export async function saveMeetingTranscript(
       }
     }
 
-    // 4. Upsert into company_documents
+    // 4. Upsert into company_documents (includes fireflies_url for "View in Fireflies" button)
     const { data, error: dbError } = await supabase
       .from("company_documents" as "documents")
       .upsert(
@@ -63,6 +63,7 @@ export async function saveMeetingTranscript(
           document_type: "meeting_transcript",
           file_name:     `${safeTitle}.pdf`,
           storage_path:  storagePath,
+          fireflies_url: meeting.transcript_url ?? null,
           created_by:    "system",
         },
         { onConflict: "meeting_id" }

@@ -90,6 +90,7 @@ export async function POST() {
         company_id:          resolution.company_id,
         contact_ids:         resolution.contact_ids.length ? resolution.contact_ids : null,
         fireflies_id:        m.id,
+        transcript_url:      m.transcript_url ?? null,
         source:              "fireflies",
         resolution_status:   resolution.resolution_status,
         pending_resolutions: resolution.pending_resolutions ?? null,
@@ -110,52 +111,50 @@ export async function POST() {
           .update({ last_contact_date: dateStr, last_meeting_date: dateStr })
           .eq("id", companyId);
 
-        // ── Auto-save PDF if meeting has an AI summary ──────────────────────
-        if (m.ai_summary?.trim()) {
-          const meetingRecord: Interaction = {
-            id:                  (inserted as { id: string }).id,
-            type:                "meeting",
-            subject:             title,
-            body:                m.ai_summary,
-            summary:             m.ai_summary,
-            ai_summary:          m.ai_summary,
-            transcript_text:     m.transcript ?? null,
-            transcript_url:      null,
-            action_items:        m.action_items.length ? m.action_items : null,
-            attendees:           attendees.length ? (attendees as Interaction["attendees"]) : null,
-            duration_minutes:    duration,
-            date:                new Date(date).toISOString(),
-            company_id:          companyId,
-            contact_ids:         resolution.contact_ids.length ? resolution.contact_ids : null,
-            fireflies_id:        m.id,
-            fellow_id:           null,
-            source:              "fireflies",
-            resolution_status:   resolution.resolution_status,
-            pending_resolutions: resolution.pending_resolutions ?? null,
-            sentiment:           "neutral",
-            created_by:          user.id,
-            created_at:          new Date().toISOString(),
-            updated_at:          new Date().toISOString(),
-            archived:            false,
-          };
+        // ── Auto-save PDF for every resolved meeting (summary, transcript, or both) ──
+        const meetingRecord: Interaction = {
+          id:                  (inserted as { id: string }).id,
+          type:                "meeting",
+          subject:             title,
+          body:                m.ai_summary,
+          summary:             m.ai_summary,
+          ai_summary:          m.ai_summary,
+          transcript_text:     m.transcript ?? null,
+          transcript_url:      m.transcript_url ?? null,
+          action_items:        m.action_items.length ? m.action_items : null,
+          attendees:           attendees.length ? (attendees as Interaction["attendees"]) : null,
+          duration_minutes:    duration,
+          date:                new Date(date).toISOString(),
+          company_id:          companyId,
+          contact_ids:         resolution.contact_ids.length ? resolution.contact_ids : null,
+          fireflies_id:        m.id,
+          fellow_id:           null,
+          source:              "fireflies",
+          resolution_status:   resolution.resolution_status,
+          pending_resolutions: resolution.pending_resolutions ?? null,
+          sentiment:           "neutral",
+          created_by:          user.id,
+          created_at:          new Date().toISOString(),
+          updated_at:          new Date().toISOString(),
+          archived:            false,
+        };
 
-          // Fetch company name for PDF header
-          const pdfWork = async (): Promise<void> => {
-            try {
-              const { data: co } = await supabase
-                .from("companies")
-                .select("name")
-                .eq("id", companyId)
-                .single();
-              if (co?.name) {
-                await saveMeetingTranscript(supabase, meetingRecord, co.name as string);
-              }
-            } catch (err) {
-              console.error("[sync] PDF save error:", err);
+        // Fetch company name for PDF header, works for all entity types (pipeline, fund, LP, strategic)
+        const pdfWork = async (): Promise<void> => {
+          try {
+            const { data: co } = await supabase
+              .from("companies")
+              .select("name")
+              .eq("id", companyId)
+              .single();
+            if (co?.name) {
+              await saveMeetingTranscript(supabase, meetingRecord, co.name as string);
             }
-          };
-          pdfPromises.push(pdfWork());
-        }
+          } catch (err) {
+            console.error("[sync] PDF save error:", err);
+          }
+        };
+        pdfPromises.push(pdfWork());
       }
 
       switch (resolution.resolution_status) {
