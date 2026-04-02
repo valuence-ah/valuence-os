@@ -938,10 +938,12 @@ export function PipelineClient({ initialCompanies }: Props) {
       created_by:  user?.id,
       contact_ids: noteContactIds.length > 0 ? noteContactIds : null,
     });
-    // Update last_contact_date for tagged contacts
+    // Update last_contact_date on the company and any tagged contacts
+    const contactDateISO = new Date(eventDate).toISOString();
+    await supabase.from("companies").update({ last_contact_date: contactDateISO }).eq("id", selected.id);
     if (noteContactIds.length > 0) {
-      await supabase.from("contacts").update({ last_contact_date: new Date(eventDate).toISOString() }).in("id", noteContactIds);
-      setContacts(prev => prev.map(c => noteContactIds.includes(c.id) ? { ...c, last_contact_date: new Date(eventDate).toISOString() } : c));
+      await supabase.from("contacts").update({ last_contact_date: contactDateISO }).in("id", noteContactIds);
+      setContacts(prev => prev.map(c => noteContactIds.includes(c.id) ? { ...c, last_contact_date: contactDateISO } : c));
     }
     setNoteText("");
     setEventDate(new Date().toISOString().slice(0, 10));

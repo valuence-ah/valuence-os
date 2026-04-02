@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   Search, RefreshCw, ChevronDown, ChevronRight,
   Building2, Calendar, CheckSquare, Users,
-  AlertCircle, X, Clock, Archive, ArchiveRestore,
+  AlertCircle, X, Clock, Archive, ArchiveRestore, Trash2,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
@@ -440,12 +440,19 @@ export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: in
       body: JSON.stringify({ archived: false }),
     });
     if (!res.ok) { setStatusToast("Failed to unarchive meeting"); return; }
-    // Move from archived list back to active list
     const meeting = archivedMeetings.find(m => m.id === id);
     setArchivedMeetings(prev => prev.filter(m => m.id !== id));
     if (meeting) setMeetings(prev => [{ ...meeting, archived: false }, ...prev]);
     setStatusToast("Meeting restored");
   }, [archivedMeetings]);
+
+  const handleDeleteArchived = useCallback(async (id: string) => {
+    if (!confirm("Permanently delete this meeting? This cannot be undone.")) return;
+    const res = await fetch(`/api/meetings/${id}`, { method: "DELETE" });
+    if (!res.ok) { setStatusToast("Failed to delete meeting"); return; }
+    setArchivedMeetings(prev => prev.filter(m => m.id !== id));
+    setStatusToast("Meeting deleted");
+  }, []);
 
   const handleToggleSelect = useCallback((id: string, checked: boolean) => {
     setSelectedIds(prev => {
@@ -702,6 +709,13 @@ export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: in
                     className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-teal-50 text-teal-700 border border-teal-300 rounded-lg hover:bg-teal-100 transition-colors flex-shrink-0"
                   >
                     <ArchiveRestore size={11} /> Restore
+                  </button>
+                  <button
+                    title="Delete permanently"
+                    onClick={() => handleDeleteArchived(m.id)}
+                    className="p-1 text-slate-300 hover:text-red-500 transition-colors flex-shrink-0"
+                  >
+                    <Trash2 size={13} />
                   </button>
                 </div>
               ))}

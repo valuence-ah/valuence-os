@@ -10,7 +10,7 @@ import { useColumnPrefs } from "@/lib/use-column-prefs";
 import {
   Search, X, Building2, TrendingUp, Users,
   CheckCircle2, Zap, ChevronRight, ExternalLink, MapPin, Plus, Check, Sparkles,
-  Loader2, Link2, Star, User,
+  Loader2, Link2, Star, User, Pencil,
 } from "lucide-react";
 
 // ── Logo component — tries logo.dev from website domain, falls back to initials ─
@@ -106,7 +106,7 @@ function companyToFundData(c: Company): FundData {
     coInvestLabel: "No co-invest",
     relHealth: 50,
     owner: "",
-    lastContact: "",
+    lastContact: c.last_contact_date ? formatDate(c.last_contact_date) : "",
     overdue: false,
     nextAction: "",
     dealFlow: "none",
@@ -434,6 +434,48 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
   // Double-click field editing in overview
   const [editingFundField, setEditingFundField] = useState<string | null>(null);
+
+  // Key Contact inline editing
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const [contactEditForm, setContactEditForm]   = useState<{
+    first_name: string; last_name: string; title: string; email: string; phone: string; linkedin_url: string;
+  }>({ first_name: "", last_name: "", title: "", email: "", phone: "", linkedin_url: "" });
+  const [savingContact, setSavingContact]       = useState(false);
+
+  function startEditContact(c: Contact) {
+    setEditingContactId(c.id);
+    setContactEditForm({
+      first_name:   c.first_name ?? "",
+      last_name:    c.last_name  ?? "",
+      title:        c.title      ?? "",
+      email:        c.email      ?? "",
+      phone:        c.phone      ?? "",
+      linkedin_url: c.linkedin_url ?? "",
+    });
+  }
+
+  async function saveEditContact() {
+    if (!editingContactId || !selectedId) return;
+    setSavingContact(true);
+    const patch = {
+      first_name:   contactEditForm.first_name.trim() || null,
+      last_name:    contactEditForm.last_name.trim()  || null,
+      title:        contactEditForm.title.trim()       || null,
+      email:        contactEditForm.email.trim()       || null,
+      phone:        contactEditForm.phone.trim()       || null,
+      linkedin_url: contactEditForm.linkedin_url.trim() || null,
+    };
+    await supabase.from("contacts").update(patch).eq("id", editingContactId);
+    // Update local state
+    setFundContacts(prev => ({
+      ...prev,
+      [selectedId]: (prev[selectedId] ?? []).map((c: Contact) =>
+        c.id === editingContactId ? ({ ...c, ...patch, first_name: patch.first_name ?? c.first_name } as Contact) : c
+      ),
+    }));
+    setEditingContactId(null);
+    setSavingContact(false);
+  }
 
   // Auto-generate loaders for profile rows
   const [loadingFundSector, setLoadingFundSector] = useState(false);
@@ -1844,23 +1886,117 @@ export function FundsViewClient({ initialCompanies }: Props) {
                           {selectedContact && (() => {
                             const live = (liveContacts as Contact[] | null)?.find((c: Contact) => c.id === selectedContact);
                             if (live) {
+                              const isEditing = editingContactId === live.id;
                               return (
                                 <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 space-y-1.5">
-                                  <div className="flex items-center justify-between">
-                                    <p className="text-xs font-semibold text-blue-800">{live.first_name} {live.last_name}</p>
-                                    <button onClick={() => setSelectedContact(null)} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                                  {/* Header row with edit / close buttons */}
+                                  <div className="flex items-center justify-between gap-1">
+                                    {isEditing ? (
+                                      <div className="flex gap-1 flex-1">
+                                        <input
+                                          className="flex-1 text-xs font-semibold bg-white border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                          value={contactEditForm.first_name}
+                                          onChange={e => setContactEditForm(p => ({ ...p, first_name: e.target.value }))}
+                                          placeholder="First"
+                                        />
+                                        <input
+                                          className="flex-1 text-xs font-semibold bg-white border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                          value={contactEditForm.last_name}
+                                          onChange={e => setContactEditForm(p => ({ ...p, last_name: e.target.value }))}
+                                          placeholder="Last"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs font-semibold text-blue-800 flex-1">{live.first_name} {live.last_name}</p>
+                                    )}
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                      {isEditing ? (
+                                        <>
+                                          <button
+                                            onClick={saveEditContact}
+                                            disabled={savingContact}
+                                            className="text-[10px] px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
+                                          >
+                                            {savingContact ? "Saving…" : "Save"}
+                                          </button>
+                                          <button onClick={() => setEditingContactId(null)} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <button
+                                            onClick={() => startEditContact(live)}
+                                            title="Edit contact"
+                                            className="text-blue-400 hover:text-blue-600 p-0.5"
+                                          >
+                                            <Pencil size={11} />
+                                          </button>
+                                          <button onClick={() => setSelectedContact(null)} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                                        </>
+                                      )}
+                                    </div>
                                   </div>
-                                  {live.title && <p className="text-[10px] text-blue-600 font-medium">{live.title}</p>}
-                                  {live.email && (
-                                    <a href={`mailto:${live.email}`} className="flex items-center gap-1 text-[10px] text-blue-700 hover:underline truncate">
-                                      <ExternalLink size={9} className="flex-shrink-0" />{live.email}
-                                    </a>
+
+                                  {/* Title */}
+                                  {isEditing ? (
+                                    <input
+                                      className="w-full text-[10px] bg-white border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                      value={contactEditForm.title}
+                                      onChange={e => setContactEditForm(p => ({ ...p, title: e.target.value }))}
+                                      placeholder="Title / Role"
+                                    />
+                                  ) : (
+                                    live.title && <p className="text-[10px] text-blue-600 font-medium">{live.title}</p>
                                   )}
-                                  {live.phone && <p className="text-[10px] text-blue-600">{live.phone}</p>}
-                                  {live.last_contact_date && (
+
+                                  {/* Email */}
+                                  {isEditing ? (
+                                    <input
+                                      type="email"
+                                      className="w-full text-[10px] bg-white border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                      value={contactEditForm.email}
+                                      onChange={e => setContactEditForm(p => ({ ...p, email: e.target.value }))}
+                                      placeholder="Email"
+                                    />
+                                  ) : (
+                                    live.email && (
+                                      <a href={`mailto:${live.email}`} className="flex items-center gap-1 text-[10px] text-blue-700 hover:underline truncate">
+                                        <ExternalLink size={9} className="flex-shrink-0" />{live.email}
+                                      </a>
+                                    )
+                                  )}
+
+                                  {/* Phone */}
+                                  {isEditing ? (
+                                    <input
+                                      className="w-full text-[10px] bg-white border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                      value={contactEditForm.phone}
+                                      onChange={e => setContactEditForm(p => ({ ...p, phone: e.target.value }))}
+                                      placeholder="Phone"
+                                    />
+                                  ) : (
+                                    live.phone && <p className="text-[10px] text-blue-600">{live.phone}</p>
+                                  )}
+
+                                  {/* LinkedIn */}
+                                  {isEditing ? (
+                                    <input
+                                      className="w-full text-[10px] bg-white border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                      value={contactEditForm.linkedin_url}
+                                      onChange={e => setContactEditForm(p => ({ ...p, linkedin_url: e.target.value }))}
+                                      placeholder="LinkedIn URL"
+                                    />
+                                  ) : (
+                                    live.linkedin_url && (
+                                      <a href={live.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-blue-600 hover:underline truncate">
+                                        <ExternalLink size={9} className="flex-shrink-0" />LinkedIn
+                                      </a>
+                                    )
+                                  )}
+
+                                  {!isEditing && live.last_contact_date && (
                                     <p className="text-[10px] text-blue-500">Last contact: {formatDate(live.last_contact_date)}</p>
                                   )}
-                                  {live.location_city && (
+                                  {!isEditing && live.location_city && (
                                     <p className="text-[10px] text-blue-400">{live.location_city}{live.location_country ? `, ${live.location_country}` : ""}</p>
                                   )}
                                 </div>
