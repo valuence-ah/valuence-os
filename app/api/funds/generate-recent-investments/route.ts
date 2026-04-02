@@ -1,8 +1,8 @@
 // ─── POST /api/funds/generate-recent-investments ──────────────────────────────
 // Uses Claude Haiku to generate a list of recent investments made by a VC fund,
 // based on the fund's name, location, focus, and any available context.
-// Body: { company_id: string }
-// Returns: { investments: { name, round, sector, date }[] }
+// Body: { company_id: string; force?: boolean }
+// Returns: { investments: { name, round, sector, date }[]; updated_at: string | null }
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -18,12 +18,35 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({})) as { company_id?: string };
+  const body = await req.json().catch(() => ({})) as { company_id?: string; force?: boolean };
   if (!body.company_id) {
     return NextResponse.json({ error: "company_id required" }, { status: 400 });
   }
 
   const supabase = createAdminClient();
+
+  // ── Load from cache if not forcing ───────────────────────────────────────────
+  if (!body.force) {
+    const { data: cached } = await supabase
+      .from("fund_investments")
+      .select("company_name, round, sector, year, updated_at")
+      .eq("fund_id", body.company_id)
+      .order("company_name");
+
+    if (cached && cached.length > 0) {
+      const updatedAt = (cached[0] as { updated_at: string }).updated_at;
+      return NextResponse.json({
+        investments: cached.map((r: { company_name: string; round: string; sector: string; year: string }) => ({
+          name: r.company_name,
+          round: r.round,
+          sector: r.sector,
+          date: r.year,
+        })),
+        updated_at: updatedAt,
+        from_cache: true,
+      });
+    }
+  }
 
   // Fetch fund details
   const { data: fund } = await supabase
@@ -32,7 +55,7 @@ export async function POST(req: NextRequest) {
     .eq("id", body.company_id)
     .single();
 
-  if (!fund?.name) return NextResponse.json({ investments: [] });
+  if (!fund?.name) return NextResponse.json({ investments: [], updated_at: null });
 
   const name      = (fund.name as string).trim();
   const locParts  = [(fund.location_city as string | null), (fund.location_country as string | null)].filter(Boolean);
@@ -65,11 +88,11 @@ export async function POST(req: NextRequest) {
     });
 
     const raw = msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
-    if (!raw) return NextResponse.json({ investments: [] });
+    if (!raw) return NextResponse.json({ investments: [], updated_at: null });
 
     // Extract JSON array from response (in case Claude wraps it in prose)
     const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) return NextResponse.json({ investments: [] });
+    if (!match) return NextResponse.json({ investments: [], updated_at: null });
 
     const parsed = JSON.parse(match[0]) as unknown[];
 
@@ -85,10 +108,28 @@ export async function POST(req: NextRequest) {
       .filter(i => i.name.length > 0)
       .slice(0, 5);
 
-    return NextResponse.json({ investments });
+    // Persist to fund_investments table
+    const now = new Date().toISOString();
+    if (investments.length > 0) {
+      // Delete existing rows for this fund then insert fresh
+      await supabase.from("fund_investments").delete().eq("fund_id", body.company_id);
+      await supabase.from("fund_investments").insert(
+        investments.map(inv => ({
+          fund_id:      body.company_id,
+          company_name: inv.name,
+          round:        inv.round,
+          sector:       inv.sector,
+          year:         inv.date,
+          source:       "ai_generated",
+          updated_at:   now,
+        }))
+      );
+    }
+
+    return NextResponse.json({ investments, updated_at: now, from_cache: false });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     console.error(`generate-recent-investments error for ${name}:`, reason);
-    return NextResponse.json({ investments: [], error: reason });
+    return NextResponse.json({ investments: [], updated_at: null, error: reason });
   }
 }

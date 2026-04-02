@@ -1,8 +1,8 @@
 // ─── POST /api/funds/generate-overlap ─────────────────────────────────────────
 // Returns pipeline/portfolio overlap for a single fund:
 // deals in Valuence's DB where this fund appears as co_investor or lead_partner.
-// Body: { company_id: string }
-// Returns: { overlap: { initials, name, role }[], fund_name: string }
+// Body: { company_id: string; force?: boolean }
+// Returns: { overlap: { initials, name, role, confidence, match_method }[], fund_name: string }
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -19,12 +19,27 @@ function normalize(s: string): string {
     .trim();
 }
 
-function nameMatches(fundName: string, candidate: string): boolean {
-  if (!candidate.trim()) return false;
+function matchStrength(fundName: string, candidate: string): { matches: boolean; method: "exact" | "contains" | "fuzzy" } | null {
+  if (!candidate.trim()) return null;
   const fn = normalize(fundName);
   const cn = normalize(candidate);
-  // Direct substring match either way
-  return fn.includes(cn) || cn.includes(fn);
+  if (fn === cn) return { matches: true, method: "exact" };
+  if (fn.includes(cn) || cn.includes(fn)) return { matches: true, method: "contains" };
+  return null;
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map(w => w[0]?.toUpperCase() ?? "")
+    .join("")
+    .slice(0, 2);
+}
+
+function roleToConfidence(method: "exact" | "contains" | "fuzzy", role: string): "high" | "medium" | "low" {
+  if (method === "exact")    return role === "Lead investor" ? "high" : "high";
+  if (method === "contains") return "medium";
+  return "low";
 }
 
 export async function POST(req: NextRequest) {
@@ -33,12 +48,35 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({})) as { company_id?: string };
+  const body = await req.json().catch(() => ({})) as { company_id?: string; force?: boolean };
   if (!body.company_id) {
     return NextResponse.json({ error: "company_id required" }, { status: 400 });
   }
 
   const supabase = createAdminClient();
+
+  // ── Load from cache if not forcing ───────────────────────────────────────────
+  if (!body.force) {
+    const { data: cached } = await supabase
+      .from("fund_portfolio_overlap")
+      .select("portfolio_company, role, confidence, match_method, initials")
+      .eq("fund_id", body.company_id)
+      .order("portfolio_company");
+
+    if (cached && cached.length > 0) {
+      return NextResponse.json({
+        overlap: cached.map((r: { portfolio_company: string; role: string; confidence: string; match_method: string; initials: string }) => ({
+          initials: r.initials,
+          name: r.portfolio_company,
+          role: r.role,
+          confidence: r.confidence,
+          match_method: r.match_method,
+        })),
+        fund_name: "",
+        from_cache: true,
+      });
+    }
+  }
 
   // Fetch fund name
   const { data: fund } = await supabase
@@ -61,11 +99,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ overlap: [], fund_name: fundName });
   }
 
-  const overlap: { initials: string; name: string; role: string }[] = [];
+  const overlap: { initials: string; name: string; role: string; confidence: string; match_method: string }[] = [];
   const seen = new Set<string>();
 
   for (const deal of deals) {
-    // The joined company is the startup (portfolio company)
     const company = (deal as unknown as { companies: { name: string } | null }).companies;
     const companyName = company?.name?.trim() ?? "";
     if (!companyName || seen.has(companyName.toLowerCase())) continue;
@@ -74,21 +111,32 @@ export async function POST(req: NextRequest) {
     const coInvs = (deal.co_investors as string[] | null) ?? [];
 
     let role: string | null = null;
+    let method: "exact" | "contains" | "fuzzy" = "contains";
 
-    if (lead && nameMatches(fundName, lead)) {
+    const leadMatch = lead ? matchStrength(fundName, lead) : null;
+    if (leadMatch?.matches) {
       role = "Lead investor";
-    } else if (coInvs.some(c => nameMatches(fundName, c))) {
-      role = "Co-investor";
+      method = leadMatch.method;
+    } else {
+      for (const c of coInvs) {
+        const coMatch = matchStrength(fundName, c);
+        if (coMatch?.matches) {
+          role = "Co-investor";
+          method = coMatch.method;
+          break;
+        }
+      }
     }
 
     if (role) {
       seen.add(companyName.toLowerCase());
-      const initials = companyName
-        .split(/\s+/)
-        .map(w => w[0]?.toUpperCase() ?? "")
-        .join("")
-        .slice(0, 2);
-      overlap.push({ initials, name: companyName, role });
+      overlap.push({
+        initials: getInitials(companyName),
+        name: companyName,
+        role,
+        confidence: roleToConfidence(method, role),
+        match_method: method,
+      });
     }
   }
 
@@ -99,5 +147,20 @@ export async function POST(req: NextRequest) {
     return a.name.localeCompare(b.name);
   });
 
-  return NextResponse.json({ overlap, fund_name: fundName });
+  // Persist to fund_portfolio_overlap table
+  if (overlap.length > 0) {
+    await supabase.from("fund_portfolio_overlap").delete().eq("fund_id", body.company_id);
+    await supabase.from("fund_portfolio_overlap").insert(
+      overlap.map(o => ({
+        fund_id:           body.company_id,
+        portfolio_company: o.name,
+        role:              o.role,
+        confidence:        o.confidence,
+        match_method:      o.match_method,
+        initials:          o.initials,
+      }))
+    );
+  }
+
+  return NextResponse.json({ overlap, fund_name: fundName, from_cache: false });
 }

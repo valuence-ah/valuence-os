@@ -1733,7 +1733,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">LP Type</p>
-                      <select className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+                      <select className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
                         value={editLpType}
                         onChange={async e => { const v = e.target.value; setEditLpType(v); await saveField(selected.id, { lp_type: v || null }); }}>
                         <option value="">Not set</option>
@@ -1769,7 +1769,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                       <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
                         Tier <span className="font-normal normal-case text-slate-300">(Anchor / Core / Other)</span>
                       </p>
-                      <select className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+                      <select className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
                         value={PRIORITY_TO_TIER[selected.priority ?? ""] ?? ""}
                         onChange={async e => { const t = e.target.value; const priority = TIER_TO_PRIORITY[t] ?? null; await saveField(selected.id, { priority }); }}>
                         <option value="">—</option>
@@ -1799,7 +1799,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                     <div>
                       <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Co-invest Sector</p>
                       {coinvestMap[selected.id]?.interest === "Yes" ? (
-                        <select className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
+                        <select className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
                           value={coinvestMap[selected.id]?.sector ?? ""}
                           onChange={e => saveCoinvest(selected.id, "Yes", e.target.value)}>
                           <option value="">Select…</option>

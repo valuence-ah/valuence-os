@@ -10,7 +10,7 @@ import { useColumnPrefs } from "@/lib/use-column-prefs";
 import {
   Search, X, Building2, TrendingUp, Users,
   CheckCircle2, Zap, ChevronRight, ExternalLink, MapPin, Plus, Check, Sparkles,
-  Loader2, Link2, Star, User, Pencil,
+  Loader2, Link2, Star, User, Pencil, RefreshCw, Calendar, FileText, Phone, Mail, Paperclip,
 } from "lucide-react";
 
 // ── Logo component — tries logo.dev from website domain, falls back to initials ─
@@ -58,7 +58,7 @@ interface FundData {
   nextAction: string;
   dealFlow: "bidirectional" | "inbound" | "outbound" | "none";
   dealFlowLabel: string;
-  portfolioOverlap: { initials: string; name: string; role: string }[];
+  portfolioOverlap: { initials: string; name: string; role: string; confidence?: string; match_method?: string }[];
   scores: { label: string; value: number; colorClass: string }[];
   recentInvest: { name: string; round: string; sector: string; date: string }[];
   intel: { headline: string; meta: string; url?: string }[];
@@ -378,9 +378,19 @@ export function FundsViewClient({ initialCompanies }: Props) {
   // Tracks which fund IDs are currently having overlap / recent investments generated
   const [generatingOverlapIds, setGeneratingOverlapIds] = useState<Set<string>>(new Set());
   const [generatingRecentIds,  setGeneratingRecentIds]  = useState<Set<string>>(new Set());
+  const [fundInvestmentsUpdatedAt, setFundInvestmentsUpdatedAt] = useState<Record<string, string | null>>({});
 
   // Ref to avoid re-generating overlap/recent for funds already attempted this session
   const generatedDataRef = useRef<Set<string>>(new Set());
+
+  // Interaction timeline per fund
+  const [fundInteractions, setFundInteractions] = useState<Record<string, Array<{ id: string; type: string; subject: string | null; body: string | null; date: string; contact_ids?: string[] | null }>>>({});
+  const [fundAddingNote, setFundAddingNote]   = useState(false);
+  const [fundNoteText, setFundNoteText]       = useState("");
+  const [fundNoteDate, setFundNoteDate]       = useState(new Date().toISOString().slice(0, 10));
+  const [fundNoteType, setFundNoteType]       = useState<"note" | "call" | "email">("note");
+  const [fundNoteContactIds, setFundNoteContactIds] = useState<string[]>([]);
+  const [fundSavingNote, setFundSavingNote]   = useState(false);
 
   // Fund key-contact add / link
   const [showFundAddContact, setShowFundAddContact]   = useState(false);
@@ -516,6 +526,57 @@ export function FundsViewClient({ initialCompanies }: Props) {
     } catch { /* silent */ }
     setLoadingFundDesc(false);
   }
+  async function refreshRecentInvestments() {
+    if (!selectedId) return;
+    setGeneratingRecentIds(prev => new Set(prev).add(selectedId));
+    try {
+      const res = await fetch("/api/funds/generate-recent-investments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: selectedId, force: true }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { investments?: { name: string; round: string; sector: string; date: string }[]; updated_at?: string | null };
+        if (data.investments?.length) {
+          setFundOverrides(prev => ({
+            ...prev,
+            [selectedId]: { ...(prev[selectedId] ?? {}), recentInvest: data.investments },
+          }));
+        }
+        if (data.updated_at !== undefined) {
+          setFundInvestmentsUpdatedAt(prev => ({ ...prev, [selectedId]: data.updated_at ?? null }));
+        }
+      }
+    } catch { /* silent */ }
+    setGeneratingRecentIds(prev => { const s = new Set(prev); s.delete(selectedId); return s; });
+  }
+
+  async function handleAddFundNote() {
+    if (!selectedId) return;
+    setFundSavingNote(true);
+    try {
+      const { data: newInt } = await supabase.from("interactions").insert({
+        company_id:  selectedId,
+        type:        fundNoteType,
+        date:        fundNoteDate,
+        subject:     fundNoteType === "note" ? "Note" : fundNoteType === "call" ? "Call" : "Email",
+        body:        fundNoteText.trim() || null,
+        contact_ids: fundNoteContactIds.length > 0 ? fundNoteContactIds : null,
+      }).select().single();
+      if (newInt) {
+        const newEntry = { id: newInt.id, type: newInt.type, subject: newInt.subject, body: newInt.body, date: newInt.date, contact_ids: (newInt as { contact_ids?: string[] }).contact_ids };
+        setFundInteractions(prev => ({
+          ...prev,
+          [selectedId]: [newEntry as { id: string; type: string; subject: string | null; body: string | null; date: string; contact_ids?: string[] | null }, ...(prev[selectedId] ?? [])],
+        }));
+        // Update last_contact_date on the company
+        await supabase.from("companies").update({ last_contact_date: fundNoteDate }).eq("id", selectedId);
+      }
+      setFundNoteText(""); setFundAddingNote(false); setFundNoteContactIds([]);
+    } catch { /* silent */ }
+    setFundSavingNote(false);
+  }
+
   const [fundOverrides, setFundOverrides] = useState<Record<string, Partial<FundData>>>({});
 
   // Portfolio overlap editing
@@ -697,6 +758,24 @@ export function FundsViewClient({ initialCompanies }: Props) {
         })();
       }
 
+      // Fetch interaction timeline for this fund
+      if (!fundInteractions[selectedId]) {
+        (async () => {
+          try {
+            const { data: ints } = await supabase
+              .from("interactions")
+              .select("id, type, subject, body, date, contact_ids")
+              .eq("company_id", selectedId)
+              .neq("type", "deck_upload")
+              .order("date", { ascending: false })
+              .limit(30);
+            setFundInteractions(prev => ({ ...prev, [selectedId]: (ints ?? []) as Array<{ id: string; type: string; subject: string | null; body: string | null; date: string; contact_ids?: string[] | null }> }));
+          } catch {
+            setFundInteractions(prev => ({ ...prev, [selectedId]: [] }));
+          }
+        })();
+      }
+
       // If this specific fund still has no description, generate it now
       const fund = fundListRef.current.find(f => f.id === selectedId);
       const hasDesc = !!(fund?.desc?.trim()) || !!(fundOverridesRef.current[selectedId]?.desc);
@@ -731,10 +810,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
             const res = await fetch("/api/funds/generate-overlap", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ company_id: selectedId }),
+              body: JSON.stringify({ company_id: selectedId, force: false }),
             });
             if (res.ok) {
-              const data = await res.json() as { overlap?: { initials: string; name: string; role: string }[] };
+              const data = await res.json() as { overlap?: { initials: string; name: string; role: string; confidence?: string; match_method?: string }[] };
               if (data.overlap) {
                 setFundOverrides(prev => ({
                   ...prev,
@@ -747,7 +826,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
         })();
       }
 
-      // Recent investments — generate once per fund per session via Claude
+      // Recent investments — load from DB cache first, generate if missing
       if (!generatedDataRef.current.has(`recent:${selectedId}`)) {
         generatedDataRef.current.add(`recent:${selectedId}`);
         setGeneratingRecentIds(prev => new Set(prev).add(selectedId));
@@ -756,15 +835,18 @@ export function FundsViewClient({ initialCompanies }: Props) {
             const res = await fetch("/api/funds/generate-recent-investments", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ company_id: selectedId }),
+              body: JSON.stringify({ company_id: selectedId, force: false }),
             });
             if (res.ok) {
-              const data = await res.json() as { investments?: { name: string; round: string; sector: string; date: string }[] };
+              const data = await res.json() as { investments?: { name: string; round: string; sector: string; date: string }[]; updated_at?: string | null };
               if (data.investments?.length) {
                 setFundOverrides(prev => ({
                   ...prev,
                   [selectedId]: { ...(prev[selectedId] ?? {}), recentInvest: data.investments },
                 }));
+              }
+              if (data.updated_at !== undefined) {
+                setFundInvestmentsUpdatedAt(prev => ({ ...prev, [selectedId]: data.updated_at ?? null }));
               }
             }
           } catch { /* silent */ }
@@ -849,10 +931,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
   }
 
   // Get current portfolio overlap (overrides or base)
-  function getCurrentOverlap(): { initials: string; name: string; role: string }[] {
+  function getCurrentOverlap(): { initials: string; name: string; role: string; confidence?: string; match_method?: string }[] {
     if (!selectedId || !baseSelected) return [];
     const ov = fundOverrides[selectedId];
-    if (ov && ov.portfolioOverlap !== undefined) return ov.portfolioOverlap as { initials: string; name: string; role: string }[];
+    if (ov && ov.portfolioOverlap !== undefined) return ov.portfolioOverlap as { initials: string; name: string; role: string; confidence?: string; match_method?: string }[];
     return baseSelected.portfolioOverlap;
   }
 
@@ -1706,6 +1788,11 @@ export function FundsViewClient({ initialCompanies }: Props) {
                                   <span className="text-white font-bold text-[9px]">{p.initials}</span>
                                 </div>
                                 <span className="text-xs font-medium text-slate-800 flex-1">{p.name}</span>
+                                {p.confidence && (
+                                  <span className={cn("text-[10px] px-1 py-0.5 rounded font-medium", p.confidence === "high" ? "bg-emerald-50 text-emerald-600" : p.confidence === "medium" ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-400")}>
+                                    {p.confidence}
+                                  </span>
+                                )}
                                 <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", roleBadgeClass(p.role))}>
                                   {p.role}
                                 </span>
@@ -1733,12 +1820,26 @@ export function FundsViewClient({ initialCompanies }: Props) {
                     {/* 4. Recent Investments */}
                     <div className="px-4 py-3">
                       <div className="flex items-center justify-between mb-2">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Recent Investments</p>
-                        {selectedId && generatingRecentIds.has(selectedId) && (
-                          <span className="flex items-center gap-1 text-[10px] text-violet-500 font-medium">
-                            <Sparkles size={10} className="animate-pulse" /> Generating…
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Recent Investments</p>
+                          {selectedId && fundInvestmentsUpdatedAt[selectedId] && (
+                            <span className="text-[10px] text-slate-300">
+                              · {new Date(fundInvestmentsUpdatedAt[selectedId]!).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={refreshRecentInvestments}
+                          disabled={!!(selectedId && generatingRecentIds.has(selectedId))}
+                          title="Refresh investments via AI"
+                          className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-violet-600 transition-colors disabled:opacity-50"
+                        >
+                          {selectedId && generatingRecentIds.has(selectedId) ? (
+                            <><Sparkles size={10} className="animate-pulse text-violet-500" /> Generating…</>
+                          ) : (
+                            <><RefreshCw size={10} /> Refresh</>
+                          )}
+                        </button>
                       </div>
                       {selected.recentInvest.length > 0 ? (
                         <div className="flex flex-col gap-1.5">
@@ -2077,7 +2178,118 @@ export function FundsViewClient({ initialCompanies }: Props) {
                       );
                     })()}
 
-                    {/* 7. Relationship Timeline — with + Add button */}
+                    {/* 7. Interaction Timeline */}
+                    <div className="px-4 py-3 border-t border-slate-100 mt-1">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Interaction Timeline</h3>
+                        <button
+                          onClick={() => { setFundAddingNote(p => !p); setFundNoteDate(new Date().toISOString().slice(0, 10)); }}
+                          className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-blue-600 transition-colors border border-slate-200 rounded px-2 py-0.5 hover:border-blue-300"
+                        >
+                          <Plus size={9} /> Add
+                        </button>
+                      </div>
+
+                      {fundAddingNote && (
+                        <div className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block">Date</label>
+                              <input type="date" className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" value={fundNoteDate} onChange={e => setFundNoteDate(e.target.value)} />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block">Type</label>
+                              <select className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" value={fundNoteType} onChange={e => setFundNoteType(e.target.value as "note" | "call" | "email")}>
+                                <option value="note">Note</option>
+                                <option value="call">Call</option>
+                                <option value="email">Email</option>
+                              </select>
+                            </div>
+                          </div>
+                          <textarea className="w-full text-sm border border-slate-200 rounded-lg p-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" rows={2} placeholder="Notes (optional)…" value={fundNoteText} onChange={e => setFundNoteText(e.target.value)} />
+                          {(() => {
+                            const liveContacts = selectedId ? (fundContacts[selectedId] ?? []) : [];
+                            if (liveContacts.length === 0) return null;
+                            return (
+                              <div>
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Tag Contacts</p>
+                                <div className="max-h-[100px] overflow-y-auto border border-slate-200 rounded-lg bg-white p-1.5 space-y-1">
+                                  {liveContacts.map((c: Contact) => (
+                                    <label key={c.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-1 py-0.5 rounded">
+                                      <input type="checkbox" checked={fundNoteContactIds.includes(c.id)} onChange={e => setFundNoteContactIds(prev => e.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id))} className="w-3 h-3 accent-blue-600" />
+                                      <span className="text-xs text-slate-700">{c.first_name} {c.last_name}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          <div className="flex gap-2 justify-end">
+                            <button onClick={() => { setFundAddingNote(false); setFundNoteText(""); setFundNoteContactIds([]); }} className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-100">Cancel</button>
+                            <button onClick={handleAddFundNote} disabled={fundSavingNote} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 flex items-center gap-1">
+                              {fundSavingNote ? <><Loader2 size={10} className="animate-spin" /> Saving…</> : <><Check size={10} /> Save</>}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {(() => {
+                        const ints = selectedId ? (fundInteractions[selectedId] ?? null) : null;
+                        if (ints === null) return <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-10 bg-slate-50 rounded-lg animate-pulse" />)}</div>;
+                        if (ints.length === 0) return <p className="text-xs text-slate-400 italic">No interactions recorded yet</p>;
+                        const kindIcon: Record<string, React.ReactNode> = {
+                          meeting: <Calendar size={12} className="text-violet-500" />,
+                          note:    <FileText size={12} className="text-slate-500" />,
+                          email:   <Mail size={12} className="text-blue-500" />,
+                          call:    <Phone size={12} className="text-green-500" />,
+                        };
+                        const kindColor: Record<string, string> = {
+                          meeting: "border-violet-100 bg-violet-50",
+                          note:    "border-slate-200 bg-slate-50",
+                          email:   "border-blue-100 bg-blue-50",
+                          call:    "border-green-100 bg-green-50",
+                        };
+                        return (
+                          <div className="relative pl-4 max-h-[280px] overflow-y-auto pr-1">
+                            <div className="absolute left-1.5 top-0 bottom-0 w-px bg-slate-100" />
+                            <div className="space-y-2">
+                              {ints.map(int => {
+                                const liveContacts = selectedId ? (fundContacts[selectedId] ?? []) : [];
+                                return (
+                                  <div key={int.id} className="relative flex gap-2">
+                                    <div className="absolute -left-4 mt-0.5 w-3 h-3 rounded-full bg-white border-2 border-slate-200" />
+                                    <div className={cn("flex-1 rounded-lg border px-2.5 py-2 min-w-0", kindColor[int.type] ?? "border-slate-200 bg-slate-50")}>
+                                      <div className="flex items-start justify-between gap-1">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          {kindIcon[int.type] ?? <FileText size={12} className="text-slate-400" />}
+                                          <span className="text-xs font-medium text-slate-700 truncate">{int.subject ?? int.type.charAt(0).toUpperCase() + int.type.slice(1)}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 flex-shrink-0">
+                                          <span className="text-[10px] text-slate-400">{formatDate(int.date)}</span>
+                                          <button onClick={async () => { if (!confirm("Delete this interaction?")) return; await supabase.from("interactions").delete().eq("id", int.id); setFundInteractions(prev => ({ ...prev, [selectedId!]: (prev[selectedId!] ?? []).filter(i => i.id !== int.id) })); }} className="text-slate-300 hover:text-red-400 ml-1"><X size={10} /></button>
+                                        </div>
+                                      </div>
+                                      {int.body && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{int.body}</p>}
+                                      {int.contact_ids && int.contact_ids.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {int.contact_ids.map((cid: string) => {
+                                            const tc = liveContacts.find((c: Contact) => c.id === cid);
+                                            if (!tc) return null;
+                                            return <span key={cid} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium"><User size={8} />{tc.first_name} {tc.last_name}</span>;
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* 8. Relationship Timeline — with + Add button */}
                     <div className="px-4 py-3">
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Relationship Timeline</p>
