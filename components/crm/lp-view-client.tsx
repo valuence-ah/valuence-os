@@ -144,10 +144,10 @@ function StagePicker({ value, onChange }: { value: string; onChange: (s: string)
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-2 px-2 py-1.5 border border-slate-200 rounded-md bg-white hover:border-blue-300 transition-colors text-left">
+        className="w-full flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg bg-white hover:border-blue-300 transition-colors text-left">
         {value ? (
-          <><span className={cn("w-2 h-2 rounded-full flex-shrink-0", STAGE_DOT[value])} /><span className={cn("text-xs flex-1", STAGE_TEXT[value])}>{value}</span></>
-        ) : <span className="text-xs text-slate-400 flex-1">Not set</span>}
+          <><span className={cn("w-2 h-2 rounded-full flex-shrink-0", STAGE_DOT[value])} /><span className={cn("text-sm flex-1", STAGE_TEXT[value])}>{value}</span></>
+        ) : <span className="text-sm text-slate-400 flex-1">Not set</span>}
         <ChevronDown size={12} className="text-slate-400 flex-shrink-0" />
       </button>
       {open && (
