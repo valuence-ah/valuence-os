@@ -892,8 +892,8 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
         document.body
       )}
       {showCreatePanel && createPortal(
-        <div style={{ position: "fixed", inset: 0, zIndex: 100000 }} onMouseDown={() => setShowCreatePanel(false)}>
-          <div style={{ position: "fixed", right: 0, top: 0, bottom: 0, width: 380, background: "#fff", boxShadow: "-4px 0 32px rgba(0,0,0,0.15)", zIndex: 100001, display: "flex", flexDirection: "column", fontFamily: "inherit" }} onMouseDown={e => e.stopPropagation()}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 100000 }} onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); setShowCreatePanel(false); }}>
+          <div style={{ position: "fixed", right: 0, top: 0, bottom: 0, width: 380, background: "#fff", boxShadow: "-4px 0 32px rgba(0,0,0,0.15)", zIndex: 100001, display: "flex", flexDirection: "column", fontFamily: "inherit" }} onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}>
             {/* Header */}
             <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
