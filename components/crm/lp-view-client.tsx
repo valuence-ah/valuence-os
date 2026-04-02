@@ -11,7 +11,7 @@ import {
   BarChart2, AlertCircle, CheckSquare, Video,
   ChevronDown, ChevronUp, ChevronsUpDown, MoreHorizontal, Loader2, ArrowUpRight, FileText,
   Pencil, Check, LayoutGrid, List, Globe, Wand2, Send, Copy, RefreshCw, Link2, Sparkles,
-  Clock, Star,
+  Clock, Star, Building2,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -346,11 +346,11 @@ type FilterId = typeof FILTER_PILLS[number]["id"];
 
 // ── Add LP modal ──────────────────────────────────────────────────────────────
 interface AddLPForm {
-  name: string; owner: string; lp_stage: string;
+  name: string; owner: string; lp_stage: string; lp_type: string; website: string;
   commitment_goal: string; location_city: string; location_country: string;
   contact: { first_name: string; last_name: string; email: string; title: string; location_city: string; location_country: string } | null;
 }
-const EMPTY_ADD_LP: AddLPForm = { name: "", owner: "", lp_stage: "", commitment_goal: "", location_city: "", location_country: "", contact: null };
+const EMPTY_ADD_LP: AddLPForm = { name: "", owner: "", lp_stage: "", lp_type: "", website: "", commitment_goal: "", location_city: "", location_country: "", contact: null };
 const EMPTY_CONTACT = { first_name: "", last_name: "", email: "", title: "", location_city: "", location_country: "" };
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
@@ -765,13 +765,15 @@ export function LpViewClient({ initialCompanies }: Props) {
     setSavingLP(true);
     const { data: { user } } = await supabase.auth.getUser();
     const { data: newCo } = await supabase.from("companies").insert({
-      name: addLPForm.name.trim(),
-      type: "lp" as const,
-      lp_stage: addLPForm.lp_stage || null,
-      commitment_goal: addLPForm.commitment_goal ? parseFloat(addLPForm.commitment_goal) : null,
-      location_city: addLPForm.location_city.trim() || null,
+      name:             addLPForm.name.trim(),
+      type:             "lp" as const,
+      lp_stage:         addLPForm.lp_stage || null,
+      lp_type:          addLPForm.lp_type || null,
+      website:          addLPForm.website.trim() || null,
+      commitment_goal:  addLPForm.commitment_goal ? parseFloat(addLPForm.commitment_goal) : null,
+      location_city:    addLPForm.location_city.trim() || null,
       location_country: addLPForm.location_country.trim() || null,
-      created_by: user?.id ?? null,
+      created_by:       user?.id ?? null,
     }).select().single();
     if (newCo) {
       if (addLPForm.owner) saveOwner(newCo.id, addLPForm.owner);
@@ -780,7 +782,7 @@ export function LpViewClient({ initialCompanies }: Props) {
           first_name: addLPContact.first_name.trim(), last_name: addLPContact.last_name.trim() || null,
           email: addLPContact.email.trim() || null, title: addLPContact.title.trim() || null,
           location_city: addLPContact.location_city.trim() || null, location_country: addLPContact.location_country.trim() || null,
-          company_id: newCo.id, type: "lp" as const, status: "active" as const,
+          company_id: newCo.id, type: "Limited Partner" as const, status: "active" as const,
           is_primary_contact: true, created_by: user?.id ?? null,
         });
       }
@@ -1011,12 +1013,61 @@ export function LpViewClient({ initialCompanies }: Props) {
               <button onClick={() => setShowAddLP(false)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400"><X size={14} /></button>
             </div>
             <div className="px-5 py-4 space-y-3">
+              {/* Name + logo preview */}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  {(() => {
+                    const domain = addLPForm.website ? (() => { try { const u = addLPForm.website.startsWith("http") ? addLPForm.website : `https://${addLPForm.website}`; return new URL(u).hostname.replace(/^www\./, ""); } catch { return null; } })() : null;
+                    return domain
+                      ? <img src={`https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128`} alt="" className="w-8 h-8 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      : <Building2 size={18} className="text-slate-300" />;
+                  })()}
+                </div>
+                <div className="flex-1">
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Company Name *</label>
+                  <input type="text" placeholder="e.g. Atinum Investment" value={addLPForm.name}
+                    onChange={e => setAddLPForm(p => ({ ...p, name: e.target.value }))}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              {/* Website */}
               <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Company Name *</label>
-                <input type="text" placeholder="e.g. Atinum Investment" value={addLPForm.name}
-                  onChange={e => setAddLPForm(p => ({ ...p, name: e.target.value }))}
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Website</label>
+                <input type="text" placeholder="e.g. atinum.com" value={addLPForm.website}
+                  onChange={e => setAddLPForm(p => ({ ...p, website: e.target.value }))}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
+              {/* LP Type + Stage */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">LP Type</label>
+                  <select value={addLPForm.lp_type} onChange={e => setAddLPForm(p => ({ ...p, lp_type: e.target.value }))}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">— Select —</option>
+                    {LP_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">LP Stage</label>
+                  <StagePicker value={addLPForm.lp_stage} onChange={v => setAddLPForm(p => ({ ...p, lp_stage: v }))} />
+                </div>
+              </div>
+              {/* City + Country */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">City</label>
+                  <input type="text" placeholder="San Francisco" value={addLPForm.location_city}
+                    onChange={e => setAddLPForm(p => ({ ...p, location_city: e.target.value }))}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Country</label>
+                  <input type="text" placeholder="USA" value={addLPForm.location_country}
+                    onChange={e => setAddLPForm(p => ({ ...p, location_country: e.target.value }))}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              {/* Owner */}
               <div>
                 <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Relationship Owner</label>
                 <div className="flex gap-2">
@@ -1029,28 +1080,10 @@ export function LpViewClient({ initialCompanies }: Props) {
                 </div>
               </div>
               <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">LP Stage</label>
-                <StagePicker value={addLPForm.lp_stage} onChange={v => setAddLPForm(p => ({ ...p, lp_stage: v }))} />
-              </div>
-              <div>
                 <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Commitment Goal</label>
                 <input type="number" placeholder="e.g. 5000000" value={addLPForm.commitment_goal}
                   onChange={e => setAddLPForm(p => ({ ...p, commitment_goal: e.target.value }))}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">City</label>
-                  <input type="text" placeholder="Seoul" value={addLPForm.location_city}
-                    onChange={e => setAddLPForm(p => ({ ...p, location_city: e.target.value }))}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Country</label>
-                  <input type="text" placeholder="South Korea" value={addLPForm.location_country}
-                    onChange={e => setAddLPForm(p => ({ ...p, location_country: e.target.value }))}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
               </div>
               {/* Contact section */}
               {!showAddLPContact ? (
