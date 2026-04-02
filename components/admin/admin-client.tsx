@@ -1786,7 +1786,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       {
         key: "lp_type",
         name: "LP Type",
-        width: 150,
+        width: 180,
         sortable: true,
         resizable: true,
         editable: false,
