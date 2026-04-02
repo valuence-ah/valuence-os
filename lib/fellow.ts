@@ -117,12 +117,13 @@ function formatTranscript(raw: FellowRecording["transcript"]): string | null {
 
 /** Map a Fellow recording to our normalised FellowMeeting shape. */
 function mapRecording(r: FellowRecording): FellowMeeting {
-  // Guard: event_attendees may come back as a non-array (string, object, null)
-  const rawAttendees = r.event_attendees;
+  // Guard: event_attendees may come back as a non-array (string, object, null).
+  // Cast through unknown so TypeScript doesn't pre-narrow the string branch away.
+  const rawAttendees = r.event_attendees as unknown;
   const attendeeEmails: string[] = Array.isArray(rawAttendees)
-    ? rawAttendees
+    ? (rawAttendees as string[])
     : typeof rawAttendees === "string" && rawAttendees
-      ? rawAttendees.split(",").map(s => s.trim()).filter(Boolean)
+      ? rawAttendees.split(",").map((s: string) => s.trim()).filter(Boolean)
       : [];
 
   return {
