@@ -662,11 +662,12 @@ const StrategicTypeCell = makePortalSingleSelectCell<CompanyRow>(
 
 // ─── CompanyPickerCell: searchable company FK picker for contacts ──────────────
 
-function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
+function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved, onRequestCreate }: {
   row: ContactRow;
   companiesRef: React.RefObject<CompanyRow[]>;
   setCompanies: React.Dispatch<React.SetStateAction<CompanyRow[]>>;
   onSaved: (id: string, companyId: string | null, companyName: string | null) => void;
+  onRequestCreate: (name: string, onCreated: (co: CompanyRow) => void) => void;
 }) {
   const supabase = createClient();
   const [open, setOpen] = useState(false);
@@ -680,16 +681,6 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const displayName = row.company_name ?? "";
-
-  // Create panel state
-  const [showCreatePanel, setShowCreatePanel] = useState(false);
-  const [createPanelName, setCreatePanelName] = useState("");
-  const [panelType, setPanelType] = useState("other");
-  const [panelWebsite, setPanelWebsite] = useState("");
-  const [panelDesc, setPanelDesc] = useState("");
-  const [panelCity, setPanelCity] = useState("");
-  const [panelCountry, setPanelCountry] = useState("");
-  const [panelSaving, setPanelSaving] = useState(false);
 
   const filtered = useMemo(() => {
     const all = companiesRef.current ?? [];
@@ -774,30 +765,6 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
     setSaving(false);
   }
 
-  async function handlePanelCreate() {
-    if (!createPanelName.trim() || !row.id) return;
-    setPanelSaving(true);
-    const sb = createClient();
-    const { data: nc, error } = await sb
-      .from("companies")
-      .insert({
-        name: createPanelName,
-        type: panelType,
-        website: panelWebsite || null,
-        description: panelDesc || null,
-        location_city: panelCity || null,
-        location_country: panelCountry || null,
-      })
-      .select()
-      .single();
-    if (!error && nc) {
-      setCompanies(prev => [nc as CompanyRow, ...prev]);
-      await sb.from("contacts").update({ company_id: nc.id }).eq("id", row.id);
-      onSaved(row.id, nc.id, nc.name);
-      setShowCreatePanel(false);
-    }
-    setPanelSaving(false);
-  }
 
   useEffect(() => {
     if (!open) return;
@@ -843,14 +810,16 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
             {search.trim() && !filtered.some(c => c.name.toLowerCase() === search.trim().toLowerCase()) && (
               <div onMouseDown={(e) => {
                 e.stopPropagation();
-                setCreatePanelName(search.trim());
-                setPanelType("other");
-                setPanelWebsite("");
-                setPanelDesc("");
-                setPanelCity("");
-                setPanelCountry("");
+                const name = search.trim();
+                const rowId = row.id;
+                const savedCb = onSaved;
                 setOpen(false);
-                setShowCreatePanel(true);
+                onRequestCreate(name, async (newCo: CompanyRow) => {
+                  setCompanies(prev => [newCo, ...prev]);
+                  const sb = createClient();
+                  await sb.from("contacts").update({ company_id: newCo.id }).eq("id", rowId);
+                  savedCb(rowId, newCo.id, newCo.name);
+                });
               }}
                 style={{ padding: "8px 14px", cursor: "pointer", fontSize: 12, color: "#2563eb", fontWeight: 600, borderBottom: "1px solid #f1f5f9", background: "#f0f9ff" }}>
                 + Create &quot;{search.trim()}&quot;
@@ -888,70 +857,6 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved }: {
               )}
             </div>
           )}
-        </div>,
-        document.body
-      )}
-      {showCreatePanel && createPortal(
-        <div style={{ position: "fixed", inset: 0, zIndex: 100000 }} onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); setShowCreatePanel(false); }}>
-          <div style={{ position: "fixed", right: 0, top: 0, bottom: 0, width: 380, background: "#fff", boxShadow: "-4px 0 32px rgba(0,0,0,0.15)", zIndex: 100001, display: "flex", flexDirection: "column", fontFamily: "inherit" }} onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}>
-            {/* Header */}
-            <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <p style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", margin: 0 }}>Create Company</p>
-                <p style={{ fontSize: 12, color: "#94a3b8", margin: "2px 0 0" }}>Fill in the details below</p>
-              </div>
-              <button onClick={() => setShowCreatePanel(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 20, lineHeight: 1 }}>×</button>
-            </div>
-            {/* Form */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
-              {/* Name */}
-              <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Name *</label>
-                <input value={createPanelName} onChange={e => setCreatePanelName(e.target.value)} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} autoFocus />
-              </div>
-              {/* Type */}
-              <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Type</label>
-                <select value={panelType} onChange={e => setPanelType(e.target.value)} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", background: "#fff", boxSizing: "border-box" as const }}>
-                  <option value="startup">Startup</option>
-                  <option value="fund">Fund / VC</option>
-                  <option value="lp">LP</option>
-                  <option value="corporate">Corporate</option>
-                  <option value="ecosystem_partner">Ecosystem</option>
-                  <option value="government">Government / Academic</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              {/* Website */}
-              <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Website</label>
-                <input value={panelWebsite} onChange={e => setPanelWebsite(e.target.value)} placeholder="https://..." style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} />
-              </div>
-              {/* Description */}
-              <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Description</label>
-                <textarea value={panelDesc} onChange={e => setPanelDesc(e.target.value)} rows={3} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", resize: "vertical", boxSizing: "border-box" as const }} />
-              </div>
-              {/* City / Country */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div>
-                  <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>City</label>
-                  <input value={panelCity} onChange={e => setPanelCity(e.target.value)} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Country</label>
-                  <input value={panelCountry} onChange={e => setPanelCountry(e.target.value)} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} />
-                </div>
-              </div>
-            </div>
-            {/* Footer */}
-            <div style={{ padding: "16px 24px", borderTop: "1px solid #f1f5f9", display: "flex", gap: 10 }}>
-              <button onClick={() => setShowCreatePanel(false)} style={{ flex: 1, padding: "9px", border: "1px solid #e2e8f0", borderRadius: 8, background: "#fff", fontSize: 13, color: "#64748b", cursor: "pointer", fontWeight: 500 }}>Cancel</button>
-              <button onClick={handlePanelCreate} disabled={panelSaving || !createPanelName.trim()} style={{ flex: 1, padding: "9px", border: "none", borderRadius: 8, background: panelSaving || !createPanelName.trim() ? "#94a3b8" : "#2563eb", fontSize: 13, color: "#fff", cursor: panelSaving || !createPanelName.trim() ? "not-allowed" : "pointer", fontWeight: 600 }}>
-                {panelSaving ? "Creating…" : "Create Company"}
-              </button>
-            </div>
-          </div>
         </div>,
         document.body
       )}
@@ -1376,6 +1281,37 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   const supabase = createClient();
 
   const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive" | "sourcing">("companies");
+
+  // ── Create Company panel (lifted above grid so it outlives cell editors) ──
+  const [createRequest, setCreateRequest] = useState<{ name: string; onCreated: (co: CompanyRow) => void } | null>(null);
+  const [cpName, setCpName] = useState("");
+  const [cpType, setCpType] = useState("other");
+  const [cpWebsite, setCpWebsite] = useState("");
+  const [cpDesc, setCpDesc] = useState("");
+  const [cpCity, setCpCity] = useState("");
+  const [cpCountry, setCpCountry] = useState("");
+  const [cpSaving, setCpSaving] = useState(false);
+
+  function handleRequestCreate(name: string, onCreated: (co: CompanyRow) => void) {
+    setCpName(name); setCpType("other"); setCpWebsite(""); setCpDesc(""); setCpCity(""); setCpCountry("");
+    setCreateRequest({ name, onCreated });
+  }
+
+  async function handleCreatePanelSubmit() {
+    if (!cpName.trim() || !createRequest) return;
+    setCpSaving(true);
+    const { data: nc, error } = await supabase.from("companies").insert({
+      name: cpName.trim(), type: cpType,
+      website: cpWebsite.trim() || null, description: cpDesc.trim() || null,
+      location_city: cpCity.trim() || null, location_country: cpCountry.trim() || null,
+    }).select().single();
+    if (!error && nc) {
+      setCompanies(prev => [nc as CompanyRow, ...prev]);
+      await createRequest.onCreated(nc as CompanyRow);
+      setCreateRequest(null);
+    }
+    setCpSaving(false);
+  }
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [toast, setToast] = useState<ToastState>(null);
@@ -1934,6 +1870,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
               setContacts(prev => prev.map(c => c.id === id ? { ...c, company_id: companyId, company_name: companyName } : c));
               setCompanies(prev => [...prev]);
             }}
+            onRequestCreate={handleRequestCreate}
           />
         ),
       },
@@ -2674,6 +2611,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   }
 
   return (
+    <>
     <div className="flex flex-col h-full">
       {/* ── Header bar ── */}
       <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0 flex-wrap">
@@ -3159,5 +3097,63 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         }
       `}</style>
     </div>
+    {/* ── Create Company panel (lifted above grid so it outlives cell editors) ── — rendered at AdminClient level so it outlives grid cell editors ── */}
+    {createRequest && createPortal(
+      <div style={{ position: "fixed", inset: 0, zIndex: 100000 }} onMouseDown={() => setCreateRequest(null)}>
+        <div style={{ position: "fixed", right: 0, top: 0, bottom: 0, width: 380, background: "#fff", boxShadow: "-4px 0 32px rgba(0,0,0,0.15)", zIndex: 100001, display: "flex", flexDirection: "column", fontFamily: "inherit" }} onMouseDown={e => e.stopPropagation()}>
+          <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <p style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", margin: 0 }}>Create Company</p>
+              <p style={{ fontSize: 12, color: "#94a3b8", margin: "2px 0 0" }}>Fill in the details below</p>
+            </div>
+            <button onClick={() => setCreateRequest(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 20, lineHeight: 1 }}>×</button>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Name *</label>
+              <input value={cpName} onChange={e => setCpName(e.target.value)} autoFocus style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Type</label>
+              <select value={cpType} onChange={e => setCpType(e.target.value)} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", background: "#fff", boxSizing: "border-box" as const }}>
+                <option value="startup">Startup</option>
+                <option value="fund">Fund / VC</option>
+                <option value="lp">LP</option>
+                <option value="corporate">Corporate</option>
+                <option value="ecosystem_partner">Ecosystem</option>
+                <option value="government">Government / Academic</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Website</label>
+              <input value={cpWebsite} onChange={e => setCpWebsite(e.target.value)} placeholder="https://..." style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Description</label>
+              <textarea value={cpDesc} onChange={e => setCpDesc(e.target.value)} rows={3} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", resize: "vertical", boxSizing: "border-box" as const }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>City</label>
+                <input value={cpCity} onChange={e => setCpCity(e.target.value)} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Country</label>
+                <input value={cpCountry} onChange={e => setCpCountry(e.target.value)} style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, outline: "none", boxSizing: "border-box" as const }} />
+              </div>
+            </div>
+          </div>
+          <div style={{ padding: "16px 24px", borderTop: "1px solid #f1f5f9", display: "flex", gap: 10 }}>
+            <button onClick={() => setCreateRequest(null)} style={{ flex: 1, padding: "9px", border: "1px solid #e2e8f0", borderRadius: 8, background: "#fff", fontSize: 13, color: "#64748b", cursor: "pointer", fontWeight: 500 }}>Cancel</button>
+            <button onClick={handleCreatePanelSubmit} disabled={cpSaving || !cpName.trim()} style={{ flex: 1, padding: "9px", border: "none", borderRadius: 8, background: cpSaving || !cpName.trim() ? "#94a3b8" : "#2563eb", fontSize: 13, color: "#fff", cursor: cpSaving || !cpName.trim() ? "not-allowed" : "pointer", fontWeight: 600 }}>
+              {cpSaving ? "Creating…" : "Create Company"}
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }
