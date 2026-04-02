@@ -104,7 +104,7 @@ export interface FellowMeeting {
 function formatTranscript(raw: FellowRecording["transcript"]): string | null {
   if (!raw) return null;
   if (typeof raw === "string") return raw;
-  const segments = raw.speech_segments ?? [];
+  const segments = Array.isArray(raw.speech_segments) ? raw.speech_segments : [];
   if (!segments.length) return null;
   return segments
     .map(s => {
@@ -117,16 +117,24 @@ function formatTranscript(raw: FellowRecording["transcript"]): string | null {
 
 /** Map a Fellow recording to our normalised FellowMeeting shape. */
 function mapRecording(r: FellowRecording): FellowMeeting {
+  // Guard: event_attendees may come back as a non-array (string, object, null)
+  const rawAttendees = r.event_attendees;
+  const attendeeEmails: string[] = Array.isArray(rawAttendees)
+    ? rawAttendees
+    : typeof rawAttendees === "string" && rawAttendees
+      ? rawAttendees.split(",").map(s => s.trim()).filter(Boolean)
+      : [];
+
   return {
     id: r.id,
     title: r.title,
     start_datetime: r.started_at,
     end_datetime: r.ended_at,
-    attendees: (r.event_attendees ?? []).map(email => ({ email, name: email })),
+    attendees: attendeeEmails.map(email => ({ email, name: email })),
     transcript: formatTranscript(r.transcript) ?? undefined,
     ai_summary: r.ai_notes ?? r.ai_summary,   // Fellow uses ai_notes
     summary: r.summary,
-    action_items: r.action_items ?? [],
+    action_items: Array.isArray(r.action_items) ? r.action_items : [],
     duration_minutes: r.duration_minutes ?? null,
   };
 }
@@ -170,6 +178,11 @@ export async function fellowListMeetings(lookbackDays = 30): Promise<FellowMeeti
     recordings = (obj.data ?? obj.results ?? []) as FellowRecording[];
   }
 
+  // Final safety net: ensure recordings is an array before mapping
+  if (!Array.isArray(recordings)) {
+    console.error("[Fellow] Unexpected recordings shape:", JSON.stringify(recordings).slice(0, 300));
+    return [];
+  }
   return recordings.map(mapRecording);
 }
 

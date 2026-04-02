@@ -38,6 +38,9 @@ export async function POST() {
   let internal = 0;
 
   for (const m of meetings) {
+    // Skip malformed entries (missing required id)
+    if (!m?.id) { skipped++; continue; }
+
     // Idempotency check
     const { data: existing } = await supabase
       .from("interactions")
@@ -64,7 +67,8 @@ export async function POST() {
       ?? null;
 
     // Normalize action items
-    const actionItemStrings: string[] = actionItemsRaw.map(ai =>
+    const safeActionItems = Array.isArray(actionItemsRaw) ? actionItemsRaw : [];
+    const actionItemStrings: string[] = safeActionItems.map(ai =>
       typeof ai === "string" ? ai : ai.description
     ).filter(Boolean);
 
