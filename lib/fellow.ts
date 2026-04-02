@@ -154,7 +154,7 @@ export async function fellowListMeetings(lookbackDays = 30): Promise<FellowMeeti
     headers: fellowHeaders(),
     body: JSON.stringify({
       updated_at_start: since,
-      include: { transcript: true },
+      include: { transcript: true, ai_notes: true, summary: true },
     }),
     cache: "no-store",
   });
@@ -191,7 +191,7 @@ export async function fellowListMeetings(lookbackDays = 30): Promise<FellowMeeti
  * Get a single recording by ID (transcript included).
  */
 export async function fellowGetMeeting(id: string): Promise<FellowMeeting> {
-  const res = await fetch(`${fellowBase()}/recordings/${id}?include[transcript]=true`, {
+  const res = await fetch(`${fellowBase()}/recordings/${id}?include[transcript]=true&include[ai_notes]=true&include[summary]=true`, {
     headers: fellowHeaders(),
     cache: "no-store",
   });
