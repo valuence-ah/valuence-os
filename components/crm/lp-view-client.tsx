@@ -389,6 +389,7 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [editLpType, setEditLpType]   = useState("");
   const [editCity, setEditCity]       = useState("");
   const [editCountry, setEditCountry] = useState("");
+  const [editWebsite, setEditWebsite] = useState("");
 
   // Sort + city/country filters
   const [sortCol, setSortCol]     = useState<string | null>(null);
@@ -633,6 +634,7 @@ export function LpViewClient({ initialCompanies }: Props) {
     setEditLpType(co.lp_type ?? "");
     setEditCity(co.location_city ?? "");
     setEditCountry(co.location_country ?? "");
+    setEditWebsite(co.website ?? "");
     setContactsManaging(false);
     setShowAddContactForm(false);
     setAddingActivity(false);
@@ -663,6 +665,7 @@ export function LpViewClient({ initialCompanies }: Props) {
     if ("lp_type" in patch) setEditLpType(patch.lp_type ?? "");
     if ("location_city" in patch) setEditCity(patch.location_city ?? "");
     if ("location_country" in patch) setEditCountry(patch.location_country ?? "");
+    if ("website" in patch) setEditWebsite(patch.website ?? "");
   }
 
   async function fetchLpIntelligence() {
@@ -715,7 +718,7 @@ export function LpViewClient({ initialCompanies }: Props) {
       first_name: newContact.first_name.trim(), last_name: newContact.last_name.trim() || null,
       email: newContact.email.trim() || null, title: newContact.title.trim() || null,
       location_city: newContact.location_city.trim() || null, location_country: newContact.location_country.trim() || null,
-      company_id: selected.id, type: "lp" as const, status: "active" as const,
+      company_id: selected.id, type: "Limited Partner" as const, status: "active" as const,
       is_primary_contact: contacts.length === 0, created_by: user?.id ?? null,
     }).select().single();
     setAddingContact(false);
@@ -1779,6 +1782,14 @@ export function LpViewClient({ initialCompanies }: Props) {
                         onBlur={async () => { await saveField(selected.id, { location_country: editCountry.trim() || null }); }}
                         className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700" />
                     </div>
+                  </div>
+                  {/* Website row */}
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Website</p>
+                    <input type="text" placeholder="e.g. temasek.com.sg" value={editWebsite}
+                      onChange={e => setEditWebsite(e.target.value)}
+                      onBlur={async () => { await saveField(selected.id, { website: editWebsite.trim() || null }); }}
+                      className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700" />
                   </div>
                 </div>
               </div>
