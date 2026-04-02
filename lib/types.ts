@@ -31,6 +31,7 @@ export interface Company {
   sectors: string[] | null;
   description: string | null;
   website: string | null;
+  website_domain: string | null;
   linkedin_url: string | null;
   crunchbase_url: string | null;
   logo_url: string | null;

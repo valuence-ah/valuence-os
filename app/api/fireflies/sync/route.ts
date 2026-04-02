@@ -1,173 +1,113 @@
-// ─── Fireflies Manual Sync /api/fireflies/sync ───────────────────────────────
-// Fetches recent transcripts from Fireflies GraphQL API and saves any
-// that aren't already in the interactions table.
-// Called manually from the Meetings page "Sync" button.
+// ─── Fireflies Sync /api/fireflies/sync ───────────────────────────────────────
+// Fetches meetings from Fireflies, runs CRM entity resolution, stores in DB.
+// Called from the "Sync" button on the Meetings page.
 
-import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { NextResponse }                from "next/server";
+import { createAdminClient }           from "@/lib/supabase/admin";
+import { createClient }                from "@/lib/supabase/server";
+import {
+  firefliesListMeetings,
+  getMeetingTitle, getMeetingDuration, getMeetingDate,
+} from "@/lib/fireflies";
+import { resolveEntitiesForMeeting }   from "@/lib/meeting-resolution";
+import { enrichAllUnresolvedMeetings } from "@/lib/meeting-enrichment";
 
-export const maxDuration = 60;
-
-const FIREFLIES_API = "https://api.fireflies.ai/graphql";
-
-const LIST_QUERY = `
-  query ListTranscripts($limit: Int) {
-    transcripts(limit: $limit) {
-      id
-      title
-      date
-      duration
-      sentences { speaker_name text }
-      summary { keywords action_items overview shorthand_bullet }
-      attendees { displayName email }
-      host_email
-    }
-  }
-`;
-
-interface FirefliesAttendee {
-  displayName?: string;
-  email?: string;
-}
-
-interface FirefliesSentence {
-  speaker_name: string;
-  text: string;
-}
-
-interface FirefliesTranscriptItem {
-  id: string;
-  title: string;
-  date: string;
-  duration?: number;
-  sentences?: FirefliesSentence[];
-  summary?: {
-    keywords?: string;
-    action_items?: string | string[];
-    overview?: string;
-    shorthand_bullet?: string;
-  };
-  attendees?: FirefliesAttendee[];
-  host_email?: string;
-}
+export const maxDuration = 120;
 
 export async function POST() {
-  // Auth check
   const supabaseUser = await createClient();
   const { data: { user } } = await supabaseUser.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const apiKey = process.env.FIREFLIES_API_KEY;
-  if (!apiKey) {
+  if (!process.env.FIREFLIES_API_KEY) {
     return NextResponse.json({ error: "FIREFLIES_API_KEY not configured" }, { status: 503 });
   }
 
-  // Fetch recent transcripts from Fireflies
-  let transcripts: FirefliesTranscriptItem[] = [];
-  try {
-    const res = await fetch(FIREFLIES_API, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ query: LIST_QUERY, variables: { limit: 50 } }),
-    });
+  const supabase = createAdminClient();
 
-    if (!res.ok) throw new Error(`Fireflies API error: ${res.status}`);
-    const json = await res.json();
-    if (json.errors) throw new Error(json.errors[0]?.message ?? "GraphQL error");
-    transcripts = json.data?.transcripts ?? [];
+  let meetings;
+  try {
+    meetings = await firefliesListMeetings(30);
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 502 });
   }
 
-  const supabase = createAdminClient();
-  let imported = 0;
-  let skipped = 0;
+  let imported    = 0;
+  let skipped     = 0;
+  let resolved    = 0;
+  let needsReview = 0;
+  let internal    = 0;
 
-  for (const t of transcripts) {
-    // Idempotency
+  for (const m of meetings) {
+    if (!m?.id) { skipped++; continue; }
+
+    // Idempotency — skip if already imported by fireflies_id
     const { data: existing } = await supabase
       .from("interactions")
       .select("id")
-      .eq("fireflies_id", t.id)
+      .eq("fireflies_id", m.id)
       .maybeSingle();
-
     if (existing) { skipped++; continue; }
 
-    // Build transcript text
-    const transcriptText =
-      t.sentences?.map((s) => `${s.speaker_name}: ${s.text}`).join("\n") ?? "";
+    const title     = getMeetingTitle(m);
+    const date      = getMeetingDate(m);
+    const duration  = getMeetingDuration(m);
+    const attendees = m.attendees ?? [];
 
-    // Participant emails (exclude Valuence team)
-    const participantEmails = (t.attendees ?? [])
-      .map((a) => a.email?.toLowerCase())
-      .filter((e): e is string => !!e && !e.endsWith("@valuence.vc"));
-
-    // Resolve company
-    let companyId: string | null = null;
-    if (participantEmails.length > 0) {
-      const { data: matchedContact } = await supabase
-        .from("contacts")
-        .select("company_id")
-        .in("email", participantEmails)
-        .not("company_id", "is", null)
-        .limit(1)
-        .maybeSingle();
-      companyId = matchedContact?.company_id ?? null;
-
-      if (!companyId) {
-        const domain = participantEmails[0].split("@")[1];
-        const { data: byDomain } = await supabase
-          .from("companies")
-          .select("id")
-          .ilike("website", `%${domain}%`)
-          .limit(1)
-          .maybeSingle();
-        companyId = byDomain?.id ?? null;
-      }
-    }
-
-    // Resolve contact IDs
-    const { data: contacts } = participantEmails.length
-      ? await supabase.from("contacts").select("id").in("email", participantEmails)
-      : { data: [] };
-
-    // Normalise action items
-    const actionItems: string[] =
-      typeof t.summary?.action_items === "string"
-        ? t.summary.action_items.split("\n").filter(Boolean)
-        : (t.summary?.action_items ?? []);
+    // CRM entity resolution
+    const resolution = await resolveEntitiesForMeeting(title, attendees, supabase);
 
     const { error } = await supabase.from("interactions").insert({
-      type: "meeting",
-      subject: t.title || "Fireflies Meeting",
-      body: t.summary?.overview ?? null,
-      transcript_text: transcriptText || null,
-      summary: t.summary?.overview ?? null,
-      action_items: actionItems,
-      date: t.date ? new Date(t.date).toISOString() : new Date().toISOString(),
-      company_id: companyId,
-      contact_ids: contacts?.map((c: { id: string }) => c.id) ?? [],
-      fireflies_id: t.id,
-      sentiment: "neutral",
+      type:                "meeting",
+      subject:             title,
+      body:                m.ai_summary,
+      summary:             m.ai_summary,
+      ai_summary:          m.ai_summary,
+      transcript_text:     m.transcript ?? null,
+      action_items:        m.action_items.length ? m.action_items : null,
+      attendees:           attendees.length ? attendees : null,
+      duration_minutes:    duration,
+      date:                new Date(date).toISOString(),
+      company_id:          resolution.company_id,
+      contact_ids:         resolution.contact_ids.length ? resolution.contact_ids : null,
+      fireflies_id:        m.id,
+      source:              "fireflies",
+      resolution_status:   resolution.resolution_status,
+      pending_resolutions: resolution.pending_resolutions ?? null,
+      sentiment:           "neutral",
+      created_by:          user.id,
     });
 
     if (!error) {
       imported++;
-      if (companyId) {
-        const dateStr = t.date
-          ? new Date(t.date).toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0];
-        await supabase
-          .from("companies")
+
+      if (resolution.company_id) {
+        const dateStr = new Date(date).toISOString().split("T")[0];
+        await supabase.from("companies")
           .update({ last_contact_date: dateStr, last_meeting_date: dateStr })
-          .eq("id", companyId);
+          .eq("id", resolution.company_id);
+      }
+
+      switch (resolution.resolution_status) {
+        case "resolved":    resolved++;    break;
+        case "partial":     needsReview++; break;
+        case "unresolved":  needsReview++; break;
+        case "no_external": internal++;    break;
       }
     }
   }
 
-  return NextResponse.json({ success: true, imported, skipped, total: transcripts.length });
+  // Enrichment pass — auto-tag any still-unresolved meetings
+  const enrichStats = await enrichAllUnresolvedMeetings(supabase);
+
+  return NextResponse.json({
+    success: true,
+    imported,
+    skipped,
+    total:       meetings.length,
+    resolved:    resolved    + enrichStats.resolved,
+    needsReview: needsReview + enrichStats.needsReview,
+    internal,
+    enriched:    enrichStats.resolved,
+  });
 }

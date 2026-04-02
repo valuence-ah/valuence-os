@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { FeedsManager } from "@/components/admin/feeds-manager";
 import {
   Loader2, Save, Check, Rss, Search, BookOpen, Award, FlaskConical,
-  Plus, Trash2, Mail, Wifi, WifiOff, AlertCircle, Users,
+  Plus, Trash2, Mail, Wifi, WifiOff, AlertCircle, Users, Tags,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -64,12 +64,12 @@ const TABS = [
     description: "Microsoft Graph API — reads Outlook emails from the fund mailbox and surfaces them on company pages.",
   },
   {
-    id:          "fellow",
-    label:       "Fellow",
+    id:          "fireflies",
+    label:       "Fireflies",
     icon:        Users,
     color:       "text-violet-600",
     bg:          "bg-violet-50",
-    description: "Fellow meeting notes API — syncs meetings, transcripts, and action items into Valuence OS.",
+    description: "Fireflies.ai meeting recorder — syncs transcripts, AI summaries, and action items into Valuence OS.",
   },
 ] as const;
 
@@ -595,26 +595,58 @@ function OutlookPanel() {
   );
 }
 
-// ── Fellow API status panel ───────────────────────────────────────────────────
-function FellowPanel() {
+// ── Fireflies API status panel ────────────────────────────────────────────────
+function FirefliesPanel() {
   const [status, setStatus]   = useState<"idle" | "checking" | "ok" | "error" | "not_configured">("idle");
   const [message, setMessage] = useState("");
+  const [enriching, setEnriching]       = useState(false);
+  const [enrichResult, setEnrichResult] = useState<{
+    resolved: number; needsReview: number; unresolved: number; processed: number;
+  } | null>(null);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+
+  async function runEnrichment() {
+    setEnriching(true);
+    setEnrichResult(null);
+    setEnrichError(null);
+    try {
+      const res  = await fetch("/api/meetings/enrich-all", { method: "POST" });
+      const data = await res.json() as {
+        success?: boolean; error?: string;
+        resolved?: number; needsReview?: number; unresolved?: number; processed?: number;
+      };
+      if (!res.ok || data.error) {
+        setEnrichError(data.error ?? "Enrichment failed.");
+      } else {
+        setEnrichResult({
+          resolved:    data.resolved    ?? 0,
+          needsReview: data.needsReview ?? 0,
+          unresolved:  data.unresolved  ?? 0,
+          processed:   data.processed  ?? 0,
+        });
+      }
+    } catch (err) {
+      setEnrichError(err instanceof Error ? err.message : "Network error.");
+    } finally {
+      setEnriching(false);
+    }
+  }
 
   async function checkConnection() {
     setStatus("checking");
     setMessage("");
     try {
-      const res  = await fetch("/api/fellow/status");
+      const res  = await fetch("/api/fireflies/status");
       const data = await res.json() as { configured: boolean; error?: boolean; message?: string };
       if (!data.configured) {
         setStatus("not_configured");
-        setMessage(data.message ?? "FELLOW_API_KEY is not set.");
+        setMessage(data.message ?? "FIREFLIES_API_KEY is not set.");
       } else if (data.error) {
         setStatus("error");
         setMessage(data.message ?? "API call failed.");
       } else {
         setStatus("ok");
-        setMessage(data.message ?? "Connected to Fellow API.");
+        setMessage(data.message ?? "Connected to Fireflies.");
       }
     } catch (err) {
       setStatus("error");
@@ -625,10 +657,10 @@ function FellowPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-sm font-semibold text-slate-800 mb-1">Fellow API</h3>
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">Fireflies.ai</h3>
         <p className="text-xs text-slate-500">
-          Syncs meeting notes, transcripts, and action items from Fellow into Valuence OS.
-          Click <strong>Sync</strong> on the Meetings page to pull the latest meetings.
+          Syncs meeting transcripts, AI summaries, and action items from Fireflies into Valuence OS.
+          Click <strong>Sync</strong> on the Meetings page to pull the latest recordings.
         </p>
       </div>
 
@@ -647,7 +679,7 @@ function FellowPanel() {
         </div>
 
         {status === "idle" && (
-          <p className="text-xs text-slate-400">Click "Test Connection" to verify your Fellow API key.</p>
+          <p className="text-xs text-slate-400">Click &quot;Test Connection&quot; to verify your Fireflies API key.</p>
         )}
         {status === "ok" && (
           <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
@@ -675,23 +707,17 @@ function FellowPanel() {
         )}
       </div>
 
-      {/* Required env vars */}
+      {/* Required env var */}
       <div className="space-y-3">
-        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Required Environment Variables</p>
+        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Required Environment Variable</p>
         <div className="rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-200">
-          {[
-            { name: "FELLOW_WORKSPACE", desc: "Your Fellow workspace slug — the subdomain before .fellow.app (e.g. valuence)" },
-            { name: "FELLOW_API_KEY",   desc: "Your Fellow API key — found in Fellow → Settings → Developer API" },
-          ].map(({ name, desc }) => (
-            <div key={name} className="px-4 py-2.5 flex items-start justify-between gap-4">
-              <code className="text-xs font-mono text-blue-700 flex-shrink-0">{name}</code>
-              <span className="text-xs text-slate-500 text-right">{desc}</span>
-            </div>
-          ))}
+          <div className="px-4 py-2.5 flex items-start justify-between gap-4">
+            <code className="text-xs font-mono text-blue-700 flex-shrink-0">FIREFLIES_API_KEY</code>
+            <span className="text-xs text-slate-500 text-right">Your Fireflies API key — found in Fireflies → Integrations → API</span>
+          </div>
         </div>
         <p className="text-xs text-slate-400">
-          Set these in <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">.env.local</code> for local dev,
-          and in <strong>Vercel → Settings → Environment Variables</strong> for production.
+          Add to <strong>Vercel → Settings → Environment Variables</strong>, then redeploy.
         </p>
       </div>
 
@@ -699,12 +725,58 @@ function FellowPanel() {
       <div className="rounded-xl border border-violet-100 bg-violet-50 p-4">
         <p className="text-xs font-semibold text-violet-800 mb-1">Setup Guide</p>
         <ol className="text-xs text-violet-700 space-y-1 list-decimal list-inside">
-          <li>Find your workspace slug: it&apos;s the part before <code className="bg-violet-100 px-1 rounded">.fellow.app</code> when you log in (e.g. <code className="bg-violet-100 px-1 rounded">valuence</code>)</li>
-          <li>Go to <strong>Fellow → Settings → Developer API</strong> and generate an API key</li>
-          <li>Add both variables to <strong>Vercel → Settings → Environment Variables</strong></li>
-          <li>Redeploy (Vercel → Deployments → Redeploy) for the variables to take effect</li>
-          <li>Click &quot;Test Connection&quot; above to verify</li>
+          <li>Log in to <strong>app.fireflies.ai</strong> and go to <strong>Integrations → API</strong></li>
+          <li>Copy your API key</li>
+          <li>Add <code className="bg-violet-100 px-1 rounded">FIREFLIES_API_KEY</code> to <strong>Vercel → Settings → Environment Variables</strong></li>
+          <li>Redeploy (Vercel → Deployments → Redeploy)</li>
+          <li>Click &quot;Test Connection&quot; above to verify, then hit <strong>Sync</strong> on the Meetings page</li>
         </ol>
+      </div>
+
+      {/* Meeting Auto-Tagging */}
+      <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-md bg-violet-50 flex items-center justify-center flex-shrink-0">
+              <Tags size={11} className="text-violet-600" />
+            </span>
+            <div>
+              <p className="text-xs font-semibold text-slate-700">Meeting Auto-Tagging</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Re-run the 4-signal enrichment pipeline on all unresolved meetings</p>
+            </div>
+          </div>
+          <button
+            onClick={runEnrichment}
+            disabled={enriching}
+            className="flex items-center gap-1.5 text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+          >
+            {enriching ? <Loader2 size={12} className="animate-spin" /> : <Tags size={12} />}
+            {enriching ? "Running…" : "Re-run Auto-Tagging"}
+          </button>
+        </div>
+
+        {enrichResult && (
+          <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2.5 space-y-1">
+            <p className="text-xs font-semibold text-emerald-800">Enrichment complete — {enrichResult.processed} meetings processed</p>
+            <div className="flex gap-4 text-[11px] text-emerald-700">
+              <span>✓ {enrichResult.resolved} auto-tagged</span>
+              <span>⚠ {enrichResult.needsReview} need review</span>
+              <span>✗ {enrichResult.unresolved} unmatched</span>
+            </div>
+          </div>
+        )}
+
+        {enrichError && (
+          <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 flex items-start gap-2">
+            <AlertCircle size={13} className="text-red-500 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-red-700">{enrichError}</p>
+          </div>
+        )}
+
+        <p className="text-[11px] text-slate-400 leading-relaxed">
+          Signals run in order: (1) email domain → CRM, (2) title parsing, (3) Clearbit logo API, (4) Outlook calendar attendees.
+          Returns on first high-confidence match. Runs automatically after every Fireflies sync.
+        </p>
       </div>
     </div>
   );
@@ -745,9 +817,9 @@ export function ApiConfigPanel() {
 
       {/* ── Right: content ── */}
       <div className="flex-1 overflow-y-auto p-6">
-        {activeTab === "feeds"   ? <FeedsManager /> :
-         activeTab === "outlook" ? <OutlookPanel /> :
-         activeTab === "fellow"  ? <FellowPanel /> :
+        {activeTab === "feeds"      ? <FeedsManager /> :
+         activeTab === "outlook"    ? <OutlookPanel /> :
+         activeTab === "fireflies"  ? <FirefliesPanel /> :
          <AgentEditor agentName={activeTab as "exa" | "arxiv" | "sbir" | "nsf"} tab={tab} />
         }
       </div>

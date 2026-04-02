@@ -10,6 +10,7 @@ import {
   getMeetingTitle, getMeetingDuration, getMeetingDate,
 } from "@/lib/fellow";
 import { resolveEntitiesForMeeting } from "@/lib/meeting-resolution";
+import { enrichAllUnresolvedMeetings } from "@/lib/meeting-enrichment";
 
 export const maxDuration = 120;
 
@@ -118,13 +119,17 @@ export async function POST() {
     }
   }
 
+  // ── Enrichment pass — auto-tag any unresolved meetings ──────────────────────
+  const enrichStats = await enrichAllUnresolvedMeetings(supabase);
+
   return NextResponse.json({
     success: true,
     imported,
     skipped,
     total: meetings.length,
-    resolved,
-    needsReview,
+    resolved:    resolved    + enrichStats.resolved,
+    needsReview: needsReview + enrichStats.needsReview,
     internal,
+    enriched: enrichStats.resolved,
   });
 }

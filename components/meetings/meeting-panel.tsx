@@ -123,8 +123,8 @@ function SummaryTab({ meeting }: { meeting: MeetingRow }) {
           <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Source</p>
           <span className={cn(
             "inline-flex text-[10px] px-1.5 py-0.5 rounded border font-medium",
-            meeting.source === "fellow"
-              ? "bg-blue-50 text-blue-700 border-blue-200"
+            meeting.source === "fireflies"
+              ? "bg-violet-50 text-violet-700 border-violet-200"
               : "bg-slate-50 text-slate-600 border-slate-200"
           )}>
             {meeting.source ?? "manual"}

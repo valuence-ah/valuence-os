@@ -1,5 +1,5 @@
 "use client";
-// ─── Meetings Client (Fellow Integration) ─────────────────────────────────────
+// ─── Meetings Client (Fireflies Integration) ──────────────────────────────────
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import {
@@ -39,13 +39,12 @@ function ResolutionDot({ status }: { status: string | null }) {
 function SourceBadge({ source }: { source: string | null }) {
   if (!source || source === "manual") return null;
   const styles: Record<string, string> = {
-    fellow:             "bg-blue-50 text-blue-700 border-blue-200",
     fireflies:          "bg-violet-50 text-violet-700 border-violet-200",
     transcript_upload:  "bg-slate-50 text-slate-600 border-slate-200",
   };
   return (
     <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border font-medium", styles[source] ?? styles.fireflies)}>
-      {source === "fellow" ? "Fellow" : source === "fireflies" ? "Fireflies" : "Upload"}
+      {source === "fireflies" ? "Fireflies" : "Upload"}
     </span>
   );
 }
@@ -262,7 +261,7 @@ function SyncToast({ data, onClose, onReview }: { data: ToastData; onClose: () =
         <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-0.5"><X size={14} /></button>
       </div>
       <p className="text-xs text-slate-600">
-        {data.imported} meetings synced: {data.resolved} resolved, {data.needsReview} need review, {data.internal} internal
+        Synced {data.imported ?? 0} meetings: {data.resolved ?? 0} auto-tagged, {data.needsReview ?? 0} need review
       </p>
       {data.needsReview > 0 && (
         <button onClick={onReview}
@@ -284,7 +283,7 @@ interface MeetingsClientProps {
 export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialLastSynced }: MeetingsClientProps) {
   const [meetings, setMeetings]       = useState<MeetingRow[]>(initialMeetings);
   const [search, setSearch]           = useState("");
-  const [sourceFilter, setSourceFilter] = useState<"all" | "fellow" | "manual" | "fireflies">("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "fireflies" | "manual">("all");
   const [resolutionFilter, setResolutionFilter] = useState<"all" | "resolved" | "review" | "unresolved" | "internal">("all");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [dateFrom, setDateFrom]       = useState("");
@@ -301,7 +300,7 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
   // Stats
   const totalMeetings   = meetings.length;
   const transcriptCount = meetings.filter(m => m.transcript_text || m.transcript_url).length;
-  const fellowCount     = meetings.filter(m => m.source === "fellow" || !!m.fellow_id).length;
+  const fellowCount     = meetings.filter(m => m.source === "fireflies" || !!m.fireflies_id).length;
   const actionItemTotal = meetings.reduce((s, m) => s + (m.action_items?.length ?? 0), 0);
   const needsReviewCount = meetings.filter(m => m.resolution_status === "partial" || m.resolution_status === "unresolved").length;
 
@@ -316,7 +315,6 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
 
     if (sourceFilter !== "all") {
       rows = rows.filter(m =>
-        sourceFilter === "fellow" ? (m.source === "fellow" || !!m.fellow_id) :
         sourceFilter === "fireflies" ? (m.source === "fireflies" || !!m.fireflies_id) :
         (!m.source || m.source === "manual")
       );
@@ -360,7 +358,7 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
   const handleSync = useCallback(async () => {
     setSyncing(true);
     try {
-      const res = await fetch("/api/fellow/sync", { method: "POST" });
+      const res = await fetch("/api/fireflies/sync", { method: "POST" });
       const data = await res.json() as {
         imported?: number; resolved?: number; needsReview?: number; internal?: number; error?: string;
       };
@@ -368,7 +366,7 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
       else {
         const now = new Date().toISOString();
         setLastSynced(now);
-        try { localStorage.setItem("fellow_last_sync", now); } catch {}
+        try { localStorage.setItem("fireflies_last_sync", now); } catch {}
         setToast({
           imported: data.imported ?? 0,
           resolved: data.resolved ?? 0,
@@ -409,7 +407,7 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
   const tiles = [
     { label: "Total Meetings",    value: totalMeetings, color: "text-slate-900" },
     { label: "With Transcripts",  value: transcriptCount, color: "text-slate-900" },
-    { label: "From Fellow",       value: fellowCount, color: "text-blue-700" },
+    { label: "From Fireflies",    value: fellowCount, color: "text-violet-700" },
     { label: "Open Action Items", value: actionItemTotal, color: "text-amber-700" },
     {
       label: "Needs Review",
@@ -454,7 +452,6 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
         <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value as typeof sourceFilter)}
           className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
           <option value="all">All sources</option>
-          <option value="fellow">Fellow</option>
           <option value="fireflies">Fireflies</option>
           <option value="manual">Manual</option>
         </select>
