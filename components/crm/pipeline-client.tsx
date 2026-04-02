@@ -11,7 +11,7 @@ import {
   Search, Plus, ExternalLink, ChevronRight, Pencil, Check, X,
   User, FileText, Link2, MapPin, Calendar, Mail, Phone,
   Building2, Sparkles, Paperclip, Tag, Upload, Loader2, ImageIcon, Bot,
-  List, LayoutGrid,
+  List, LayoutGrid, Eye, Download, CheckSquare, Clock,
 } from "lucide-react";
 import { PdfCover } from "@/components/ui/pdf-cover";
 
@@ -98,6 +98,28 @@ const STAGE_DOT: Record<string, string> = {
   tracking_hold:          "bg-amber-500",
   exited:                 "bg-gray-400",
 };
+
+// ── AI Notes parser (reused from meeting-panel) ──────────────────────────────
+function parseAINotes(raw: string | null | undefined): { summary: string; nextSteps: string[] } {
+  if (!raw?.trim()) return { summary: "", nextSteps: [] };
+  const nextStepsRe = /(?:\*{2}|#{1,3}\s*)?(?:next\s+steps?|action\s+items?|follow[\-\s]?ups?|to[\-\s]?dos?)(?:\*{2})?\s*:?\s*\n/im;
+  const summaryHeaderRe = /(?:\*{2}|#{1,3}\s*)?(?:summary|overview|meeting\s+summary)(?:\*{2})?\s*:?\s*\n?/im;
+  const nextMatch = raw.match(nextStepsRe);
+  let summaryText: string;
+  let nextStepsText = "";
+  if (nextMatch?.index !== undefined) {
+    summaryText   = raw.slice(0, nextMatch.index);
+    nextStepsText = raw.slice(nextMatch.index + nextMatch[0].length);
+  } else {
+    summaryText = raw;
+  }
+  summaryText = summaryText.replace(summaryHeaderRe, "").trim();
+  const nextSteps = nextStepsText
+    .split("\n")
+    .map(l => l.replace(/^[\s\t]*[-*•\u2022\d]+[.)]\s*/, "").trim())
+    .filter(l => l.length > 3 && !/^(?:\*{2}|#{1,3})/.test(l));
+  return { summary: summaryText, nextSteps };
+}
 
 // Values match Excel "Sub-sector" column
 const SUB_SECTOR_OPTIONS = [
@@ -519,6 +541,10 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [intelligenceStatus, setIntelligenceStatus] = useState<string>("Refresh");
   const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [selectedTimelineMeeting, setSelectedTimelineMeeting] = useState<Interaction | null>(null);
+  const [companyDocuments, setCompanyDocuments] = useState<Array<{ id: string; meeting_id: string | null; file_name: string; storage_path: string; uploaded_at: string }>>([]);
+  const [exportingPdf, setExportingPdf] = useState<string | null>(null); // meeting id being exported
+  const [exportSuccess, setExportSuccess] = useState<string | null>(null); // meeting id just exported
 
   // Link existing contact in manage panel
   const [showLinkContactForm, setShowLinkContactForm] = useState(false);
@@ -627,6 +653,15 @@ export function PipelineClient({ initialCompanies }: Props) {
     setDocuments(docs ?? []);
     setMemo(memos?.[0] ?? null);
     setLoadingDetail(false);
+
+    // Load company_documents (meeting transcripts)
+    supabase
+      .from("company_documents" as "documents")
+      .select("id, meeting_id, file_name, storage_path, uploaded_at")
+      .eq("company_id", id)
+      .eq("document_type", "meeting_transcript")
+      .order("uploaded_at", { ascending: false })
+      .then(({ data }) => setCompanyDocuments((data ?? []) as unknown as typeof companyDocuments));
   }, [supabase]);
 
   const loadEmails = useCallback(async (id: string) => {
@@ -2174,8 +2209,19 @@ export function PipelineClient({ initialCompanies }: Props) {
                           </div>
                           {/* Card */}
                           <div
-                            className={cn("flex-1 border rounded-xl px-4 py-3 min-w-0 cursor-pointer transition-colors hover:ring-1 hover:ring-slate-300", kindColor[ev.kind] ?? "bg-slate-50 border-slate-200")}
-                            onClick={() => setExpandedEventId(prev => prev === ev.id ? null : ev.id)}
+                            className={cn(
+                              "flex-1 border rounded-xl px-4 py-3 min-w-0 cursor-pointer transition-colors hover:ring-1 hover:ring-slate-300",
+                              kindColor[ev.kind] ?? "bg-slate-50 border-slate-200",
+                              ev.kind === "meeting" && "hover:bg-indigo-50 hover:border-indigo-200"
+                            )}
+                            onClick={() => {
+                              if (ev.kind === "meeting") {
+                                const full = interactions.find(i => i.id === ev.id) ?? null;
+                                setSelectedTimelineMeeting(full);
+                              } else {
+                                setExpandedEventId(prev => prev === ev.id ? null : ev.id);
+                              }
+                            }}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
@@ -2199,7 +2245,12 @@ export function PipelineClient({ initialCompanies }: Props) {
                                 )}
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
-                                {ev.url && (
+                                {ev.kind === "meeting" && (
+                                  <span className="text-[10px] text-indigo-500 flex items-center gap-0.5 opacity-70">
+                                    <Eye size={10} /> Summary
+                                  </span>
+                                )}
+                                {ev.url && ev.kind !== "meeting" && (
                                   <a href={ev.url} target="_blank" rel="noopener noreferrer"
                                     className="text-xs text-blue-600 hover:underline flex items-center gap-0.5">
                                     <ExternalLink size={10} /> View
@@ -2234,6 +2285,159 @@ export function PipelineClient({ initialCompanies }: Props) {
               </div>{/* end timeline content */}
 
             </div>{/* end 2-col contacts/timeline grid */}
+
+            {/* ── Meeting Summary Modal ── */}
+            {selectedTimelineMeeting && (() => {
+              const m = selectedTimelineMeeting;
+              const raw = m.ai_summary ?? m.summary ?? m.body;
+              const { summary: parsedSummary, nextSteps } = parseAINotes(raw);
+              const allNextSteps = nextSteps.length > 0 ? nextSteps : (m.action_items ?? []);
+              const attendees = m.attendees as Array<{ name?: string; email?: string }> | null;
+              const isExporting = exportingPdf === m.id;
+              const justExported = exportSuccess === m.id;
+              return (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+                  onClick={() => { setSelectedTimelineMeeting(null); setExportSuccess(null); }}>
+                  <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col"
+                    style={{ maxHeight: "85vh" }}
+                    onClick={e => e.stopPropagation()}>
+                    {/* Modal header */}
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-start gap-3 flex-shrink-0">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold text-slate-900 leading-snug break-words">
+                          {m.subject ?? "Meeting"}
+                        </h3>
+                        <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1">
+                          <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                            <Calendar size={10} /> {formatDate(m.date)}
+                          </span>
+                          {m.duration_minutes && (
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                              <Clock size={10} /> {m.duration_minutes}m
+                            </span>
+                          )}
+                          {selected && (
+                            <span className="text-[11px] px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded font-medium">
+                              {selected.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button onClick={() => { setSelectedTimelineMeeting(null); setExportSuccess(null); }}
+                        className="text-slate-400 hover:text-slate-600 p-1 flex-shrink-0">
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    {/* Modal body — scrollable */}
+                    <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                      {/* AI Summary */}
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Summary</p>
+                        {parsedSummary ? (
+                          <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{parsedSummary}</p>
+                        ) : (
+                          <p className="text-sm text-slate-400 italic">No AI summary available for this meeting.</p>
+                        )}
+                      </div>
+
+                      {/* Attendees */}
+                      {attendees && attendees.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Attendees</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {attendees.map((a, i) => (
+                              <span key={i} className="inline-flex items-center gap-1 text-xs bg-white border border-slate-200 rounded-full px-2 py-0.5">
+                                <span className="w-4 h-4 rounded-full bg-violet-100 flex items-center justify-center text-[9px] font-bold text-violet-600">
+                                  {((a.name ?? a.email ?? "?")[0]).toUpperCase()}
+                                </span>
+                                {a.name ?? a.email ?? "Unknown"}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Next Steps */}
+                      {allNextSteps.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Next Steps</p>
+                          <div className="space-y-1.5">
+                            {allNextSteps.map((step, i) => (
+                              <div key={i} className="flex items-start gap-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
+                                <CheckSquare size={13} className="mt-0.5 text-amber-500 flex-shrink-0" />
+                                <p className="text-sm text-slate-700 leading-snug">{step}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Modal footer */}
+                    <div className="px-6 py-4 border-t border-slate-100 flex items-center gap-3 flex-shrink-0">
+                      <a
+                        href={`/meetings?meeting=${m.id}`}
+                        className="flex-1 py-2 text-xs font-medium text-center border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
+                      >
+                        Open Full Meeting
+                      </a>
+                      <button
+                        disabled={isExporting || justExported}
+                        onClick={async () => {
+                          if (!selected) return;
+                          setExportingPdf(m.id);
+                          setExportSuccess(null);
+                          try {
+                            const { generateMeetingPDF } = await import("@/lib/generate-meeting-pdf");
+                            const blob = await generateMeetingPDF({ ...m, company: selected as unknown as Company | undefined });
+                            const reader = new FileReader();
+                            reader.onload = async () => {
+                              const base64 = (reader.result as string).split(",")[1];
+                              const res = await fetch(`/api/meetings/${m.id}/export-pdf`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ company_id: selected.id, pdf_base64: base64 }),
+                              });
+                              if (res.ok) {
+                                setExportSuccess(m.id);
+                                // Refresh company documents list
+                                const { data } = await supabase
+                                  .from("company_documents" as "documents")
+                                  .select("id, meeting_id, file_name, storage_path, uploaded_at")
+                                  .eq("company_id", selected.id)
+                                  .eq("document_type", "meeting_transcript")
+                                  .order("uploaded_at", { ascending: false });
+                                setCompanyDocuments((data ?? []) as unknown as typeof companyDocuments);
+                              }
+                            };
+                            reader.readAsDataURL(blob);
+                          } catch (err) {
+                            console.error("PDF export failed:", err);
+                          } finally {
+                            setExportingPdf(null);
+                          }
+                        }}
+                        className={cn(
+                          "flex-1 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-1.5",
+                          justExported
+                            ? "bg-emerald-50 border border-emerald-200 text-emerald-700"
+                            : "bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
+                        )}
+                      >
+                        {isExporting ? (
+                          <><Loader2 size={11} className="animate-spin" /> Exporting…</>
+                        ) : justExported ? (
+                          <><Check size={11} /> Saved to Transcripts</>
+                        ) : (
+                          "Export PDF"
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Row B: Strategic Partnerships (50%) | Portfolio Intelligence (50%) ── */}
             <div className="grid grid-cols-2 gap-x-6">
@@ -2403,6 +2607,49 @@ export function PipelineClient({ initialCompanies }: Props) {
               </div>{/* end portfolio intelligence content */}
 
             </div>{/* end 2-col strategic/intelligence grid */}
+
+            {/* ── Meeting Transcripts ── */}
+            <section>
+              <details className="group">
+                <summary className="flex items-center justify-between cursor-pointer list-none pb-3">
+                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    Meeting Transcripts
+                    {companyDocuments.length > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full font-medium">
+                        {companyDocuments.length}
+                      </span>
+                    )}
+                  </h2>
+                  <ChevronRight size={13} className="text-slate-400 group-open:rotate-90 transition-transform" />
+                </summary>
+                <div className="space-y-1.5 pb-2">
+                  {companyDocuments.length === 0 ? (
+                    <p className="text-xs text-slate-300 italic">No meeting transcripts saved yet. Export a PDF from the interaction timeline.</p>
+                  ) : (
+                    companyDocuments.map(doc => (
+                      <div key={doc.id} className="flex items-center gap-2.5 px-3 py-2.5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white transition-colors">
+                        <FileText size={13} className="text-teal-500 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-slate-800 truncate">{doc.file_name}</p>
+                          <p className="text-[10px] text-slate-400">
+                            {new Date(doc.uploaded_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </p>
+                        </div>
+                        <a
+                          href={`/api/documents/${doc.id}/download`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Download PDF"
+                          className="text-slate-400 hover:text-teal-600 transition-colors p-1 flex-shrink-0"
+                        >
+                          <Download size={13} />
+                        </a>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </details>
+            </section>
 
             {/* ── Documents — Pitch Decks & Transcripts (50/50) ── */}
             <section>

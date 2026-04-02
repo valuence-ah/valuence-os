@@ -1,11 +1,11 @@
 "use client";
 // ─── Meetings Client (Fellow Integration) ─────────────────────────────────────
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Search, RefreshCw, ChevronDown, ChevronRight,
   Building2, Calendar, CheckSquare, Users,
-  AlertCircle, X, Clock
+  AlertCircle, X, Clock, Trash2
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
@@ -81,16 +81,17 @@ interface MeetingCardProps {
   meeting: MeetingRow;
   onResolve: (m: MeetingRow) => void;
   onOpenPanel: (m: MeetingRow) => void;
+  onDelete: (id: string) => void;
 }
 
-function MeetingCard({ meeting, onResolve, onOpenPanel }: MeetingCardProps) {
+function MeetingCard({ meeting, onResolve, onOpenPanel, onDelete }: MeetingCardProps) {
   const [expanded, setExpanded] = useState(false);
   const hasTranscript = !!(meeting.transcript_text || meeting.transcript_url);
   const actionCount   = meeting.action_items?.length ?? 0;
   const needsResolve  = meeting.resolution_status === "partial" || meeting.resolution_status === "unresolved";
 
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white hover:border-slate-300 transition-colors">
+    <div className="group border border-slate-200 rounded-xl overflow-hidden bg-white hover:border-slate-300 transition-colors">
       {/* Summary row */}
       <div className="px-4 py-3 flex items-center gap-3">
         {/* Expand */}
@@ -147,6 +148,19 @@ function MeetingCard({ meeting, onResolve, onOpenPanel }: MeetingCardProps) {
             </span>
           )}
         </div>
+
+        {/* Delete button — visible on row hover */}
+        <button
+          title="Delete meeting"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!confirm("Delete this meeting? This cannot be undone.")) return;
+            onDelete(meeting.id);
+          }}
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 transition-colors flex-shrink-0 p-1"
+        >
+          <Trash2 size={13} />
+        </button>
 
         {/* Resolve button */}
         {needsResolve && (
@@ -216,6 +230,21 @@ function MeetingCard({ meeting, onResolve, onOpenPanel }: MeetingCardProps) {
   );
 }
 
+// ── Simple message toast (deletion) ──────────────────────────────────────────
+
+function MessageToast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 2500);
+    return () => clearTimeout(t);
+  }, [onClose]);
+  return (
+    <div className="fixed bottom-6 right-6 z-50 bg-slate-800 text-white text-xs rounded-lg shadow-xl px-4 py-2.5 flex items-center gap-2">
+      <span>{message}</span>
+      <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={12} /></button>
+    </div>
+  );
+}
+
 // ── Toast ─────────────────────────────────────────────────────────────────────
 
 interface ToastData {
@@ -267,6 +296,7 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
   const [toast, setToast]             = useState<ToastData | null>(null);
   const [resolveMeeting, setResolveMeeting] = useState<MeetingRow | null>(null);
   const [panelMeeting, setPanelMeeting]     = useState<MeetingRow | null>(null);
+  const [deleteToast, setDeleteToast]       = useState<string | null>(null);
 
   // Stats
   const totalMeetings   = meetings.length;
@@ -358,6 +388,14 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
       prev.map(m => m.id === meetingId ? { ...m, resolution_status: "resolved" } : m)
     );
   }
+
+  const handleDelete = useCallback(async (id: string) => {
+    const res = await fetch(`/api/meetings/${id}`, { method: "DELETE" });
+    if (!res.ok) { alert("Failed to delete meeting"); return; }
+    setMeetings(prev => prev.filter(m => m.id !== id));
+    if (panelMeeting?.id === id) setPanelMeeting(null);
+    setDeleteToast("Meeting deleted");
+  }, [panelMeeting]);
 
   function handlePanelUpdate(patch: Partial<MeetingRow> & { id: string }) {
     setMeetings(prev =>
@@ -489,6 +527,7 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
               meeting={m}
               onResolve={setResolveMeeting}
               onOpenPanel={setPanelMeeting}
+              onDelete={handleDelete}
             />
           ))
         )}
@@ -510,6 +549,11 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
           onClose={() => setPanelMeeting(null)}
           onUpdate={handlePanelUpdate}
         />
+      )}
+
+      {/* Delete toast */}
+      {deleteToast && (
+        <MessageToast message={deleteToast} onClose={() => setDeleteToast(null)} />
       )}
 
       {/* Sync toast */}
