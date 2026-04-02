@@ -557,7 +557,7 @@ export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
     onUpdate({
       id: meeting.id,
       company_id: co?.id ?? null,
-      company: co ? { id: co.id, name: co.name, type: co.type as Company["type"] ?? null } : null,
+      company: (co ? { id: co.id, name: co.name, type: co.type as Company["type"] } : null) as MeetingRow["company"],
     });
   }, [meeting.id, onUpdate]);
 
