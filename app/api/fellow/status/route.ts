@@ -1,31 +1,49 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { fellowListMeetings } from "@/lib/fellow";
 
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!process.env.FELLOW_WORKSPACE) {
+  const workspace = process.env.FELLOW_WORKSPACE;
+  const apiKey    = process.env.FELLOW_API_KEY;
+
+  if (!workspace) {
     return NextResponse.json({ configured: false, message: "FELLOW_WORKSPACE is not set." });
   }
-  if (!process.env.FELLOW_API_KEY) {
+  if (!apiKey) {
     return NextResponse.json({ configured: false, message: "FELLOW_API_KEY is not set." });
   }
 
-  // Try a lightweight call — fetch just 1 recording to verify the key + workspace work
+  // Lightweight check: GET /me — confirms workspace + key are valid
   try {
-    await fellowListMeetings(1);
+    const res = await fetch(`https://${workspace}.fellow.app/api/v1/me`, {
+      headers: { "X-API-KEY": apiKey, Accept: "application/json" },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return NextResponse.json({
+        configured: true,
+        error: true,
+        message: `API returned ${res.status}: ${text.slice(0, 200)}`,
+      });
+    }
+
+    const data = await res.json() as { user?: { full_name?: string; email?: string }; workspace?: { name?: string } };
+    const name = data.workspace?.name ?? workspace;
+    const who  = data.user?.full_name ?? data.user?.email ?? "";
     return NextResponse.json({
       configured: true,
-      message: `Connected to Fellow workspace: ${process.env.FELLOW_WORKSPACE}.fellow.app`,
+      message: `Connected — ${name}${who ? ` (${who})` : ""}`,
     });
   } catch (err) {
     return NextResponse.json({
       configured: true,
       error: true,
-      message: `Credentials set but API call failed: ${String(err)}`,
+      message: `Request failed: ${String(err)}`,
     });
   }
 }

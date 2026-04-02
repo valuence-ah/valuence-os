@@ -47,19 +47,24 @@ export interface FellowNote {
 interface FellowRecording {
   id: string;
   title?: string;
-  scheduled_start?: string;
-  scheduled_end?: string;
-  recording_start?: string;
-  recording_end?: string;
+  // Fellow uses started_at / ended_at
+  started_at?: string;
+  ended_at?: string;
+  created_at?: string;
+  updated_at?: string;
   note_id?: string;
   event_guid?: string;
-  virtual_call_url?: string;
+  event_call_url?: string;
+  user_has_calendar_event?: boolean;
   // Transcript returned when include.transcript = true
   transcript?: {
     language?: string;
     speech_segments?: Array<{
-      speaker_name?: string;
+      speaker?: string;       // Fellow uses "speaker" not "speaker_name"
+      speaker_name?: string;  // fallback
       text?: string;
+      start?: number;         // seconds from recording start
+      end?: number;
       start_timestamp?: number;
       end_timestamp?: number;
     }>;
@@ -67,6 +72,7 @@ interface FellowRecording {
   // Sometimes attendees come back on the recording
   event_attendees?: string[];
   duration_minutes?: number;
+  ai_notes?: string;    // Fellow uses ai_notes
   ai_summary?: string;
   summary?: string;
   action_items?: FellowActionItem[];
@@ -101,7 +107,10 @@ function formatTranscript(raw: FellowRecording["transcript"]): string | null {
   const segments = raw.speech_segments ?? [];
   if (!segments.length) return null;
   return segments
-    .map(s => (s.speaker_name ? `${s.speaker_name}: ${s.text ?? ""}` : s.text ?? ""))
+    .map(s => {
+      const speaker = s.speaker ?? s.speaker_name;
+      return speaker ? `${speaker}: ${s.text ?? ""}` : (s.text ?? "");
+    })
     .filter(Boolean)
     .join("\n");
 }
@@ -111,11 +120,11 @@ function mapRecording(r: FellowRecording): FellowMeeting {
   return {
     id: r.id,
     title: r.title,
-    start_datetime: r.scheduled_start ?? r.recording_start,
-    end_datetime: r.scheduled_end ?? r.recording_end,
+    start_datetime: r.started_at,
+    end_datetime: r.ended_at,
     attendees: (r.event_attendees ?? []).map(email => ({ email, name: email })),
     transcript: formatTranscript(r.transcript) ?? undefined,
-    ai_summary: r.ai_summary,
+    ai_summary: r.ai_notes ?? r.ai_summary,   // Fellow uses ai_notes
     summary: r.summary,
     action_items: r.action_items ?? [],
     duration_minutes: r.duration_minutes ?? null,
@@ -147,12 +156,19 @@ export async function fellowListMeetings(lookbackDays = 30): Promise<FellowMeeti
   }
 
   const json = await res.json() as unknown;
-  const recordings: FellowRecording[] = Array.isArray(json)
-    ? json
-    : ((json as Record<string, unknown>).data ??
-       (json as Record<string, unknown>).recordings ??
-       (json as Record<string, unknown>).results ??
-       []) as FellowRecording[];
+  const obj = json as Record<string, unknown>;
+
+  // Fellow response: { recordings: { page_info: {...}, data: [...] } }
+  // Fallback to flat array or other common shapes just in case
+  let recordings: FellowRecording[];
+  if (Array.isArray(json)) {
+    recordings = json as FellowRecording[];
+  } else if (obj.recordings && typeof obj.recordings === "object") {
+    const inner = obj.recordings as Record<string, unknown>;
+    recordings = (inner.data ?? inner.recordings ?? []) as FellowRecording[];
+  } else {
+    recordings = (obj.data ?? obj.results ?? []) as FellowRecording[];
+  }
 
   return recordings.map(mapRecording);
 }
@@ -248,7 +264,7 @@ export function getMeetingTitle(m: FellowMeeting): string {
 export function getMeetingDuration(m: FellowMeeting): number | null {
   if (m.duration_minutes) return m.duration_minutes;
   const start = m.start_datetime ?? m.start_time;
-  const end = m.end_datetime ?? m.end_time;
+  const end   = m.end_datetime   ?? m.end_time;
   if (start && end) {
     const diff = new Date(end).getTime() - new Date(start).getTime();
     if (diff > 0) return Math.round(diff / 60000);
