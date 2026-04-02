@@ -101,8 +101,20 @@ function mapTranscript(r: RawTranscript): FirefliesMeeting {
     attendees = r.participants.map(p => ({ name: p, email: p }));
   }
 
-  // Build AI summary — prefer overview, fall back to bullet_gist
-  const aiSummary = r.summary?.overview ?? r.summary?.bullet_gist ?? r.summary?.short_overview ?? null;
+  // Build structured AI summary from Fireflies' native sections so our
+  // formatMeetingSummary parser can display each section cleanly.
+  const sections: string[] = [];
+  const overview = r.summary?.overview ?? r.summary?.short_overview ?? null;
+  if (overview?.trim()) {
+    sections.push(`## Overview\n${overview.trim()}`);
+  }
+  if (r.summary?.bullet_gist?.trim()) {
+    sections.push(`## Key Discussion Topics\n${r.summary.bullet_gist.trim()}`);
+  }
+  if (r.summary?.action_items?.trim()) {
+    sections.push(`## Next Steps\n${r.summary.action_items.trim()}`);
+  }
+  const aiSummary = sections.length > 0 ? sections.join("\n\n") : null;
 
   // Action items come as a newline-separated string
   const actionItems: string[] = r.summary?.action_items

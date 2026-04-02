@@ -32,8 +32,8 @@ export async function PATCH(
 
   const supabase = createAdminClient();
 
-  // ── If archiving, also record the external ID so sync won't reimport it ───
-  if (body.archived === true) {
+  // ── Fetch external ID for archive/unarchive side-effects ─────────────────
+  if (body.archived !== undefined) {
     const { data: mtg } = await supabase
       .from("interactions")
       .select("fireflies_id, source")
@@ -42,12 +42,21 @@ export async function PATCH(
 
     const externalId = (mtg as { fireflies_id?: string | null; source?: string | null } | null)?.fireflies_id;
     if (externalId) {
-      await supabase
-        .from("archived_external_meetings")
-        .upsert(
-          { external_id: externalId, source: "fireflies", archived_by: user.id },
-          { onConflict: "external_id" }
-        );
+      if (body.archived === true) {
+        // Block future re-syncs
+        await supabase
+          .from("archived_external_meetings")
+          .upsert(
+            { external_id: externalId, source: "fireflies", archived_by: user.id },
+            { onConflict: "external_id" }
+          );
+      } else {
+        // Remove block so Fireflies can re-sync this meeting
+        await supabase
+          .from("archived_external_meetings")
+          .delete()
+          .eq("external_id", externalId);
+      }
     }
   }
 

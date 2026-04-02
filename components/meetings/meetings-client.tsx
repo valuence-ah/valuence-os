@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   Search, RefreshCw, ChevronDown, ChevronRight,
   Building2, Calendar, CheckSquare, Users,
-  AlertCircle, X, Clock, Archive,
+  AlertCircle, X, Clock, Archive, ArchiveRestore,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
@@ -291,11 +291,14 @@ function SyncToast({ data, onClose, onReview }: { data: ToastData; onClose: () =
 
 interface MeetingsClientProps {
   meetings: MeetingRow[];
+  archivedMeetings?: MeetingRow[];
   lastSynced?: string | null;
 }
 
-export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialLastSynced }: MeetingsClientProps) {
-  const [meetings, setMeetings]       = useState<MeetingRow[]>(initialMeetings);
+export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: initialArchived = [], lastSynced: initialLastSynced }: MeetingsClientProps) {
+  const [meetings, setMeetings]             = useState<MeetingRow[]>(initialMeetings);
+  const [archivedMeetings, setArchivedMeetings] = useState<MeetingRow[]>(initialArchived);
+  const [showArchived, setShowArchived]     = useState(false);
   const [search, setSearch]           = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | "fireflies" | "manual">("all");
   const [resolutionFilter, setResolutionFilter] = useState<"all" | "resolved" | "review" | "unresolved" | "internal">("all");
@@ -421,16 +424,28 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
       body: JSON.stringify({ archived: true }),
     });
     if (!res.ok) { setStatusToast("Failed to archive meeting"); return; }
+    // Move from active list to archived list
+    const meeting = meetings.find(m => m.id === id);
     setMeetings(prev => prev.filter(m => m.id !== id));
+    if (meeting) setArchivedMeetings(prev => [{ ...meeting, archived: true }, ...prev]);
     if (panelMeeting?.id === id) setPanelMeeting(null);
-    // Deselect if was selected
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
+    setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
     setStatusToast("Meeting archived");
-  }, [panelMeeting]);
+  }, [panelMeeting, meetings]);
+
+  const handleUnarchive = useCallback(async (id: string) => {
+    const res = await fetch(`/api/meetings/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: false }),
+    });
+    if (!res.ok) { setStatusToast("Failed to unarchive meeting"); return; }
+    // Move from archived list back to active list
+    const meeting = archivedMeetings.find(m => m.id === id);
+    setArchivedMeetings(prev => prev.filter(m => m.id !== id));
+    if (meeting) setMeetings(prev => [{ ...meeting, archived: false }, ...prev]);
+    setStatusToast("Meeting restored");
+  }, [archivedMeetings]);
 
   const handleToggleSelect = useCallback((id: string, checked: boolean) => {
     setSelectedIds(prev => {
@@ -574,6 +589,20 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
           <span className="text-[10px] text-slate-400">Last synced: {timeSince(lastSynced)}</span>
         )}
 
+        {/* Show archived toggle */}
+        <button
+          onClick={() => setShowArchived(v => !v)}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors",
+            showArchived
+              ? "bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100"
+              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+          )}
+        >
+          <Archive size={12} />
+          Archived {archivedMeetings.length > 0 && `(${archivedMeetings.length})`}
+        </button>
+
         {/* Sync button */}
         <button onClick={handleSync} disabled={syncing}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
@@ -641,6 +670,45 @@ export function MeetingsClient({ meetings: initialMeetings, lastSynced: initialL
           </>
         )}
       </div>
+
+      {/* Archived meetings section */}
+      {showArchived && (
+        <div className="border-t border-amber-200 bg-amber-50/40 px-6 py-4">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+            <Archive size={12} />
+            Archived Meetings ({archivedMeetings.length})
+          </p>
+          {archivedMeetings.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">No archived meetings.</p>
+          ) : (
+            <div className="space-y-2">
+              {archivedMeetings.map(m => (
+                <div key={m.id} className="flex items-center gap-3 px-4 py-2.5 bg-white border border-amber-200 rounded-xl opacity-70 hover:opacity-100 transition-opacity">
+                  <ResolutionDot status={m.resolution_status} />
+                  <span className="flex-1 text-sm text-slate-600 truncate">
+                    {m.subject ?? "Untitled Meeting"}
+                  </span>
+                  {m.company && (
+                    <span className="hidden sm:flex items-center gap-1 text-xs text-slate-400 flex-shrink-0">
+                      <Building2 size={10} />{m.company.name}
+                    </span>
+                  )}
+                  <span className="text-xs text-slate-400 flex-shrink-0 flex items-center gap-1">
+                    <Calendar size={11} />{formatDate(m.date)}
+                  </span>
+                  <button
+                    title="Restore meeting"
+                    onClick={() => handleUnarchive(m.id)}
+                    className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-teal-50 text-teal-700 border border-teal-300 rounded-lg hover:bg-teal-100 transition-colors flex-shrink-0"
+                  >
+                    <ArchiveRestore size={11} /> Restore
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Resolution modal */}
       {resolveMeeting && (
