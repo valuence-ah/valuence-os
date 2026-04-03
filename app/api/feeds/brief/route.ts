@@ -1,6 +1,7 @@
 // ─── GET /api/feeds/brief ─────────────────────────────────────────────────────
 // Returns curated articles for the Daily Intelligence Brief.
 // ?type=relevant  — articles with relevance_score >= 2, not dismissed
+//                   falls back to recent articles if none are categorized yet
 // ?type=dismissed — articles dismissed today (?since=ISO)
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,34 +17,57 @@ export async function GET(req: NextRequest) {
   const since = searchParams.get("since");
 
   if (type === "relevant") {
-    const { data, error } = await supabase
-      .from("feed_articles")
-      .select("*")
-      .gte("relevance_score", 2)
-      .eq("dismissed", false)
-      .order("relevance_score", { ascending: false })
-      .order("published_at", { ascending: false })
-      .limit(30);
+    // Try to get AI-categorized articles first
+    try {
+      const { data, error } = await supabase
+        .from("feed_articles")
+        .select("*")
+        .gte("relevance_score", 2)
+        .eq("dismissed", false)
+        .order("relevance_score", { ascending: false })
+        .order("published_at", { ascending: false })
+        .limit(30);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(data ?? []);
+      if (!error && data && data.length > 0) {
+        return NextResponse.json({ articles: data, fallback: false });
+      }
+    } catch {
+      // Column might not exist yet — fall through to fallback
+    }
+
+    // Fallback: return recent articles regardless of categorization status
+    try {
+      const { data: fallbackData } = await supabase
+        .from("feed_articles")
+        .select("*")
+        .order("published_at", { ascending: false })
+        .limit(20);
+
+      return NextResponse.json({ articles: fallbackData ?? [], fallback: true });
+    } catch {
+      return NextResponse.json({ articles: [], fallback: true });
+    }
   }
 
   if (type === "dismissed") {
-    let query = supabase
-      .from("feed_articles")
-      .select("id, title, ai_why_relevant")
-      .eq("dismissed", true)
-      .order("published_at", { ascending: false })
-      .limit(10);
+    try {
+      let query = supabase
+        .from("feed_articles")
+        .select("id, title, ai_why_relevant")
+        .eq("dismissed", true)
+        .order("published_at", { ascending: false })
+        .limit(10);
 
-    if (since) {
-      query = query.gte("published_at", since);
+      if (since) {
+        query = query.gte("published_at", since);
+      }
+
+      const { data, error } = await query;
+      if (error) return NextResponse.json([], { status: 200 });
+      return NextResponse.json(data ?? []);
+    } catch {
+      return NextResponse.json([]);
     }
-
-    const { data, error } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(data ?? []);
   }
 
   return NextResponse.json({ error: "Unknown type" }, { status: 400 });

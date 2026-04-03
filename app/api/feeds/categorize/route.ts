@@ -1,6 +1,7 @@
 // ─── POST /api/feeds/categorize ───────────────────────────────────────────────
 // Processes up to 20 uncategorized feed_articles with Claude Haiku.
-// Fetches thesis keywords from DB, computes relevance_score, sets ai_why_relevant.
+// Fetches thesis keywords from DB (falls back to hardcoded list if unavailable).
+// Computes relevance_score, sets ai_why_relevant.
 // Called automatically after feed sync and by Vercel cron.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -8,7 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const dynamic    = "force-dynamic";
+export const dynamic     = "force-dynamic";
 export const maxDuration = 60;
 
 interface ClaudeCategorizationResult {
@@ -22,6 +23,18 @@ interface ClaudeCategorizationResult {
   thesis_keywords: string[];
   ai_why_relevant: string | null;
 }
+
+// Hardcoded fallback if thesis_keywords table is empty or unavailable
+const FALLBACK_KEYWORDS = [
+  "biomining", "bioleaching", "perovskite", "green hydrogen", "hydrogen catalyst",
+  "carbon capture", "direct air capture", "green steel", "critical mineral",
+  "rare earth", "battery recycling", "solid state battery", "electrochemical",
+  "electrolysis", "thermoelectric", "synthetic biology", "synbio", "cell-free",
+  "directed evolution", "protein design", "biosensor", "CRISPR",
+  "biomanufacturing", "fermentation platform", "carbon nanotube",
+  "nanomaterial", "metal organic framework", "MOF", "membrane separation",
+  "materials informatics", "autonomous lab",
+];
 
 export async function POST(request: NextRequest) {
   // Auth: allow Vercel cron or authenticated user
@@ -38,35 +51,72 @@ export async function POST(request: NextRequest) {
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  // 1. Fetch active thesis keywords from DB
-  const { data: kwRows } = await supabase
-    .from("thesis_keywords")
-    .select("keyword, category")
-    .eq("active", true);
+  // 1. Fetch active thesis keywords — gracefully fall back if table doesn't exist
+  let thesisKeywords: string[] = FALLBACK_KEYWORDS;
+  let keywordCategories: Record<string, string> = {};
 
-  const thesisKeywords = (kwRows ?? []).map(r => r.keyword);
-  const keywordCategories = Object.fromEntries(
-    (kwRows ?? []).map(r => [r.keyword.toLowerCase(), r.category as string])
-  );
+  try {
+    const { data: kwRows, error: kwError } = await supabase
+      .from("thesis_keywords")
+      .select("keyword, category")
+      .eq("active", true);
 
-  // 2. Fetch uncategorized articles
-  const { data: articles, error } = await supabase
-    .from("feed_articles")
-    .select("id, title, summary, content, source_id")
-    .eq("ai_categorized", false)
-    .order("published_at", { ascending: false })
-    .limit(20);
+    if (!kwError && kwRows && kwRows.length > 0) {
+      thesisKeywords = kwRows.map(r => r.keyword);
+      keywordCategories = Object.fromEntries(
+        kwRows.map(r => [r.keyword.toLowerCase(), r.category as string])
+      );
+    } else {
+      console.log("[categorize] thesis_keywords empty or unavailable, using fallback list");
+    }
+  } catch {
+    console.log("[categorize] thesis_keywords table not found, using hardcoded fallback");
+  }
 
-  if (error || !articles?.length) {
+  // 2. Fetch uncategorized articles — gracefully fall back if ai_categorized column missing
+  let articles: Array<{ id: string; title: string; summary: string | null; content: string | null; source_id: string | null }> | null = null;
+
+  try {
+    const { data, error } = await supabase
+      .from("feed_articles")
+      .select("id, title, summary, content, source_id")
+      .eq("ai_categorized", false)
+      .order("published_at", { ascending: false })
+      .limit(20);
+
+    if (error) throw error;
+    articles = data;
+  } catch {
+    // Column might not exist — fall back to recent articles
+    console.log("[categorize] ai_categorized column unavailable, falling back to recent articles");
+    try {
+      const { data } = await supabase
+        .from("feed_articles")
+        .select("id, title, summary, content, source_id")
+        .order("published_at", { ascending: false })
+        .limit(20);
+      articles = data;
+    } catch (err) {
+      console.error("[categorize] Failed to fetch articles:", err);
+      return NextResponse.json({ processed: 0, error: "Could not fetch articles" });
+    }
+  }
+
+  if (!articles?.length) {
     return NextResponse.json({ processed: 0 });
   }
 
   // 3. Fetch watchlist for co-investor matching
-  const { data: watchlistItems } = await supabase
-    .from("feed_watchlist")
-    .select("name, keywords, type");
-
-  const watchlist = watchlistItems ?? [];
+  let watchlist: Array<{ name: string; keywords: string[]; type: string }> = [];
+  try {
+    const { data: watchlistItems } = await supabase
+      .from("feed_watchlist")
+      .select("name, keywords, type");
+    watchlist = watchlistItems ?? [];
+  } catch {
+    // feed_watchlist table might not exist yet
+    console.log("[categorize] feed_watchlist not available");
+  }
 
   const BATCH_SIZE = 5;
   let processed = 0;
@@ -143,13 +193,15 @@ For deal_amount_usd: convert EUR × 1.1, GBP × 1.27.`,
           // 3c. Match mentioned companies against CRM
           const matchedCompanyIds: string[] = [];
           for (const name of parsed.mentioned_companies ?? []) {
-            const { data: match } = await supabase
-              .from("companies")
-              .select("id")
-              .ilike("name", `%${name}%`)
-              .limit(1)
-              .maybeSingle();
-            if (match) matchedCompanyIds.push(match.id);
+            try {
+              const { data: match } = await supabase
+                .from("companies")
+                .select("id")
+                .ilike("name", `%${name}%`)
+                .limit(1)
+                .maybeSingle();
+              if (match) matchedCompanyIds.push(match.id);
+            } catch { /* non-critical */ }
           }
 
           // 3d. Watchlist matching
@@ -161,28 +213,24 @@ For deal_amount_usd: convert EUR × 1.1, GBP × 1.27.`,
 
           // 3e. Calculate relevance_score (0–5)
           let relevanceScore = 0;
-          // +1 per thesis keyword match (max 2)
           relevanceScore += Math.min(finalThesisKeywords.length, 2);
-          // +1 if sector is cleantech or biotech
           const sectors: string[] = parsed.sectors ?? [];
-          if (sectors.includes("cleantech") || sectors.includes("biotech")) {
+          if (sectors.includes("cleantech") || sectors.includes("biotech") || sectors.includes("advanced_materials")) {
             relevanceScore += 1;
           }
-          // +1 if deal stage is early
           const earlyStages = ["pre_seed", "seed", "series_a"];
           if (parsed.deal_stage && earlyStages.includes(parsed.deal_stage)) {
             relevanceScore += 1;
           }
-          // +1 if matched to existing pipeline company or known co-investor
           if (matchedCompanyIds.length > 0 || watchlistMatched.length > 0) {
             relevanceScore += 1;
           }
 
           // 3f. Build relevance tags
           const relevanceTags: string[] = [];
-          if (matchedCompanyIds.length)     relevanceTags.push("pipeline_match");
-          if (finalThesisKeywords.length)   relevanceTags.push("thesis_match");
-          if (watchlistMatched.length)      relevanceTags.push("coinvestor_activity");
+          if (matchedCompanyIds.length)   relevanceTags.push("pipeline_match");
+          if (finalThesisKeywords.length) relevanceTags.push("thesis_match");
+          if (watchlistMatched.length)    relevanceTags.push("coinvestor_activity");
 
           // 3g. Update article
           await supabase
@@ -204,7 +252,7 @@ For deal_amount_usd: convert EUR × 1.1, GBP × 1.27.`,
             })
             .eq("id", article.id);
 
-          // 3h. Increment keyword match counts in DB
+          // 3h. Increment keyword match counts (non-critical)
           for (const kw of finalThesisKeywords) {
             const cat = keywordCategories[kw.toLowerCase()];
             if (cat !== undefined) {
@@ -218,10 +266,12 @@ For deal_amount_usd: convert EUR × 1.1, GBP × 1.27.`,
         } catch (err) {
           console.error(`[categorize] article ${article.id}:`, err);
           // Mark categorized to avoid re-processing failures
-          await supabase
-            .from("feed_articles")
-            .update({ ai_categorized: true, bucket: "uncategorized", relevance_score: 0 })
-            .eq("id", article.id);
+          try {
+            await supabase
+              .from("feed_articles")
+              .update({ ai_categorized: true, bucket: "uncategorized", relevance_score: 0 })
+              .eq("id", article.id);
+          } catch { /* non-critical */ }
         }
       })
     );
