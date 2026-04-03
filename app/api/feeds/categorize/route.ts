@@ -74,12 +74,12 @@ export async function POST(request: NextRequest) {
   }
 
   // 2. Fetch uncategorized articles — gracefully fall back if ai_categorized column missing
-  let articles: Array<{ id: string; title: string; summary: string | null; content: string | null; source_id: string | null }> | null = null;
+  let articles: Array<{ id: string; title: string; summary: string | null; source_id: string | null }> | null = null;
 
   try {
     const { data, error } = await supabase
       .from("feed_articles")
-      .select("id, title, summary, content, source_id")
+      .select("id, title, summary, source_id")
       .eq("ai_categorized", false)
       .order("published_at", { ascending: false })
       .limit(20);
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     try {
       const { data } = await supabase
         .from("feed_articles")
-        .select("id, title, summary, content, source_id")
+        .select("id, title, summary, source_id")
         .order("published_at", { ascending: false })
         .limit(20);
       articles = data;
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
       batch.map(async (article) => {
         try {
           const textForAnalysis = `${article.title}\n\n${
-            article.summary ?? article.content ?? ""
+            article.summary ?? ""
           }`.substring(0, 2000);
 
           const textLower = textForAnalysis.toLowerCase();
