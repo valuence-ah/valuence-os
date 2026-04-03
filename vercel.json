@@ -3,6 +3,6 @@
   "crons": [
     { "path": "/api/agents/run-all",      "schedule": "0 8 * * *"   },
     { "path": "/api/feeds/fetch-all",     "schedule": "0 7 * * *"   },
-    { "path": "/api/feeds/categorize",    "schedule": "0 */2 * * *" }
+    { "path": "/api/feeds/categorize",    "schedule": "0 9 * * *"   }
   ]
 }
