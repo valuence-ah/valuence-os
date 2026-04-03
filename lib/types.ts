@@ -64,6 +64,14 @@ export interface Company {
   drive_folder_url: string | null;
   investor_type: string | null;
   strategic_type: string | null;
+  // Portfolio intelligence columns (migration 024)
+  runway_months: number | null;
+  health_status: "healthy" | "watch" | "attention" | "unknown" | null;
+  current_raise_status: "not_raising" | "preparing" | "actively_raising" | "closing" | null;
+  current_raise_target: string | null;
+  next_board_date: string | null;
+  latest_report_date: string | null;
+  latest_report_summary: string | null;
 }
 
 export interface Contact {
@@ -305,6 +313,88 @@ export interface FeedWatchlistItem {
   type: FeedWatchlistType;
   keywords: string[];
   notify: boolean;
+  created_at: string;
+}
+
+// ── Portfolio Intelligence types (migration 024) ──────────────────────────────
+
+export interface PortfolioKpi {
+  id: string;
+  company_id: string;
+  period: string;
+  period_type: string;
+  mrr: number | null;
+  mrr_growth: number | null;
+  arr: number | null;
+  monthly_burn: number | null;
+  cash_on_hand: number | null;
+  runway_months: number | null;
+  revenue: number | null;
+  gross_margin: number | null;
+  headcount: number | null;
+  headcount_change: number | null;
+  customers: number | null;
+  pilots_active: number | null;
+  patents_filed: number | null;
+  patents_granted: number | null;
+  custom_kpis: Record<string, number>;
+  source: string;
+  source_report_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortfolioMilestone {
+  id: string;
+  company_id: string;
+  title: string;
+  description: string | null;
+  status: "upcoming" | "in_progress" | "done" | "blocked";
+  target_date: string | null;
+  completed_date: string | null;
+  category: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortfolioInitiative {
+  id: string;
+  company_id: string;
+  title: string;
+  description: string | null;
+  status: "planned" | "in_progress" | "complete" | "paused";
+  category: string;
+  source: string;
+  source_report_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortfolioReport {
+  id: string;
+  company_id: string;
+  file_name: string;
+  storage_path: string;
+  report_type: string;
+  period: string | null;
+  ai_extracted: boolean;
+  ai_summary: string | null;
+  extracted_data: Record<string, unknown>;
+  uploaded_at: string;
+}
+
+export interface PortfolioIntelligence {
+  id: string;
+  company_id: string;
+  type: "ma_acquirer" | "pilot_partner" | "competitor";
+  entity_name: string;
+  description: string | null;
+  fit_level: "high" | "medium" | "low";
+  warmth: "warm" | "lp_connection" | "cold";
+  source: string;
+  last_refreshed: string;
   created_at: string;
 }
 
