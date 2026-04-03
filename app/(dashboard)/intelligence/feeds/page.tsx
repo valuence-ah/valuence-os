@@ -8,7 +8,7 @@ export default function FeedsPage() {
     <div className="flex flex-col h-full">
       <Header
         title="News Feeds"
-        subtitle="RSS and news feeds from across your sectors"
+        subtitle="Three-bucket intelligence: fund raises, startup rounds, and M&amp;A signals"
       />
       <FeedsClient />
     </div>

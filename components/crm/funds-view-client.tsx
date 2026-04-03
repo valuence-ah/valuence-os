@@ -1149,7 +1149,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
         </div>
         <button
           onClick={() => setShowAddFund(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors"
         >
           <Plus size={13} /> Add Fund
         </button>

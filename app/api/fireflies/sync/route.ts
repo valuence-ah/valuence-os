@@ -49,7 +49,7 @@ export async function POST() {
   let needsReview = 0;
   let internal    = 0;
 
-  // PDF promises — fire-and-forget, settled before we return
+  // PDF saves are fire-and-forget — do not block the sync response
   const pdfPromises: Promise<void>[] = [];
 
   for (const m of meetings) {
@@ -166,9 +166,12 @@ export async function POST() {
     }
   }
 
-  // Settle all PDF saves before responding
-  const pdfResults = await Promise.allSettled(pdfPromises);
-  const pdfsSaved  = pdfResults.filter(r => r.status === "fulfilled").length;
+  // Fire-and-forget all PDF saves — don't block the sync response
+  let pdfsSaved = 0;
+  for (const p of pdfPromises) {
+    void p.catch(err => console.error("[sync] PDF save failed:", (err as Error).message));
+  }
+  pdfsSaved = pdfPromises.length;
 
   // Enrichment pass — auto-tag any still-unresolved meetings
   const enrichStats = await enrichAllUnresolvedMeetings(supabase);

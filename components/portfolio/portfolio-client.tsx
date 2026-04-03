@@ -142,10 +142,10 @@ export function PortfolioClient({ companies: initial }: Props) {
 
       {/* Company grid */}
       {filtered.length === 0 ? (
-        <div className="card p-12 text-center">
-          <BarChart3 className="mx-auto text-slate-300 mb-3" size={40} />
-          <p className="text-slate-500 font-medium">No portfolio companies yet</p>
-          <p className="text-slate-400 text-sm mt-1">Mark companies as &quot;Portfolio&quot; in the Pipeline CRM.</p>
+        <div className="card flex flex-col items-center justify-center py-12 text-center">
+          <BarChart3 size={28} className="text-gray-300 mb-3" />
+          <p className="text-sm font-medium text-gray-500">No portfolio companies yet</p>
+          <p className="text-xs text-gray-400 mt-1">Mark companies as &quot;Portfolio&quot; in the Pipeline CRM.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">

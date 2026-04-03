@@ -13,10 +13,10 @@ const config: Config = {
         sidebar: {
           bg: "#0a0f1e",
           hover: "#131929",
-          active: "#1a2540",
+          active: "#0d3d38",
           border: "#1e2d4a",
           text: "#94a3b8",
-          textActive: "#f1f5f9",
+          textActive: "#5eead4",
         },
         brand: {
           50: "#eff6ff",

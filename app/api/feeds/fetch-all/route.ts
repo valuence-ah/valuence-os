@@ -81,6 +81,12 @@ export async function GET() {
     }
   }
 
+  // Fire-and-forget: categorize any newly fetched uncategorized articles
+  void fetch(
+    `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/feeds/categorize`,
+    { method: "POST" }
+  ).catch(err => console.error("[fetch-all] categorize trigger failed:", (err as Error).message));
+
   return NextResponse.json({ ok: true, results, ran_at: new Date().toISOString() });
 }
 

@@ -16,7 +16,7 @@ export default async function MemosPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="IC Memos" subtitle="Investment committee memos — AI-generated, human-reviewed" />
+      <Header title="IC Memos" subtitle="Investment committee decision memos" />
       <MemosClient initialMemos={memos ?? []} />
     </div>
   );

@@ -4,6 +4,7 @@
 // Right panel: full company detail — overview, contacts, documents, IC memo.
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact, Interaction, IcMemo, DealStatus, CompanyType, ContactType } from "@/lib/types";
 import { cn, formatDate, formatCurrency, getInitials, truncate } from "@/lib/utils";
@@ -54,7 +55,6 @@ const STATUS_COLORS: Record<string, string> = {
   exited:                 "bg-gray-100 text-gray-500",
 };
 
-// Values match Excel "Investment Round" column
 // Values match Excel "Investment Round" column
 const STAGE_OPTIONS = ["Pre-Seed", "Pre-A", "Seed", "Seed Extension", "Series A", "Series B", "Series C", "Growth"];
 
@@ -503,6 +503,9 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [showPartnerDropdown, setShowPartnerDropdown] = useState(false);
   const [confirmDeletePartner, setConfirmDeletePartner] = useState<{ type: "portco" | "manual"; id: string } | null>(null);
 
+  // Virtualizer for the company list
+  const listParentRef = useRef<HTMLDivElement>(null);
+
   // Auto-save
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rightPanelRef = useRef<HTMLDivElement>(null);
@@ -617,6 +620,14 @@ export function PipelineClient({ initialCompanies }: Props) {
       }
     });
   }, [companies, search, sortBy, includePassed]);
+
+  // ── Virtualizer for the company list (left panel) ─────────────────────────
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => listParentRef.current,
+    estimateSize: () => 72,
+    overscan: 5,
+  });
 
   // ── Load detail data when selected company changes ────────────────────────
   const loadDetail = useCallback(async (id: string) => {
@@ -1402,57 +1413,64 @@ export function PipelineClient({ initialCompanies }: Props) {
           </div>
         </div>
 
-        {/* Company list */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Company list — virtualized for performance with 200+ companies */}
+        <div ref={listParentRef} className="flex-1 overflow-y-auto" style={{ height: "100%" }}>
           {filtered.length === 0 ? (
             <div className="p-6 text-center text-slate-400 text-sm">
               {search ? `No results for "${search}"` : "No startups yet"}
             </div>
           ) : (
-            filtered.map(c => {
-              const isActive = c.id === selectedId;
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => { setSelectedId(c.id); setEditing(false); setConfirmDelete(false); }}
-                  className={cn(
-                    "w-full flex items-start gap-3 px-4 py-3 text-left border-b border-slate-100 hover:bg-slate-50 transition-colors relative border-l-2",
-                    STAGE_BORDER[c.deal_status ?? ""] ?? "border-l-slate-200",
-                    isActive && "bg-blue-50 hover:bg-blue-50"
-                  )}
-                >
-                  {/* Active indicator */}
-                  {isActive && (
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-blue-600 rounded-r" />
-                  )}
-                  <CompanyLogo company={c} />
-                  <div className="flex-1 min-w-0">
-                    {/* Line 1 — Company name */}
-                    <p className={cn("text-xs font-semibold truncate", isActive ? "text-blue-700" : "text-slate-800")}>
-                      {c.name}
-                    </p>
-                    {/* Line 2 — Status */}
-                    <p className="mt-0.5 text-xs truncate">
-                      {c.deal_status ? (
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", STATUS_COLORS[c.deal_status])}>
-                          {STATUS_LABELS[c.deal_status] ?? c.deal_status}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-slate-300">No status</span>
-                      )}
-                    </p>
-                    {/* Line 3 — Sector bubble */}
-                    <p className="mt-0.5">
-                      {c.sectors?.[0] ? (
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium capitalize", SECTOR_COLORS[c.sectors[0].toLowerCase()] ?? SECTOR_COLORS.other)}>
-                          {c.sectors[0]}
-                        </span>
-                      ) : null}
-                    </p>
-                  </div>
-                </button>
-              );
-            })
+            <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}>
+              {rowVirtualizer.getVirtualItems().map(virtualItem => {
+                const c = filtered[virtualItem.index];
+                if (!c) return null;
+                const isActive = c.id === selectedId;
+                return (
+                  <button
+                    key={c.id}
+                    data-index={virtualItem.index}
+                    ref={rowVirtualizer.measureElement}
+                    onClick={() => { setSelectedId(c.id); setEditing(false); setConfirmDelete(false); }}
+                    style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${virtualItem.start}px)` }}
+                    className={cn(
+                      "flex items-start gap-3 px-4 py-3 text-left border-b border-slate-100 hover:bg-slate-50 transition-colors relative border-l-2",
+                      STAGE_BORDER[c.deal_status ?? ""] ?? "border-l-slate-200",
+                      isActive && "bg-blue-50 hover:bg-blue-50"
+                    )}
+                  >
+                    {/* Active indicator */}
+                    {isActive && (
+                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-blue-600 rounded-r" />
+                    )}
+                    <CompanyLogo company={c} />
+                    <div className="flex-1 min-w-0">
+                      {/* Line 1 — Company name */}
+                      <p className={cn("text-xs font-semibold truncate", isActive ? "text-blue-700" : "text-slate-800")}>
+                        {c.name}
+                      </p>
+                      {/* Line 2 — Status */}
+                      <p className="mt-0.5 text-xs truncate">
+                        {c.deal_status ? (
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", STATUS_COLORS[c.deal_status])}>
+                            {STATUS_LABELS[c.deal_status] ?? c.deal_status}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-300">No status</span>
+                        )}
+                      </p>
+                      {/* Line 3 — Sector bubble */}
+                      <p className="mt-0.5">
+                        {c.sectors?.[0] ? (
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium capitalize", SECTOR_COLORS[c.sectors[0].toLowerCase()] ?? SECTOR_COLORS.other)}>
+                            {c.sectors[0]}
+                          </span>
+                        ) : null}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>}
@@ -1692,7 +1710,7 @@ export function PipelineClient({ initialCompanies }: Props) {
 
             {/* ── Overview Fields ── */}
             <section>
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Overview</h2>
+              <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-4">Overview</h2>
               <div className="grid grid-cols-5 gap-x-6 gap-y-5">
 
                 {/* Row 1: Domain/Website, Type, Sector, Sub-sector, Last Contact */}
@@ -1952,7 +1970,7 @@ export function PipelineClient({ initialCompanies }: Props) {
             {/* ── Description — Claude-generated, read-only ── */}
             <section>
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Company Description</h2>
+                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Company Description</h2>
                 <button
                   onClick={handleGenerateDesc}
                   disabled={generatingDesc}
@@ -1972,7 +1990,7 @@ export function PipelineClient({ initialCompanies }: Props) {
 
               {/* Header: Contacts */}
               <div className="flex items-center justify-between pb-3">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Contacts</h2>
+                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Contacts</h2>
                 <button
                   onClick={() => { setContactPanelMode("manage"); if (contacts.length > 0) { setContactPanel(contacts[0]); } else { setContactPanel({ id: "__manage__", first_name: "", last_name: "", email: null, phone: null, linkedin_url: null, title: null, company_id: selected?.id ?? null, type: "other", relationship_strength: null, is_primary_contact: false, last_contact_date: null, location_city: null, location_country: null, notes: null, tags: null, emails: null, status: "active", created_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as Contact); } setContactEditing(false); setConfirmRemove(false); setShowAddContactForm(false); }}
                   className="text-xs text-blue-600 hover:underline flex items-center gap-1"
@@ -1983,7 +2001,7 @@ export function PipelineClient({ initialCompanies }: Props) {
 
               {/* Header: Interaction Timeline */}
               <div className="flex items-center justify-between pb-3">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Interaction Timeline</h2>
+                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Interaction Timeline</h2>
                 <button
                   onClick={() => setAddingNote(p => !p)}
                   className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 flex items-center gap-1"
@@ -2500,7 +2518,7 @@ export function PipelineClient({ initialCompanies }: Props) {
 
               {/* Header: Strategic Partnerships */}
               <div className="flex items-center justify-between pb-3">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Strategic Partnerships</h2>
+                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Strategic Partnerships</h2>
                 <button onClick={() => setShowAddPartnership(v => !v)}
                   className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                   <Plus size={11} /> Add
@@ -2509,7 +2527,7 @@ export function PipelineClient({ initialCompanies }: Props) {
 
               {/* Header: Company Intelligence */}
               <div className="flex items-center justify-between pb-3">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Company Intelligence</h2>
+                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Company Intelligence</h2>
                 <button
                   onClick={fetchIntelligence}
                   disabled={loadingIntelligence}
@@ -2668,7 +2686,7 @@ export function PipelineClient({ initialCompanies }: Props) {
             <section>
               <details className="group">
                 <summary className="flex items-center justify-between cursor-pointer list-none pb-3">
-                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] flex items-center gap-1.5">
                     Meeting Transcripts
                     {companyDocuments.length > 0 && (
                       <span className="text-[10px] px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full font-medium">
@@ -2721,7 +2739,7 @@ export function PipelineClient({ initialCompanies }: Props) {
             {/* ── Documents — Pitch Decks & Transcripts (50/50) ── */}
             <section>
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Documents</h2>
+                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Documents</h2>
                 {/* Compact Data Room row */}
                 <div className="flex items-center gap-3">
                   {selected.drive_folder_url ? (
@@ -2909,7 +2927,7 @@ export function PipelineClient({ initialCompanies }: Props) {
             {selected.drive_folder_url && (
               <section>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] flex items-center gap-1.5">
                     <Link2 size={12} /> Drive Sync
                   </h2>
                   <div className="flex items-center gap-2">
@@ -3040,7 +3058,7 @@ export function PipelineClient({ initialCompanies }: Props) {
             {/* ── IC Memo ── */}
             <section>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] flex items-center gap-1.5">
                   <Sparkles size={12} /> IC Memo
                 </h2>
                 <div className="flex items-center gap-2">

@@ -76,8 +76,8 @@ const AVATAR_COLORS = [
   "from-cyan-500 to-sky-600",
 ];
 
-const INPUT_CLS = "w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors";
-const LABEL_CLS = "block text-xs font-semibold text-slate-500 mb-1";
+const INPUT_CLS = "w-full px-3 py-2 text-sm text-gray-700 border border-gray-200 rounded-lg bg-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-colors";
+const LABEL_CLS = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
 
 const COL_DEFS = [
   { key: "name",        label: "Name",         sortable: true  },
@@ -310,6 +310,8 @@ export function ContactsClient({
   const [loadOffset, setLoadOffset]  = useState(initialContacts.length);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch]           = useState("");
+  const [searchResults, setSearchResults] = useState<ContactRow[] | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   // ── Filter state ─────────────────────────────────────────────────────────────
   const [tileFilter, setTileFilter]   = useState<TileFilter>("all");
@@ -393,10 +395,13 @@ export function ContactsClient({
   ].filter(Boolean).length;
 
   const filtered = useMemo(() => {
+    // Use server-side search results when a query is active; otherwise use loaded contacts
+    const source = (search.trim() && searchResults !== null) ? searchResults : contacts;
+
     const monthStart = new Date();
     monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
 
-    return contacts.filter(c => {
+    return source.filter(c => {
       if (tileFilter === "thisMonth"      && new Date(c.created_at) < monthStart)      return false;
       if (tileFilter === "active"         && getRelStage(c.last_contact_date) !== "active") return false;
       if (tileFilter === "noLastContact"  && c.last_contact_date !== null)              return false;
@@ -405,10 +410,13 @@ export function ContactsClient({
       if (tagsFilter && !(c.tags ?? []).some(t => t.toLowerCase().includes(tagsFilter.toLowerCase()))) return false;
       if (cityFilter    && !(c.location_city    ?? "").toLowerCase().includes(cityFilter.toLowerCase()))    return false;
       if (countryFilter && !(c.location_country ?? "").toLowerCase().includes(countryFilter.toLowerCase())) return false;
-      const q = search.toLowerCase();
-      if (q) {
-        const name = `${c.first_name} ${c.last_name}`.toLowerCase();
-        if (!name.includes(q) && !(c.email ?? "").toLowerCase().includes(q) && !(c.company?.name ?? "").toLowerCase().includes(q)) return false;
+      // When using server results the name/email filtering has already been done server-side
+      if (!search.trim() || searchResults === null) {
+        const q = search.toLowerCase();
+        if (q) {
+          const name = `${c.first_name} ${c.last_name}`.toLowerCase();
+          if (!name.includes(q) && !(c.email ?? "").toLowerCase().includes(q) && !(c.company?.name ?? "").toLowerCase().includes(q)) return false;
+        }
       }
       return true;
     }).sort((a, b) => {
@@ -432,11 +440,34 @@ export function ContactsClient({
       if (av > bv) return sortDir === "asc" ?  1 : -1;
       return 0;
     });
-  }, [contacts, tileFilter, search, typeFilter, stageFilter, cityFilter, countryFilter, tagsFilter, sortKey, sortDir]);
+  }, [contacts, searchResults, tileFilter, search, typeFilter, stageFilter, cityFilter, countryFilter, tagsFilter, sortKey, sortDir]);
 
   // ── Effects ───────────────────────────────────────────────────────────────────
+
+  // Debounce: update local `search` state AND trigger server-side search for non-empty queries
   useEffect(() => {
-    const t = setTimeout(() => setSearch(searchInput), 300);
+    const t = setTimeout(async () => {
+      setSearch(searchInput);
+      if (!searchInput.trim()) {
+        setSearchResults(null);
+        setSearchLoading(false);
+        return;
+      }
+      setSearchLoading(true);
+      try {
+        const res = await fetch(`/api/search/contacts?q=${encodeURIComponent(searchInput.trim())}&limit=50`);
+        if (res.ok) {
+          const data = await res.json() as ContactRow[];
+          setSearchResults(Array.isArray(data) ? data : null);
+        } else {
+          setSearchResults(null);
+        }
+      } catch {
+        setSearchResults(null);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
     return () => clearTimeout(t);
   }, [searchInput]);
 
@@ -660,15 +691,18 @@ export function ContactsClient({
             <div className="flex gap-2 flex-wrap items-center">
               {/* Search */}
               <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                {searchLoading
+                  ? <Loader2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500 animate-spin" />
+                  : <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                }
                 <input
-                  className="pl-8 pr-7 py-2 text-sm border border-slate-200 rounded-lg w-52 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  className="pl-8 pr-7 py-2 text-sm border border-slate-200 rounded-lg w-52 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400"
                   placeholder="Search contacts…"
                   value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
                 />
                 {searchInput && (
-                  <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" onClick={() => setSearchInput("")}>
+                  <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" onClick={() => { setSearchInput(""); setSearchResults(null); }}>
                     <X size={12} />
                   </button>
                 )}
@@ -722,7 +756,7 @@ export function ContactsClient({
 
             <button
               onClick={() => { setShowAddModal(true); loadCompanies(); }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors"
             >
               <Plus size={14} /> Add Contact
             </button>
@@ -1044,7 +1078,7 @@ export function ContactsClient({
                     </div>
                     <div className="flex gap-2 pt-1">
                       <button onClick={() => setEditing(false)} className="flex-1 py-2 border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50">Cancel</button>
-                      <button onClick={saveEdits} disabled={saving} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-1.5">
+                      <button onClick={saveEdits} disabled={saving} className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-1.5">
                         {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                         {saving ? "Saving…" : "Save"}
                       </button>
@@ -1279,7 +1313,7 @@ export function ContactsClient({
               </div>
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setLogTarget(null)} className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50">Cancel</button>
-                <button type="submit" disabled={logSaving} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2">
+                <button type="submit" disabled={logSaving} className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2">
                   {logSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   {logSaving ? "Saving…" : "Log Interaction"}
                 </button>
@@ -1313,7 +1347,7 @@ export function ContactsClient({
                   </div>
                   <div className="flex gap-3">
                     <button type="button" onClick={() => setPipelineTarget(null)} className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50">Cancel</button>
-                    <button type="submit" disabled={pipelineSaving} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2">
+                    <button type="submit" disabled={pipelineSaving} className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2">
                       {pipelineSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                       {pipelineSaving ? "Saving…" : "Confirm"}
                     </button>
@@ -1359,7 +1393,7 @@ export function ContactsClient({
               <div><label className="block text-xs font-medium text-slate-600 mb-1.5">LinkedIn URL</label><input className={INPUT_CLS} value={addForm.linkedin_url ?? ""} onChange={e => setAddForm(p => ({ ...p, linkedin_url: e.target.value }))} /></div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50">Cancel</button>
-                <button type="submit" disabled={addSaving} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2">
+                <button type="submit" disabled={addSaving} className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2">
                   {addSaving ? <Loader2 size={14} className="animate-spin" /> : null}
                   {addSaving ? "Saving…" : "Add Contact"}
                 </button>

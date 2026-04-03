@@ -14,6 +14,7 @@
     "@anthropic-ai/sdk": "^0.79.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.1",
+    "@tanstack/react-virtual": "^3.13.23",
     "@types/pdf-parse": "^1.1.5",
     "ai": "^4.3.19",
     "autoprefixer": "^10.4.27",

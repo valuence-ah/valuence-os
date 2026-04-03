@@ -1247,7 +1247,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             <div className="flex gap-2 px-5 py-4 border-t border-slate-100">
               <button onClick={() => setShowAddLP(false)} className="flex-1 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
               <button onClick={handleAddLP} disabled={savingLP || !addLPForm.name.trim()}
-                className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                className="flex-1 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
                 {savingLP ? <><Loader2 size={13} className="animate-spin" />Adding…</> : "Add LP"}
               </button>
             </div>
@@ -1525,8 +1525,8 @@ export function LpViewClient({ initialCompanies }: Props) {
         <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
           <Download size={12} /> Export CSV
         </button>
-        <button onClick={() => setShowAddLP(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-          <Plus size={12} /> Add LP
+        <button onClick={() => setShowAddLP(true)} className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors">
+          <Plus size={13} /> Add LP
         </button>
         <span className="text-xs text-slate-400">{filtered.length} LP{filtered.length !== 1 ? "s" : ""}</span>
       </div>

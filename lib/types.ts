@@ -248,6 +248,66 @@ export interface LpRelationship {
   contact?: Contact;
 }
 
+// ── Feed / News Intelligence types ────────────────────────────────────────────
+
+export type FeedBucket = "fund_raise" | "startup_round" | "ma_partnership" | "uncategorized";
+export type FeedWatchlistType = "fund" | "accelerator" | "corporate" | "keyword";
+
+export interface FeedSource {
+  id: string;
+  name: string;
+  website_url: string;
+  feed_url: string | null;
+  type: string;
+  keywords: string[];
+  is_active: boolean;
+  last_fetched_at: string | null;
+  article_count: number;
+  created_at: string;
+  bucket_affinity: FeedBucket;
+}
+
+export interface FeedArticle {
+  id: string;
+  source_id: string | null;
+  title: string;
+  url: string;
+  summary: string | null;
+  content: string | null;
+  published_at: string | null;
+  author: string | null;
+  tags: string[];
+  relevance_score: number | null;
+  is_read: boolean;
+  is_starred: boolean;
+  saved: boolean;
+  created_at: string;
+  // Intelligence fields (added by migration 022)
+  bucket: FeedBucket;
+  sectors: string[];
+  deal_stage: string | null;
+  deal_amount: string | null;
+  deal_amount_usd: number | null;
+  mentioned_companies: string[];
+  mentioned_investors: string[];
+  matched_company_ids: string[];
+  thesis_keywords: string[];
+  relevance_tags: string[];
+  ai_categorized: boolean;
+  // Added by migration 023
+  ai_why_relevant: string | null;
+  dismissed: boolean;
+}
+
+export interface FeedWatchlistItem {
+  id: string;
+  name: string;
+  type: FeedWatchlistType;
+  keywords: string[];
+  notify: boolean;
+  created_at: string;
+}
+
 // ── Supabase Database type (used to type the Supabase client) ─────────────────
 // Includes all required fields for Supabase v2 TypeScript inference to work
 // (Relationships, Views, Functions, Enums, CompositeTypes).

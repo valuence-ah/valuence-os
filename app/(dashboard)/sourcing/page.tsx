@@ -20,7 +20,7 @@ export default async function SourcingPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Sourcing Intelligence" subtitle="Signals from arXiv, SBIR, NSF, USPTO, news & more" actions={<RunAgentsButton />} />
+      <Header title="Sourcing Intelligence" subtitle="AI-sourced signals from arXiv, SBIR, USPTO, and more" actions={<RunAgentsButton />} />
       <SourcingClient initialSignals={signals ?? []} />
     </div>
   );

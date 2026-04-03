@@ -1,117 +1,257 @@
 "use client";
-// ─── News Feeds Client ─────────────────────────────────────────────────────────
+// ─── Daily Intelligence Brief ──────────────────────────────────────────────────
+// Replaces the old flat news feed with a curated AI brief.
+// Only shows articles with relevance_score >= 2.
 
-import { useState, useEffect, useMemo } from "react";
-import { ExternalLink, Plus, RefreshCw, Rss, Search, Star, Trash2, X, Loader2, Globe } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { RefreshCw, Plus, X, Loader2, Rss, Newspaper } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { FeedArticle, FeedSource } from "@/lib/types";
+import { BriefSignalCard }   from "./brief-signal-card";
+import { BriefDismissed }    from "./brief-dismissed";
+import { BriefThesisPulse }  from "./brief-thesis-pulse";
 
-interface FeedSource {
-  id: string;
-  name: string;
-  website_url: string;
-  feed_url: string | null;
-  type: string;
-  keywords: string[];
-  is_active: boolean;
-  last_fetched_at: string | null;
-  article_count: number;
-  created_at: string;
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+type BriefBucket = "startup_round" | "fund_raise" | "ma_partnership";
+
+interface KeywordStat {
+  keyword: string;
+  match_count: number;
 }
 
-interface FeedArticle {
-  id: string;
-  source_id: string | null;
-  title: string;
-  url: string;
-  summary: string | null;
-  published_at: string | null;
-  author: string | null;
-  tags: string[];
-  relevance_score: number | null;
-  is_read: boolean;
-  is_starred: boolean;
-  created_at: string;
+interface BriefCounts {
+  total: number;
+  sources: number;
+  passed: number;
+  high: number;
 }
+
+// ── Bucket config ──────────────────────────────────────────────────────────────
+
+const BUCKET_CONFIG: Record<BriefBucket, { label: string; dot: string }> = {
+  startup_round:  { label: "Startup rounds",      dot: "bg-teal-500"   },
+  fund_raise:     { label: "Fund launches + raises", dot: "bg-purple-500" },
+  ma_partnership: { label: "M&A + partnerships",  dot: "bg-orange-500" },
+};
+
+// ── Brief summary (template-based, no API call) ────────────────────────────────
+
+function generateBriefSummary(articles: FeedArticle[]): string {
+  if (articles.length === 0) return "No new signals today matching your thesis.";
+  const count = articles.length;
+  const top = articles.slice(0, 3);
+  const parts = top.map(a => {
+    if (a.ai_why_relevant) return a.ai_why_relevant.split(".")[0];
+    if (a.deal_amount)     return `${a.title} (${a.deal_amount})`;
+    return a.title;
+  });
+  return `${count} signal${count > 1 ? "s" : ""} worth your attention today. ${parts.filter(Boolean).join(". ")}.`;
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
 
 export function FeedsClient() {
-  const [sources, setSources]         = useState<FeedSource[]>([]);
-  const [articles, setArticles]       = useState<FeedArticle[]>([]);
-  const [loadingSources, setLoadingSources] = useState(true);
-  const [loadingArticles, setLoadingArticles] = useState(true);
-  const [selectedSource, setSelectedSource] = useState<string | null>(null);
-  const [search, setSearch]           = useState("");
-  const [showUnread, setShowUnread]   = useState(false);
-  const [showStarred, setShowStarred] = useState(false);
-  const [refreshing, setRefreshing]   = useState<string | null>(null);
+  const router = useRouter();
+
+  // Core data
+  const [relevantArticles,  setRelevantArticles]  = useState<FeedArticle[]>([]);
+  const [dismissedArticles, setDismissedArticles] = useState<Pick<FeedArticle, "id" | "title" | "ai_why_relevant">[]>([]);
+  const [keywordStats,      setKeywordStats]      = useState<KeywordStat[]>([]);
+  const [sources,           setSources]           = useState<FeedSource[]>([]);
+  const [counts,            setCounts]            = useState<BriefCounts>({ total: 0, sources: 0, passed: 0, high: 0 });
+
+  // UI state
+  const [loading,     setLoading]     = useState(true);
+  const [syncing,     setSyncing]     = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm, setAddForm]         = useState({ name: "", website_url: "", feed_url: "", keywords: "" });
-  const [adding, setAdding]           = useState(false);
-  const [detecting, setDetecting]     = useState(false);
+  const [addForm,     setAddForm]     = useState({ name: "", website_url: "", feed_url: "", keywords: "" });
+  const [adding,      setAdding]      = useState(false);
+  const [detecting,   setDetecting]   = useState(false);
 
-  // Load sources and articles
-  useEffect(() => {
-    fetch("/api/feeds")
-      .then(r => r.json())
-      .then(data => { setSources(Array.isArray(data) ? data : []); setLoadingSources(false); })
-      .catch(() => setLoadingSources(false));
+  // ── Data fetching ──────────────────────────────────────────────────────────
 
-    fetch("/api/feeds/articles?limit=200")
-      .then(r => r.json())
-      .then(data => { setArticles(Array.isArray(data) ? data : []); setLoadingArticles(false); })
-      .catch(() => setLoadingArticles(false));
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayISO = todayStart.toISOString();
+
+    const [
+      relevantRes,
+      dismissedRes,
+      sourcesRes,
+      kwRes,
+    ] = await Promise.all([
+      fetch("/api/feeds/brief?type=relevant").then(r => r.json()).catch(() => []),
+      fetch(`/api/feeds/brief?type=dismissed&since=${encodeURIComponent(todayISO)}`).then(r => r.json()).catch(() => []),
+      fetch("/api/feeds").then(r => r.json()).catch(() => []),
+      fetch("/api/thesis-keywords?active=true").then(r => r.json()).catch(() => []),
+    ]);
+
+    const relevant: FeedArticle[] = Array.isArray(relevantRes) ? relevantRes : [];
+    const dismissed: Pick<FeedArticle, "id" | "title" | "ai_why_relevant">[] = Array.isArray(dismissedRes) ? dismissedRes : [];
+    const srcs: FeedSource[] = Array.isArray(sourcesRes) ? sourcesRes : [];
+    const kws: KeywordStat[] = Array.isArray(kwRes)
+      ? kwRes
+          .filter((k: { match_count: number }) => k.match_count > 0)
+          .sort((a: KeywordStat, b: KeywordStat) => b.match_count - a.match_count)
+          .slice(0, 12)
+      : [];
+
+    setRelevantArticles(relevant);
+    setDismissedArticles(dismissed);
+    setSources(srcs);
+    setKeywordStats(kws);
+    setCounts({
+      total:   relevant.length + dismissed.length,
+      sources: srcs.length,
+      passed:  relevant.length,
+      high:    relevant.filter(a => (a.relevance_score ?? 0) >= 4).length,
+    });
+
+    setLoading(false);
   }, []);
 
-  const filtered = useMemo(() => {
-    let rows = articles;
-    if (selectedSource) rows = rows.filter(a => a.source_id === selectedSource);
-    if (showUnread) rows = rows.filter(a => !a.is_read);
-    if (showStarred) rows = rows.filter(a => a.is_starred);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      rows = rows.filter(a => a.title.toLowerCase().includes(q) || (a.summary ?? "").toLowerCase().includes(q));
+  useEffect(() => { void fetchData(); }, [fetchData]);
+
+  // ── Source map ─────────────────────────────────────────────────────────────
+
+  const sourceMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const s of sources) m[s.id] = s.name;
+    return m;
+  }, [sources]);
+
+  // ── Group by bucket ────────────────────────────────────────────────────────
+
+  const bucketGroups = useMemo(() => {
+    const groups: Record<BriefBucket, FeedArticle[]> = {
+      startup_round:  [],
+      fund_raise:     [],
+      ma_partnership: [],
+    };
+    for (const a of relevantArticles) {
+      const b = a.bucket as BriefBucket;
+      if (groups[b]) groups[b].push(a);
     }
-    return rows;
-  }, [articles, selectedSource, showUnread, showStarred, search]);
+    return groups;
+  }, [relevantArticles]);
 
-  const unreadCount = articles.filter(a => !a.is_read).length;
-  const starredCount = articles.filter(a => a.is_starred).length;
+  // ── Brief summary ──────────────────────────────────────────────────────────
 
-  async function handleRefresh(sourceId?: string) {
-    setRefreshing(sourceId ?? "all");
+  const briefSummary = useMemo(() => generateBriefSummary(relevantArticles), [relevantArticles]);
+
+  // ── Sync handler ───────────────────────────────────────────────────────────
+
+  async function handleSync() {
+    setSyncing(true);
     try {
-      if (sourceId) {
-        await fetch(`/api/feeds/${sourceId}/fetch`, { method: "POST" });
-      } else {
-        await fetch("/api/feeds/fetch-all", { method: "POST" });
-      }
-      // Reload articles
-      const data = await fetch("/api/feeds/articles?limit=200").then(r => r.json());
-      setArticles(Array.isArray(data) ? data : []);
-      // Reload sources to update counts
-      const srcs = await fetch("/api/feeds").then(r => r.json());
-      setSources(Array.isArray(srcs) ? srcs : []);
-    } catch {}
-    setRefreshing(null);
+      await fetch("/api/feeds/fetch-all", { method: "POST" });
+      // Wait a moment for categorize to fire (it's fire-and-forget on the server)
+      await new Promise(r => setTimeout(r, 3000));
+      await fetchData();
+    } catch { /* silent */ }
+    setSyncing(false);
   }
 
-  async function handleMarkRead(articleId: string) {
-    setArticles(prev => prev.map(a => a.id === articleId ? { ...a, is_read: true } : a));
-    await fetch(`/api/feeds/${articleId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_read: true }) }).catch(() => {});
+  // ── Dismiss handler ────────────────────────────────────────────────────────
+
+  async function handleDismiss(article: FeedArticle) {
+    // Optimistic update
+    setRelevantArticles(prev => prev.filter(a => a.id !== article.id));
+    setDismissedArticles(prev => [...prev, {
+      id: article.id,
+      title: article.title,
+      ai_why_relevant: article.ai_why_relevant,
+    }]);
+
+    await fetch(`/api/feeds/${article.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dismissed: true }),
+    }).catch(() => {});
   }
 
-  async function handleToggleStar(articleId: string, current: boolean) {
-    setArticles(prev => prev.map(a => a.id === articleId ? { ...a, is_starred: !current } : a));
-    await fetch(`/api/feeds/${articleId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_starred: !current }) }).catch(() => {});
+  // ── Add to Pipeline ────────────────────────────────────────────────────────
+
+  async function handleAddToPipeline(article: FeedArticle) {
+    const companyName = article.mentioned_companies?.[0];
+    if (!companyName) return;
+
+    const checkRes = await fetch(`/api/search/companies?q=${encodeURIComponent(companyName)}&limit=1`);
+    const existing: Array<{ id: string }> = await checkRes.json().catch(() => []);
+    if (existing?.[0]) {
+      router.push("/crm/pipeline");
+      return;
+    }
+
+    const res = await fetch("/api/companies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name:        companyName,
+        type:        "startup",
+        types:       ["startup"],
+        deal_status: "identified_introduced",
+        sectors:     article.sectors?.length ? article.sectors : null,
+        notes:       `Discovered via news feed: ${article.title}`,
+      }),
+    });
+    const newCo: { id?: string } = await res.json().catch(() => ({}));
+    if (newCo.id) {
+      await fetch(`/api/feeds/${article.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matched_company_ids: [newCo.id] }),
+      }).catch(() => {});
+      router.push("/crm/pipeline");
+    }
   }
+
+  // ── Add to Funds CRM ───────────────────────────────────────────────────────
+
+  async function handleAddToFunds(article: FeedArticle) {
+    const fundName = article.mentioned_investors?.[0] ?? article.mentioned_companies?.[0];
+    if (!fundName) return;
+
+    const checkRes = await fetch(`/api/search/companies?q=${encodeURIComponent(fundName)}&limit=1`);
+    const existing: Array<{ id: string }> = await checkRes.json().catch(() => []);
+    if (existing?.[0]) {
+      router.push("/crm/funds");
+      return;
+    }
+
+    const res = await fetch("/api/companies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name:  fundName,
+        type:  "investor",
+        types: ["investor"],
+        notes: `Discovered via news feed: ${article.title}`,
+      }),
+    });
+    const newFund: { id?: string } = await res.json().catch(() => ({}));
+    if (newFund.id) router.push("/crm/funds");
+  }
+
+  // ── Add source handlers ────────────────────────────────────────────────────
 
   async function handleDetectFeed() {
     if (!addForm.website_url) return;
     setDetecting(true);
     try {
-      const res = await fetch("/api/feeds/detect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: addForm.website_url }) });
-      const data = await res.json();
-      if (data.feed_url) setAddForm(p => ({ ...p, feed_url: data.feed_url, name: p.name || data.name || p.name }));
-    } catch {}
+      const res = await fetch("/api/feeds/detect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: addForm.website_url }),
+      });
+      const data: { feed_url?: string } = await res.json();
+      if (data.feed_url) setAddForm(p => ({ ...p, feed_url: data.feed_url! }));
+    } catch { /* silent */ }
     setDetecting(false);
   }
 
@@ -123,277 +263,250 @@ export function FeedsClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: addForm.name,
+          name:        addForm.name,
           website_url: addForm.website_url,
-          feed_url: addForm.feed_url || null,
-          keywords: addForm.keywords.split(",").map(k => k.trim()).filter(Boolean),
+          feed_url:    addForm.feed_url || null,
+          keywords:    addForm.keywords.split(",").map(k => k.trim()).filter(Boolean),
         }),
       });
-      const data = await res.json();
+      const data: FeedSource = await res.json();
       if (data.id) {
         setSources(prev => [data, ...prev]);
         setAddForm({ name: "", website_url: "", feed_url: "", keywords: "" });
         setShowAddModal(false);
       }
-    } catch {}
+    } catch { /* silent */ }
     setAdding(false);
   }
 
-  async function handleDeleteSource(sourceId: string) {
-    if (!confirm("Remove this feed source? All its articles will be deleted.")) return;
-    await fetch(`/api/feeds/${sourceId}`, { method: "DELETE" }).catch(() => {});
-    setSources(prev => prev.filter(s => s.id !== sourceId));
-    setArticles(prev => prev.filter(a => a.source_id !== sourceId));
-    if (selectedSource === sourceId) setSelectedSource(null);
-  }
+  // ── Render ─────────────────────────────────────────────────────────────────
 
-  function timeAgo(dateStr: string | null): string {
-    if (!dateStr) return "—";
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.floor(hrs / 24)}d ago`;
-  }
+  const hasAnySignals = relevantArticles.length > 0;
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* ── Left sidebar: feed sources ── */}
-      <div className="w-64 flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
-        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-800">Feed Sources</h2>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => handleRefresh()}
-              disabled={refreshing === "all"}
-              title="Refresh all feeds"
-              className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw size={13} className={cn(refreshing === "all" && "animate-spin")} />
-            </button>
+    <div className="flex-1 overflow-y-auto bg-gray-50">
+      <div className="max-w-3xl mx-auto px-6 py-6">
+
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">News Feeds</h1>
+            <p className="text-sm text-gray-500 mt-0.5">RSS and news feeds across your sectors</p>
+          </div>
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setShowAddModal(true)}
-              className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors"
-              title="Add feed"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-gray-200 text-gray-600 rounded-lg bg-white hover:bg-gray-50 transition-colors"
             >
               <Plus size={13} />
+              Manage sources
             </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto py-2">
-          {/* All / Unread / Starred */}
-          <div className="px-2 mb-2 space-y-0.5">
             <button
-              onClick={() => { setSelectedSource(null); setShowUnread(false); setShowStarred(false); }}
-              className={cn("w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between",
-                !selectedSource && !showUnread && !showStarred ? "bg-blue-50 text-blue-700 font-medium" : "text-slate-600 hover:bg-slate-50"
-              )}
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
             >
-              <span className="flex items-center gap-2"><Rss size={14} /> All Articles</span>
-              <span className="text-xs text-slate-400">{articles.length}</span>
+              <RefreshCw size={13} className={cn(syncing && "animate-spin")} />
+              {syncing ? "Syncing…" : "Sync now"}
             </button>
-            {unreadCount > 0 && (
-              <button
-                onClick={() => { setSelectedSource(null); setShowUnread(true); setShowStarred(false); }}
-                className={cn("w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between",
-                  showUnread ? "bg-blue-50 text-blue-700 font-medium" : "text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                <span>Unread</span>
-                <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5 font-medium">{unreadCount}</span>
-              </button>
-            )}
-            {starredCount > 0 && (
-              <button
-                onClick={() => { setSelectedSource(null); setShowUnread(false); setShowStarred(true); }}
-                className={cn("w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between",
-                  showStarred ? "bg-amber-50 text-amber-700 font-medium" : "text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                <span className="flex items-center gap-2"><Star size={14} /> Starred</span>
-                <span className="text-xs text-slate-400">{starredCount}</span>
-              </button>
-            )}
           </div>
-
-          <div className="px-2 mb-1">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-1">Sources</p>
-          </div>
-
-          {loadingSources ? (
-            <div className="flex justify-center py-8"><Loader2 size={16} className="animate-spin text-slate-300" /></div>
-          ) : sources.length === 0 ? (
-            <div className="px-4 py-6 text-center">
-              <Globe size={24} className="mx-auto text-slate-300 mb-2" />
-              <p className="text-xs text-slate-400">No feeds yet</p>
-              <button onClick={() => setShowAddModal(true)} className="mt-2 text-xs text-blue-600 hover:text-blue-700">Add one →</button>
-            </div>
-          ) : (
-            <div className="px-2 space-y-0.5">
-              {sources.map(source => (
-                <div
-                  key={source.id}
-                  className={cn(
-                    "group flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors text-sm",
-                    selectedSource === source.id ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
-                  )}
-                  onClick={() => { setSelectedSource(source.id === selectedSource ? null : source.id); setShowUnread(false); setShowStarred(false); }}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate font-medium text-xs">{source.name}</p>
-                    {source.last_fetched_at && (
-                      <p className="text-[10px] text-slate-400">{timeAgo(source.last_fetched_at)}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={e => { e.stopPropagation(); handleRefresh(source.id); }}
-                      disabled={refreshing === source.id}
-                      className="p-1 text-slate-400 hover:text-blue-600"
-                    >
-                      <RefreshCw size={11} className={cn(refreshing === source.id && "animate-spin")} />
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); handleDeleteSource(source.id); }}
-                      className="p-1 text-slate-400 hover:text-red-500"
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
-                  {source.article_count > 0 && (
-                    <span className="text-[10px] text-slate-400 ml-1 group-hover:hidden">{source.article_count}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Main: articles ── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Toolbar */}
-        <div className="px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search articles…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-          <span className="text-xs text-slate-400">{filtered.length} articles</span>
         </div>
 
-        {/* Articles list */}
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-          {loadingArticles ? (
-            <div className="flex justify-center items-center h-32">
-              <Loader2 size={20} className="animate-spin text-slate-300" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-slate-400">
-              <Rss size={32} className="mb-3 opacity-30" />
-              <p className="text-sm font-medium">No articles found</p>
-              {sources.length === 0 && (
-                <button onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
-                  Add your first feed
-                </button>
-              )}
-            </div>
-          ) : (
-            filtered.map(article => (
-              <div
-                key={article.id}
-                className={cn("px-5 py-4 hover:bg-slate-50/60 transition-colors", article.is_read && "opacity-60")}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      {!article.is_read && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-1" />}
-                      <a
-                        href={article.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => handleMarkRead(article.id)}
-                        className="text-sm font-semibold text-slate-800 hover:text-blue-600 leading-snug line-clamp-2"
-                      >
-                        {article.title}
-                      </a>
-                    </div>
-                    {article.summary && (
-                      <p className="text-xs text-slate-500 leading-relaxed line-clamp-2 mt-0.5">{article.summary}</p>
-                    )}
-                    <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
-                      {article.source_id && (
-                        <span>{sources.find(s => s.id === article.source_id)?.name ?? "—"}</span>
-                      )}
-                      {article.author && <span>{article.author}</span>}
-                      {article.published_at && <span>{timeAgo(article.published_at)}</span>}
-                      {article.tags && article.tags.length > 0 && (
-                        article.tags.slice(0, 3).map(t => (
-                          <span key={t} className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px]">{t}</span>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button
-                      onClick={() => handleToggleStar(article.id, article.is_starred)}
-                      className={cn("p-1.5 rounded transition-colors", article.is_starred ? "text-amber-500" : "text-slate-300 hover:text-amber-400")}
-                    >
-                      <Star size={14} fill={article.is_starred ? "currentColor" : "none"} />
-                    </button>
-                    <a href={article.url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-slate-300 hover:text-blue-600 transition-colors">
-                      <ExternalLink size={14} />
-                    </a>
-                  </div>
+        {loading ? (
+          // ── Skeleton ─────────────────────────────────────────────────────
+          <div className="space-y-4">
+            <div className="bg-gray-100 rounded-xl h-28 animate-pulse" />
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 space-y-2 animate-pulse">
+                <div className="flex gap-2">
+                  <div className="h-4 w-16 bg-gray-200 rounded-full" />
+                  <div className="h-4 w-12 bg-gray-100 rounded-full" />
                 </div>
+                <div className="h-4 w-3/4 bg-gray-200 rounded" />
+                <div className="h-10 bg-gray-100 rounded-lg" />
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            {/* ── AI Daily Brief block ───────────────────────────────────── */}
+            <div className="bg-gray-50 rounded-xl p-5 mb-6 border border-gray-200">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">
+                  AI daily brief
+                </p>
+                <p className="text-xs text-gray-400">
+                  {new Date().toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month:   "long",
+                    day:     "numeric",
+                    year:    "numeric",
+                  })}
+                </p>
+              </div>
+              <p className="text-sm text-gray-900 leading-relaxed mb-3">
+                {briefSummary}
+              </p>
+              <p className="text-xs text-gray-400">
+                {counts.total} articles scanned from {counts.sources} sources.
+                {" "}{counts.passed} passed relevance filter.
+                {" "}{counts.high > 0 ? `${counts.high} flagged as high priority.` : ""}
+              </p>
+            </div>
+
+            {/* ── No signals state ───────────────────────────────────────── */}
+            {!hasAnySignals ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Newspaper size={28} className="text-gray-300 mb-3" />
+                <p className="text-sm font-medium text-gray-500">No curated signals yet</p>
+                <p className="text-xs text-gray-400 mt-1 max-w-xs">
+                  Sync your feeds to fetch articles. Relevant signals (score ≥ 2) will appear here after AI categorization.
+                </p>
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw size={14} className={cn(syncing && "animate-spin")} />
+                  {syncing ? "Syncing…" : "Sync now"}
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* ── Bucket sections ──────────────────────────────────── */}
+                {(["startup_round", "fund_raise", "ma_partnership"] as BriefBucket[]).map(bucket => {
+                  const articles = bucketGroups[bucket];
+                  if (articles.length === 0) return null;
+                  const cfg = BUCKET_CONFIG[bucket];
+
+                  return (
+                    <div key={bucket} className="mb-8">
+                      {/* Bucket header */}
+                      <div className="flex items-center gap-2.5 mb-3 mt-2">
+                        <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                        <p className="text-[15px] font-medium text-gray-900">{cfg.label}</p>
+                        <span className="text-xs text-gray-400">
+                          {articles.length} relevant today
+                        </span>
+                      </div>
+
+                      {/* Cards */}
+                      <div className="space-y-3">
+                        {articles.map(article => (
+                          <BriefSignalCard
+                            key={article.id}
+                            article={article}
+                            sourceName={article.source_id ? sourceMap[article.source_id] : undefined}
+                            onDismiss={handleDismiss}
+                            onAddToPipeline={handleAddToPipeline}
+                            onAddToFunds={handleAddToFunds}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
+            {/* ── Dismissed section ────────────────────────────────────── */}
+            <BriefDismissed articles={dismissedArticles} />
+
+            {/* ── Thesis Pulse ─────────────────────────────────────────── */}
+            <BriefThesisPulse keywordStats={keywordStats} />
+          </>
+        )}
       </div>
 
-      {/* ── Add Feed Modal ── */}
+      {/* ── Add Feed Modal ──────────────────────────────────────────────────── */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowAddModal(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowAddModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h2 className="text-base font-semibold">Add News Feed</h2>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
             </div>
             <form onSubmit={handleAddSource} className="px-6 py-5 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Feed Name *</label>
-                <input required placeholder="e.g. TechCrunch" className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20" value={addForm.name} onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))} />
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  Feed Name *
+                </label>
+                <input
+                  required
+                  placeholder="e.g. TechCrunch"
+                  className="w-full px-3 py-2 text-sm text-gray-700 border border-gray-200 rounded-lg bg-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-colors"
+                  value={addForm.name}
+                  onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}
+                />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Website URL *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  Website URL *
+                </label>
                 <div className="flex gap-2">
-                  <input required type="url" placeholder="https://techcrunch.com" className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20" value={addForm.website_url} onChange={e => setAddForm(p => ({ ...p, website_url: e.target.value }))} />
-                  <button type="button" onClick={handleDetectFeed} disabled={detecting || !addForm.website_url} className="px-3 py-2 text-xs font-medium bg-slate-50 text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-50 flex items-center gap-1.5">
+                  <input
+                    required
+                    type="url"
+                    placeholder="https://techcrunch.com"
+                    className="flex-1 px-3 py-2 text-sm text-gray-700 border border-gray-200 rounded-lg bg-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-colors"
+                    value={addForm.website_url}
+                    onChange={e => setAddForm(p => ({ ...p, website_url: e.target.value }))}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleDetectFeed}
+                    disabled={detecting || !addForm.website_url}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                  >
                     {detecting ? <Loader2 size={12} className="animate-spin" /> : <Rss size={12} />}
                     Detect
                   </button>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">RSS/Atom Feed URL</label>
-                <input type="url" placeholder="https://techcrunch.com/feed/ (auto-detected or paste manually)" className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20" value={addForm.feed_url} onChange={e => setAddForm(p => ({ ...p, feed_url: e.target.value }))} />
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  RSS/Atom Feed URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://techcrunch.com/feed/ (auto-detected)"
+                  className="w-full px-3 py-2 text-sm text-gray-700 border border-gray-200 rounded-lg bg-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-colors"
+                  value={addForm.feed_url}
+                  onChange={e => setAddForm(p => ({ ...p, feed_url: e.target.value }))}
+                />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Keywords (comma-separated)</label>
-                <input placeholder="deep tech, biotech, cleantech, climate" className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20" value={addForm.keywords} onChange={e => setAddForm(p => ({ ...p, keywords: e.target.value }))} />
-                <p className="text-xs text-slate-400 mt-1">Articles matching these keywords will be highlighted</p>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  Keywords (comma-separated)
+                </label>
+                <input
+                  placeholder="deep tech, biotech, cleantech"
+                  className="w-full px-3 py-2 text-sm text-gray-700 border border-gray-200 rounded-lg bg-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-colors"
+                  value={addForm.keywords}
+                  onChange={e => setAddForm(p => ({ ...p, keywords: e.target.value }))}
+                />
               </div>
               <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 border border-slate-200 text-slate-700 text-sm rounded-lg hover:bg-slate-50">Cancel</button>
-                <button type="submit" disabled={adding} className="flex-1 py-2.5 bg-blue-600 text-white text-sm rounded-lg disabled:opacity-50 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={adding}
+                  className="flex-1 py-2.5 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                >
                   {adding ? <Loader2 size={14} className="animate-spin" /> : null}
                   {adding ? "Adding…" : "Add Feed"}
                 </button>

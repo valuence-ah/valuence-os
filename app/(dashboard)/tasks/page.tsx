@@ -5,7 +5,7 @@ export const metadata = { title: "Task Intelligence" };
 export default function TasksPage() {
   return (
     <div className="flex flex-col h-full">
-      <Header title="Task Intelligence" subtitle="Fund II close · portfolio · diligence · ecosystem" />
+      <Header title="Task Intelligence" subtitle="Action items and follow-ups" />
       <TasksClient />
     </div>
   );

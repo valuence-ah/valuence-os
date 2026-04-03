@@ -19,11 +19,13 @@ import {
 import "react-data-grid/lib/styles.css";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
-import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen, Download } from "lucide-react";
+import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen, Download, Bell } from "lucide-react";
 import { AiConfigPanel } from "@/components/admin/ai-config-panel";
 import { ApiConfigPanel } from "@/components/admin/api-config-panel";
 import { DrivePanel } from "@/components/admin/drive-panel";
 import { SourcingConfigPanel } from "@/components/admin/sourcing-config-panel";
+import { WatchlistPanel } from "@/components/admin/watchlist-panel";
+import { ThesisKeywordsPanel } from "@/components/admin/thesis-keywords-panel";
 
 // ─── Row types ────────────────────────────────────────────────────────────────
 
@@ -1280,7 +1282,7 @@ interface AdminClientProps {
 export function AdminClient({ initialCompanies, initialContacts }: AdminClientProps) {
   const supabase = createClient();
 
-  const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive" | "sourcing">("companies");
+  const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive" | "sourcing" | "watchlist" | "thesis_keywords">("companies");
 
   // ── Create Company panel (lifted above grid so it outlives cell editors) ──
   const [createRequest, setCreateRequest] = useState<{ name: string; onCreated: (co: CompanyRow) => void } | null>(null);
@@ -2680,10 +2682,30 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           >
             <Sparkles size={11} /> Sourcing
           </button>
+          <button
+            onClick={() => { setActiveTab("watchlist"); setSearch(""); setSearchInput(""); }}
+            className={`px-3 py-1.5 border-l border-slate-200 transition-colors flex items-center gap-1 ${
+              activeTab === "watchlist"
+                ? "bg-blue-600 text-white"
+                : "bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <Bell size={11} /> Watchlist
+          </button>
+          <button
+            onClick={() => { setActiveTab("thesis_keywords"); setSearch(""); setSearchInput(""); }}
+            className={`px-3 py-1.5 border-l border-slate-200 transition-colors flex items-center gap-1 ${
+              activeTab === "thesis_keywords"
+                ? "bg-blue-600 text-white"
+                : "bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <Sparkles size={11} /> Thesis
+          </button>
         </div>
 
-        {/* Search — hidden on api/drive/sourcing tab */}
-        <div className={`relative flex-1 max-w-xs ${(activeTab === "api" || isDrive || isSourcing) ? "invisible" : ""}`}>
+        {/* Search — hidden on api/drive/sourcing/watchlist tab */}
+        <div className={`relative flex-1 max-w-xs ${(activeTab === "api" || isDrive || isSourcing || activeTab === "watchlist" || activeTab === "thesis_keywords") ? "invisible" : ""}`}>
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -2884,9 +2906,13 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         </button>
       </div>
 
-      {/* ── Grid or AI Config panel or API or Drive or Sourcing ── */}
+      {/* ── Grid or AI Config panel or API or Drive or Sourcing or Watchlist ── */}
       <div className="flex-1 overflow-hidden admin-grid">
-        {activeTab === "sourcing" ? (
+        {activeTab === "thesis_keywords" ? (
+          <ThesisKeywordsPanel />
+        ) : activeTab === "watchlist" ? (
+          <WatchlistPanel />
+        ) : activeTab === "sourcing" ? (
           <div className="h-full overflow-y-auto"><SourcingConfigPanel /></div>
         ) : activeTab === "api" ? (
           <ApiConfigPanel />

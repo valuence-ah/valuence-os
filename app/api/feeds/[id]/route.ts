@@ -13,7 +13,8 @@ export async function PATCH(
   const body = await req.json();
 
   // If updating article-specific fields, update feed_articles table
-  if ("is_read" in body || "is_starred" in body) {
+  const articleFields = ["is_read", "is_starred", "saved", "dismissed", "matched_company_ids"];
+  if (articleFields.some(f => f in body)) {
     const { data, error } = await supabase
       .from("feed_articles")
       .update(body)

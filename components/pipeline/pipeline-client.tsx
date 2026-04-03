@@ -79,7 +79,7 @@ export function PipelineClient({ initialDeals }: Props) {
 
       <div className="flex justify-between items-center">
         <p className="text-sm text-slate-500">{deals.filter(d => !["closed","passed"].includes(d.stage)).length} active deals</p>
-        <button onClick={() => { setShowModal(true); loadCompanies(); }} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg">
+        <button onClick={() => { setShowModal(true); loadCompanies(); }} className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors">
           <Plus size={16} /> Add Deal
         </button>
       </div>
@@ -193,7 +193,7 @@ export function PipelineClient({ initialDeals }: Props) {
               </div>
               <div className="flex gap-3">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2.5 border border-slate-300 text-slate-700 text-sm rounded-lg hover:bg-slate-50">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm rounded-lg">{saving ? "Saving…" : "Add Deal"}</button>
+                <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">{saving ? "Saving…" : "Add Deal"}</button>
               </div>
             </form>
           </div>

@@ -184,7 +184,7 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
                                 "text-[10px] px-2 py-0.5 rounded border font-medium transition-colors",
                                 form.mode === mode
                                   ? mode === "skip" ? "bg-slate-100 border-slate-300 text-slate-600"
-                                    : "bg-blue-600 border-blue-600 text-white"
+                                    : "bg-teal-600 border-teal-600 text-white"
                                   : "border-slate-200 text-slate-400 hover:border-slate-300"
                               )}
                             >
@@ -214,26 +214,26 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
                             <label className="text-[10px] text-slate-400 mb-0.5 block">First Name</label>
                             <input value={form.first_name}
                               onChange={e => setAttendeeForms(p => p.map((f, j) => j === i ? { ...f, first_name: e.target.value } : f))}
-                              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-400" />
                           </div>
                           <div>
                             <label className="text-[10px] text-slate-400 mb-0.5 block">Last Name</label>
                             <input value={form.last_name}
                               onChange={e => setAttendeeForms(p => p.map((f, j) => j === i ? { ...f, last_name: e.target.value } : f))}
-                              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-400" />
                           </div>
                           <div>
                             <label className="text-[10px] text-slate-400 mb-0.5 block">Title</label>
                             <input value={form.title}
                               onChange={e => setAttendeeForms(p => p.map((f, j) => j === i ? { ...f, title: e.target.value } : f))}
                               placeholder="CEO, Founder…"
-                              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-400" />
                           </div>
                           <div>
                             <label className="text-[10px] text-slate-400 mb-0.5 block">Contact Type</label>
                             <select value={form.type}
                               onChange={e => setAttendeeForms(p => p.map((f, j) => j === i ? { ...f, type: e.target.value } : f))}
-                              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
                               {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                           </div>
@@ -270,7 +270,7 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
                         "text-[10px] px-2 py-0.5 rounded border font-medium transition-colors",
                         companyForm.mode === mode
                           ? mode === "skip" ? "bg-slate-100 border-slate-300 text-slate-600"
-                            : "bg-blue-600 border-blue-600 text-white"
+                            : "bg-teal-600 border-teal-600 text-white"
                           : "border-slate-200 text-slate-400 hover:border-slate-300"
                       )}
                     >
@@ -298,20 +298,20 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
                     <label className="text-[10px] text-slate-400 mb-0.5 block">Company Name</label>
                     <input value={companyForm.name}
                       onChange={e => setCompanyForm(f => ({ ...f, name: e.target.value }))}
-                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-400" />
                   </div>
                   <div>
                     <label className="text-[10px] text-slate-400 mb-0.5 block">Website</label>
                     <input value={companyForm.website}
                       onChange={e => setCompanyForm(f => ({ ...f, website: e.target.value }))}
                       placeholder="https://…"
-                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-400" />
                   </div>
                   <div>
                     <label className="text-[10px] text-slate-400 mb-0.5 block">Type</label>
                     <select value={companyForm.type}
                       onChange={e => setCompanyForm(f => ({ ...f, type: e.target.value }))}
-                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
                       {COMPANY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
                   </div>
@@ -319,13 +319,13 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
                     <label className="text-[10px] text-slate-400 mb-0.5 block">City</label>
                     <input value={companyForm.city}
                       onChange={e => setCompanyForm(f => ({ ...f, city: e.target.value }))}
-                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-400" />
                   </div>
                   <div>
                     <label className="text-[10px] text-slate-400 mb-0.5 block">Country</label>
                     <input value={companyForm.country}
                       onChange={e => setCompanyForm(f => ({ ...f, country: e.target.value }))}
-                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-400" />
                   </div>
                 </div>
               )}
@@ -349,7 +349,7 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
                   <div>
                     <label className="text-[10px] text-slate-400 mb-0.5 block">Deal Stage</label>
                     <select value={pipelineStage} onChange={e => setPipelineStage(e.target.value)}
-                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
                       {PIPELINE_STAGES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
@@ -368,7 +368,7 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
               Skip for Now
             </button>
             <button onClick={handleSave} disabled={saving}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors">
+              className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors">
               {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
               {saving ? "Saving…" : "Save & Resolve"}
             </button>

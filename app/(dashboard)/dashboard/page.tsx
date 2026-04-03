@@ -78,8 +78,8 @@ export default async function DashboardPage() {
     { data: recentMeetings },
     { data: dealStatusRows },
   ] = await Promise.all([
-    // Stat cards
-    supabase.from("companies").select("*", { count: "exact", head: true }).eq("type", "startup"),
+    // Stat cards — use contains("types",["startup"]) to match pipeline page exactly
+    supabase.from("companies").select("*", { count: "exact", head: true }).contains("types", ["startup"]),
     supabase.from("contacts").select("*", { count: "exact", head: true }),
     supabase.from("sourcing_signals").select("*", { count: "exact", head: true }).eq("status", "new"),
     supabase.from("ic_memos").select("*", { count: "exact", head: true }),
@@ -88,7 +88,7 @@ export default async function DashboardPage() {
     supabase
       .from("companies")
       .select("id, name, deal_status, sectors")
-      .eq("type", "startup")
+      .contains("types", ["startup"])
       .in("deal_status", ACTIVE_STAGES)
       .order("updated_at", { ascending: false })
       .limit(6) as unknown as Promise<{ data: { id: string; name: string; deal_status: string; sectors: string[] | null }[] | null; error: unknown }>,
@@ -105,7 +105,7 @@ export default async function DashboardPage() {
     supabase.from("lp_relationships").select("committed_amount, stage").neq("stage", "passed") as unknown as Promise<{ data: { committed_amount: number | null; stage: string | null }[] | null; error: unknown }>,
 
     // Portfolio count — companies with deal_status = portfolio
-    supabase.from("companies").select("*", { count: "exact", head: true }).eq("type", "startup").eq("deal_status", "portfolio"),
+    supabase.from("companies").select("*", { count: "exact", head: true }).contains("types", ["startup"]).eq("deal_status", "portfolio"),
 
     // Recent meetings
     supabase
@@ -119,7 +119,7 @@ export default async function DashboardPage() {
     supabase
       .from("companies")
       .select("deal_status")
-      .eq("type", "startup")
+      .contains("types", ["startup"])
       .not("deal_status", "is", null) as unknown as Promise<{ data: { deal_status: string }[] | null; error: unknown }>,
   ]);
 

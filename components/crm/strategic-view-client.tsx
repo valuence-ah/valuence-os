@@ -1062,7 +1062,13 @@ export function StrategicViewClient({ initialCompanies }: Props) {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={14} className="text-center py-16 text-sm text-slate-400">No strategic partners found</td>
+                  <td colSpan={14} className="py-16">
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <Handshake size={28} className="text-gray-300 mb-3" />
+                      <p className="text-sm font-medium text-gray-500">No strategic partners found</p>
+                      <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
+                    </div>
+                  </td>
                 </tr>
               )}
             </tbody>

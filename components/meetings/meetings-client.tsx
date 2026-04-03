@@ -634,7 +634,7 @@ export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: in
 
         {/* Sync button */}
         <button onClick={handleSync} disabled={syncing}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50">
           <RefreshCw size={12} className={cn(syncing && "animate-spin")} />
           {syncing ? "Syncing…" : "Sync"}
         </button>
