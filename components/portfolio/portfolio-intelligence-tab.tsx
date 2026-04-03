@@ -1,11 +1,12 @@
 "use client";
-import { useState } from "react";
-import { RefreshCw, Plus, X } from "lucide-react";
-import type { PortfolioIntelligence } from "@/lib/types";
+import { useState, useEffect } from "react";
+import { RefreshCw, Plus, X, Users } from "lucide-react";
+import type { PortfolioIntelligence, Company } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {
   companyId: string;
+  companySectors: string[];
   intelligence: PortfolioIntelligence[];
   onRefresh: () => void;
 }
@@ -31,12 +32,70 @@ interface AddForm {
   warmth: string;
 }
 
-export function PortfolioIntelligenceTab({ companyId, intelligence, onRefresh }: Props) {
-  const supabase = createClient();
+interface LpConnection {
+  id: string;
+  name: string;
+  lp_stage: string | null;
+  sectors: string[] | null;
+  aum: number | null;
+}
+
+function fmtAum(v: number | null): string {
+  if (!v) return "";
+  if (v >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(1)}B AUM`;
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(0)}M AUM`;
+  return `$${v.toLocaleString()} AUM`;
+}
+
+const LP_STAGE_LABEL: Record<string, string> = {
+  target:            "Target",
+  intro_made:        "Intro made",
+  meeting_scheduled: "Meeting scheduled",
+  meeting_done:      "Meeting done",
+  materials_sent:    "Materials sent",
+  soft_commit:       "Soft commit",
+  committed:         "Committed",
+  closed:            "Closed",
+  passed:            "Passed",
+};
+
+const LP_STAGE_BADGE: Record<string, string> = {
+  target:            "bg-slate-100 text-slate-500",
+  intro_made:        "bg-blue-50 text-blue-600",
+  meeting_scheduled: "bg-blue-100 text-blue-700",
+  meeting_done:      "bg-indigo-100 text-indigo-700",
+  materials_sent:    "bg-amber-100 text-amber-700",
+  soft_commit:       "bg-emerald-100 text-emerald-700",
+  committed:         "bg-emerald-200 text-emerald-800",
+  closed:            "bg-teal-100 text-teal-700",
+  passed:            "bg-red-50 text-red-500",
+};
+
+export function PortfolioIntelligenceTab({ companyId, companySectors, intelligence, onRefresh }: Props) {
   const [refreshing, setRefreshing] = useState<IntelType | null>(null);
   const [addingFor, setAddingFor] = useState<IntelType | null>(null);
   const [addForm, setAddForm] = useState<AddForm>({ entity_name: "", description: "", fit_level: "medium", warmth: "cold" });
   const [saving, setSaving] = useState(false);
+  const [lpConnections, setLpConnections] = useState<LpConnection[]>([]);
+
+  // Fetch LP connections that share sectors with this portfolio company
+  useEffect(() => {
+    if (companySectors.length === 0) return;
+    const supabase = createClient();
+    supabase
+      .from("companies")
+      .select("id, name, lp_stage, sectors, aum")
+      .in("type", ["lp", "limited partner"])
+      .not("lp_stage", "is", null)
+      .then(({ data }) => {
+        if (!data) return;
+        const lowerSectors = companySectors.map(s => s.toLowerCase());
+        const matched = (data as LpConnection[]).filter(lp =>
+          (lp.sectors ?? []).some(s => lowerSectors.includes(s.toLowerCase()))
+        );
+        setLpConnections(matched.slice(0, 10));
+      });
+  }, [companySectors]);
 
   const acquirers = intelligence.filter(i => i.type === "ma_acquirer");
   const pilots = intelligence.filter(i => i.type === "pilot_partner");
@@ -59,6 +118,7 @@ export function PortfolioIntelligenceTab({ companyId, intelligence, onRefresh }:
   async function handleAdd() {
     if (!addingFor || !addForm.entity_name.trim()) return;
     setSaving(true);
+    const supabase = createClient();
     await supabase.from("portfolio_intelligence").insert({
       company_id: companyId,
       type: addingFor,
@@ -75,6 +135,7 @@ export function PortfolioIntelligenceTab({ companyId, intelligence, onRefresh }:
   }
 
   async function handleDelete(id: string) {
+    const supabase = createClient();
     await supabase.from("portfolio_intelligence").delete().eq("id", id);
     onRefresh();
   }
@@ -102,7 +163,6 @@ export function PortfolioIntelligenceTab({ companyId, intelligence, onRefresh }:
           </div>
         </div>
 
-        {/* Add form */}
         {addingFor === type && (
           <div className="mb-3 p-3 bg-slate-50 rounded-lg space-y-2">
             <input
@@ -184,6 +244,48 @@ export function PortfolioIntelligenceTab({ companyId, intelligence, onRefresh }:
       <Section title="M&A acquirer candidates" type="ma_acquirer" items={acquirers} />
       <Section title="Potential pilot partners" type="pilot_partner" items={pilots} />
       <Section title="Competitor landscape" type="competitor" items={competitors} />
+
+      {/* LP connections */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Users size={14} className="text-violet-500" />
+          <h3 className="text-sm font-semibold text-slate-700">LP connections</h3>
+          <span className="text-[10px] text-slate-400 ml-1">LPs in your fund with matching sector focus</span>
+        </div>
+        {lpConnections.length === 0 ? (
+          <p className="text-xs text-slate-400">
+            {companySectors.length === 0
+              ? "No sectors set for this company."
+              : "No LP connections found with matching sectors."}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {lpConnections.map(lp => (
+              <div key={lp.id} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-lg">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[13px] font-semibold text-slate-800">{lp.name}</p>
+                    {lp.lp_stage && (
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${LP_STAGE_BADGE[lp.lp_stage] ?? "bg-slate-100 text-slate-500"}`}>
+                        {LP_STAGE_LABEL[lp.lp_stage] ?? lp.lp_stage}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {lp.aum && <span className="text-[10px] text-slate-400">{fmtAum(lp.aum)}</span>}
+                    {(lp.sectors ?? []).length > 0 && (
+                      <span className="text-[10px] text-slate-400">
+                        {(lp.sectors ?? []).slice(0, 3).join(", ")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="text-[10px] text-violet-600 font-medium flex-shrink-0">Sector match</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

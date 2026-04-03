@@ -22,21 +22,71 @@ const HEALTH_RUNWAY: Record<string, string> = {
   unknown:   "text-slate-400",
 };
 
-const SECTOR_ABBREV: Record<string, string> = {
-  cleantech: "CT",
-  biotech:   "Bio",
-  techbio:   "Bio",
-  "advanced materials": "AM",
-  "advanced_materials": "AM",
-  other:     "—",
+const SECTOR_LABEL: Record<string, string> = {
+  cleantech:            "Cleantech",
+  climate:              "Climate",
+  energy:               "Energy",
+  biotech:              "Biotech",
+  techbio:              "TechBio",
+  "advanced materials": "Adv. Materials",
+  advanced_materials:   "Adv. Materials",
+  "deep tech":          "DeepTech",
+  deeptech:             "DeepTech",
+  sustainability:       "Sustainability",
+  robotics:             "Robotics",
+  ai:                   "AI",
+  "agri tech":          "AgriTech",
+  agritech:             "AgriTech",
+  other:                "Other",
 };
+
+const SECTOR_BADGE: Record<string, string> = {
+  cleantech:            "bg-emerald-100 text-emerald-700",
+  climate:              "bg-emerald-100 text-emerald-700",
+  energy:               "bg-emerald-100 text-emerald-700",
+  sustainability:       "bg-emerald-100 text-emerald-700",
+  biotech:              "bg-purple-100 text-purple-700",
+  techbio:              "bg-purple-100 text-purple-700",
+  "advanced materials": "bg-blue-100 text-blue-700",
+  advanced_materials:   "bg-blue-100 text-blue-700",
+  "deep tech":          "bg-indigo-100 text-indigo-700",
+  deeptech:             "bg-indigo-100 text-indigo-700",
+  robotics:             "bg-sky-100 text-sky-700",
+  ai:                   "bg-violet-100 text-violet-700",
+  agritech:             "bg-lime-100 text-lime-700",
+  "agri tech":          "bg-lime-100 text-lime-700",
+};
+
+const STAGE_LABEL: Record<string, string> = {
+  pre_seed:  "Pre-seed",
+  preseed:   "Pre-seed",
+  seed:      "Seed",
+  pre_a:     "Pre-A",
+  series_a:  "Series A",
+  series_b:  "Series B",
+  series_c:  "Series C",
+  growth:    "Growth",
+};
+
+function formatStage(stage: string): string {
+  return STAGE_LABEL[stage.toLowerCase().replace(/[\s-]/g, "_")] ?? stage;
+}
+
+function formatSector(s: string): string {
+  const key = s.toLowerCase();
+  return SECTOR_LABEL[key] ?? s;
+}
+
+function sectorBadgeClass(s: string): string {
+  const key = s.toLowerCase();
+  return SECTOR_BADGE[key] ?? "bg-slate-100 text-slate-500";
+}
 
 export function PortfolioCompanyCard({ company, selected, onClick }: Props) {
   const health = company.health_status ?? "unknown";
   const borderClass = HEALTH_BORDER[health] ?? "border-l-slate-200";
   const runwayClass = HEALTH_RUNWAY[health] ?? "text-slate-400";
-  const primarySector = (company.sectors ?? [])[0]?.toLowerCase() ?? "";
-  const sectorAbbrev = SECTOR_ABBREV[primarySector] ?? primarySector.substring(0, 3);
+  const primarySector = (company.sectors ?? [])[0] ?? "";
 
   return (
     <button
@@ -61,18 +111,18 @@ export function PortfolioCompanyCard({ company, selected, onClick }: Props) {
             )}
           </div>
           <div className="flex items-center gap-1 mt-0.5">
-            {sectorAbbrev && (
-              <span className="text-[10px] px-1 py-px rounded bg-slate-100 text-slate-500 font-medium">
-                {sectorAbbrev}
+            {primarySector && (
+              <span className={`text-[10px] px-1.5 py-px rounded font-medium ${sectorBadgeClass(primarySector)}`}>
+                {formatSector(primarySector)}
               </span>
             )}
             {company.stage && (
-              <span className="text-[10px] px-1 py-px rounded bg-slate-100 text-slate-500 font-medium">
-                {company.stage}
+              <span className="text-[10px] px-1.5 py-px rounded bg-slate-100 text-slate-500 font-medium">
+                {formatStage(company.stage)}
               </span>
             )}
             {(company.current_raise_status === "actively_raising" || company.current_raise_status === "closing") && (
-              <span className="text-[10px] px-1 py-px rounded bg-emerald-100 text-emerald-700 font-medium">
+              <span className="text-[10px] px-1.5 py-px rounded bg-emerald-100 text-emerald-700 font-medium">
                 Raising
               </span>
             )}

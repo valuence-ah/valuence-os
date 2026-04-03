@@ -1,10 +1,9 @@
 "use client";
-import { useState } from "react";
-import { ExternalLink, Upload } from "lucide-react";
-import type {
-  Company, PortfolioKpi, PortfolioMilestone, PortfolioInitiative,
-  PortfolioIntelligence, PortfolioReport, Interaction, Contact, FeedArticle,
-} from "@/lib/types";
+import { useState, useRef } from "react";
+import { ExternalLink, Upload, Check, X, Pencil } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import type { Company } from "@/lib/types";
+import type { CompanyDetail } from "./portfolio-client";
 import { PortfolioOverviewTab } from "./portfolio-overview-tab";
 import { PortfolioIntelligenceTab } from "./portfolio-intelligence-tab";
 import { PortfolioRelationshipsTab } from "./portfolio-relationships-tab";
@@ -13,38 +12,130 @@ import { PortfolioReportUpload } from "./portfolio-report-upload";
 
 type TabId = "overview" | "intelligence" | "relationships" | "documents";
 
-interface CompanyDetail {
-  kpis: PortfolioKpi[];
-  milestones: PortfolioMilestone[];
-  initiatives: PortfolioInitiative[];
-  intelligence: PortfolioIntelligence[];
-  interactions: Interaction[];
-  contacts: Contact[];
-  reports: PortfolioReport[];
-  signals: FeedArticle[];
-}
-
 interface Props {
   company: Company;
   detail: CompanyDetail | null;
   onUploadSuccess: () => void;
-  onIntelligenceRefresh: () => void;
+  onDetailRefresh: () => void;
+  onCompanyUpdate: (id: string, updates: Partial<Company>) => void;
 }
+
+const RAISE_STATUS_OPTIONS: { value: Company["current_raise_status"]; label: string }[] = [
+  { value: "not_raising",     label: "Not raising" },
+  { value: "preparing",       label: "Preparing" },
+  { value: "actively_raising", label: "Actively raising" },
+  { value: "closing",         label: "Closing" },
+];
 
 const RAISE_STATUS_BADGE: Record<string, string> = {
   actively_raising: "bg-emerald-100 text-emerald-700",
   closing:          "bg-teal-100 text-teal-700",
   preparing:        "bg-amber-100 text-amber-700",
-  not_raising:      "",
+  not_raising:      "bg-slate-100 text-slate-500",
 };
 
-export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onIntelligenceRefresh }: Props) {
+const SECTOR_LABEL: Record<string, string> = {
+  cleantech:            "Cleantech",
+  climate:              "Climate",
+  energy:               "Energy",
+  biotech:              "Biotech",
+  techbio:              "TechBio",
+  "advanced materials": "Adv. Materials",
+  advanced_materials:   "Adv. Materials",
+  deeptech:             "DeepTech",
+  sustainability:       "Sustainability",
+  robotics:             "Robotics",
+  ai:                   "AI",
+  agritech:             "AgriTech",
+};
+
+function formatSector(s: string): string {
+  return SECTOR_LABEL[s.toLowerCase()] ?? s;
+}
+
+const SECTOR_BADGE: Record<string, string> = {
+  cleantech:            "bg-emerald-100 text-emerald-700",
+  climate:              "bg-emerald-100 text-emerald-700",
+  energy:               "bg-emerald-100 text-emerald-700",
+  sustainability:       "bg-emerald-100 text-emerald-700",
+  biotech:              "bg-purple-100 text-purple-700",
+  techbio:              "bg-purple-100 text-purple-700",
+  "advanced materials": "bg-blue-100 text-blue-700",
+  advanced_materials:   "bg-blue-100 text-blue-700",
+  deeptech:             "bg-indigo-100 text-indigo-700",
+  robotics:             "bg-sky-100 text-sky-700",
+  ai:                   "bg-violet-100 text-violet-700",
+  agritech:             "bg-lime-100 text-lime-700",
+};
+
+function sectorBadgeClass(s: string): string {
+  return SECTOR_BADGE[s.toLowerCase()] ?? "bg-slate-100 text-slate-600";
+}
+
+const STAGE_LABEL: Record<string, string> = {
+  pre_seed: "Pre-seed", preseed: "Pre-seed", seed: "Seed",
+  pre_a: "Pre-A", series_a: "Series A", series_b: "Series B", series_c: "Series C",
+};
+function formatStage(s: string): string {
+  return STAGE_LABEL[s.toLowerCase().replace(/[\s-]/g, "_")] ?? s;
+}
+
+function InlineTextField({
+  value, placeholder, onSave,
+}: { value: string; placeholder: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function startEdit() { setDraft(value); setEditing(true); setTimeout(() => inputRef.current?.focus(), 0); }
+  function commit() { setEditing(false); if (draft.trim() !== value) onSave(draft.trim()); }
+  function cancel() { setEditing(false); setDraft(value); }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancel(); }}
+          onBlur={commit}
+          className="text-[17px] font-bold text-slate-900 bg-white border-b-2 border-blue-500 outline-none px-0 leading-tight min-w-0 w-48"
+        />
+        <button onClick={commit} className="text-emerald-600 hover:text-emerald-700"><Check size={14} /></button>
+        <button onClick={cancel} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+      </div>
+    );
+  }
+  return (
+    <span
+      onDoubleClick={startEdit}
+      title="Double-click to edit"
+      className="text-[17px] font-bold text-slate-900 leading-tight cursor-pointer hover:bg-slate-100 rounded px-0.5 -mx-0.5 transition-colors"
+    >
+      {value || <span className="text-slate-400 font-normal italic">{placeholder}</span>}
+    </span>
+  );
+}
+
+export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetailRefresh, onCompanyUpdate }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [showUpload, setShowUpload] = useState(false);
+  const [editingWebsite, setEditingWebsite] = useState(false);
+  const [websiteDraft, setWebsiteDraft] = useState(company.website ?? "");
+  const [editingRaiseTarget, setEditingRaiseTarget] = useState(false);
+  const [raiseTargetDraft, setRaiseTargetDraft] = useState(company.current_raise_target ?? "");
+  const [editingBoardDate, setEditingBoardDate] = useState(false);
+  const [boardDateDraft, setBoardDateDraft] = useState(company.next_board_date ?? "");
 
-  const raiseBadge = company.current_raise_status ? RAISE_STATUS_BADGE[company.current_raise_status] : "";
   const sectors = company.sectors ?? [];
   const primarySector = sectors[0] ?? "";
+
+  async function saveField(updates: Partial<Company>) {
+    const supabase = createClient();
+    await supabase.from("companies").update(updates).eq("id", company.id);
+    onCompanyUpdate(company.id, updates);
+  }
 
   async function handleIntelRefresh(type: "ma_acquirer" | "pilot_partner") {
     await fetch("/api/portfolio/intelligence", {
@@ -52,8 +143,10 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onIntel
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ company_id: company.id, type }),
     });
-    onIntelligenceRefresh();
+    onDetailRefresh();
   }
+
+  const raiseBadge = company.current_raise_status ? RAISE_STATUS_BADGE[company.current_raise_status] ?? "bg-slate-100 text-slate-500" : "";
 
   const TABS: { id: TabId; label: string }[] = [
     { id: "overview",       label: "Overview" },
@@ -69,24 +162,110 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onIntel
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-[17px] font-bold text-slate-900 leading-tight">{company.name}</h2>
-                {primarySector && (
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
-                    {primarySector}
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                {/* Editable company name */}
+                <InlineTextField
+                  value={company.name}
+                  placeholder="Company name"
+                  onSave={name => saveField({ name })}
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {/* Sector badge — click to edit */}
+                {primarySector ? (
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium cursor-pointer hover:opacity-80 transition-opacity ${sectorBadgeClass(primarySector)}`}
+                    title="Sector"
+                  >
+                    {formatSector(primarySector)}
                   </span>
-                )}
+                ) : null}
+
+                {/* Stage badge */}
                 {company.stage && (
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
-                    {company.stage}
+                    {formatStage(company.stage)}
                   </span>
                 )}
-                {company.current_raise_status && raiseBadge && (
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${raiseBadge}`}>
-                    {company.current_raise_target
-                      ? `Raising ${company.current_raise_target}`
-                      : company.current_raise_status.replace("_", " ")}
-                  </span>
+
+                {/* Raise status — inline dropdown */}
+                {company.current_raise_status && company.current_raise_status !== "not_raising" && (
+                  <select
+                    value={company.current_raise_status ?? "not_raising"}
+                    onChange={e => saveField({ current_raise_status: e.target.value as Company["current_raise_status"] })}
+                    className={`text-[11px] px-2 py-0.5 rounded-full font-medium cursor-pointer border-none focus:outline-none ${raiseBadge}`}
+                  >
+                    {RAISE_STATUS_OPTIONS.map(o => (
+                      <option key={o.value ?? ""} value={o.value ?? ""}>{o.label}</option>
+                    ))}
+                  </select>
+                )}
+                {(!company.current_raise_status || company.current_raise_status === "not_raising") && (
+                  <select
+                    value={company.current_raise_status ?? "not_raising"}
+                    onChange={e => saveField({ current_raise_status: e.target.value as Company["current_raise_status"] })}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium cursor-pointer border-none focus:outline-none"
+                  >
+                    {RAISE_STATUS_OPTIONS.map(o => (
+                      <option key={o.value ?? ""} value={o.value ?? ""}>{o.label}</option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Raise target — editable inline */}
+                {company.current_raise_status && company.current_raise_status !== "not_raising" && (
+                  editingRaiseTarget ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        autoFocus
+                        value={raiseTargetDraft}
+                        onChange={e => setRaiseTargetDraft(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") { saveField({ current_raise_target: raiseTargetDraft }); setEditingRaiseTarget(false); }
+                          if (e.key === "Escape") { setEditingRaiseTarget(false); setRaiseTargetDraft(company.current_raise_target ?? ""); }
+                        }}
+                        onBlur={() => { saveField({ current_raise_target: raiseTargetDraft }); setEditingRaiseTarget(false); }}
+                        placeholder="e.g. $5M"
+                        className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 w-20 focus:outline-none"
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setRaiseTargetDraft(company.current_raise_target ?? ""); setEditingRaiseTarget(true); }}
+                      className="text-[11px] text-slate-500 hover:text-slate-700 flex items-center gap-0.5"
+                    >
+                      {company.current_raise_target ?? <span className="italic">Set target</span>}
+                      <Pencil size={9} />
+                    </button>
+                  )
+                )}
+
+                {/* Next board date */}
+                {editingBoardDate ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      autoFocus
+                      type="date"
+                      value={boardDateDraft}
+                      onChange={e => setBoardDateDraft(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") { saveField({ next_board_date: boardDateDraft || null }); setEditingBoardDate(false); }
+                        if (e.key === "Escape") { setEditingBoardDate(false); }
+                      }}
+                      onBlur={() => { saveField({ next_board_date: boardDateDraft || null }); setEditingBoardDate(false); }}
+                      className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 focus:outline-none"
+                    />
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setBoardDateDraft(company.next_board_date ?? ""); setEditingBoardDate(true); }}
+                    className="text-[11px] text-slate-400 hover:text-slate-600 flex items-center gap-0.5"
+                  >
+                    {company.next_board_date
+                      ? `Board: ${new Date(company.next_board_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+                      : "Set board date"}
+                    <Pencil size={9} />
+                  </button>
                 )}
               </div>
             </div>
@@ -100,15 +279,43 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onIntel
             >
               <Upload size={12} /> Upload report
             </button>
-            {company.website && (
-              <a
-                href={company.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2.5 py-1.5 border border-slate-200 text-slate-600 text-xs rounded-lg hover:bg-slate-50 transition-colors"
+            {/* Website — editable */}
+            {editingWebsite ? (
+              <div className="flex items-center gap-1">
+                <input
+                  autoFocus
+                  value={websiteDraft}
+                  onChange={e => setWebsiteDraft(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") { saveField({ website: websiteDraft || null }); setEditingWebsite(false); }
+                    if (e.key === "Escape") { setEditingWebsite(false); setWebsiteDraft(company.website ?? ""); }
+                  }}
+                  onBlur={() => { saveField({ website: websiteDraft || null }); setEditingWebsite(false); }}
+                  placeholder="https://..."
+                  className="text-xs border border-slate-300 rounded px-2 py-1 w-36 focus:outline-none"
+                />
+              </div>
+            ) : company.website ? (
+              <div className="flex items-center gap-1">
+                <a
+                  href={company.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2.5 py-1.5 border border-slate-200 text-slate-600 text-xs rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  <ExternalLink size={12} /> Website
+                </a>
+                <button onClick={() => { setWebsiteDraft(company.website ?? ""); setEditingWebsite(true); }} className="text-slate-400 hover:text-slate-600 p-1">
+                  <Pencil size={11} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setWebsiteDraft(""); setEditingWebsite(true); }}
+                className="flex items-center gap-1 px-2.5 py-1.5 border border-dashed border-slate-300 text-slate-400 text-xs rounded-lg hover:bg-slate-50"
               >
-                <ExternalLink size={12} /> Website
-              </a>
+                <ExternalLink size={12} /> Add website
+              </button>
             )}
           </div>
         </div>
@@ -149,13 +356,16 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onIntel
                 interactions={detail.interactions}
                 signals={detail.signals}
                 onIntelligenceRefresh={handleIntelRefresh}
+                onDetailRefresh={onDetailRefresh}
+                onCompanyUpdate={onCompanyUpdate}
               />
             )}
             {activeTab === "intelligence" && (
               <PortfolioIntelligenceTab
                 companyId={company.id}
+                companySectors={company.sectors ?? []}
                 intelligence={detail.intelligence}
-                onRefresh={onIntelligenceRefresh}
+                onRefresh={onDetailRefresh}
               />
             )}
             {activeTab === "relationships" && (
@@ -163,6 +373,8 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onIntel
                 companyId={company.id}
                 interactions={detail.interactions}
                 contacts={detail.contacts}
+                valueAdd={detail.valueAdd}
+                onDetailRefresh={onDetailRefresh}
               />
             )}
             {activeTab === "documents" && (

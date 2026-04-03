@@ -72,6 +72,8 @@ export interface Company {
   next_board_date: string | null;
   latest_report_date: string | null;
   latest_report_summary: string | null;
+  fundraise_tracker: Record<string, unknown> | null;
+  risk_flags: string[] | null;
 }
 
 export interface Contact {
@@ -383,6 +385,15 @@ export interface PortfolioReport {
   ai_summary: string | null;
   extracted_data: Record<string, unknown>;
   uploaded_at: string;
+}
+
+export interface PortfolioValueAdd {
+  id: string;
+  company_id: string;
+  description: string;
+  category: string;
+  date: string;
+  created_at: string;
 }
 
 export interface PortfolioIntelligence {

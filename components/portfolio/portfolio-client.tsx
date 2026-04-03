@@ -1,21 +1,19 @@
 "use client";
 // ─── Portfolio Intelligence Hub — Split-Pane Client ───────────────────────────
-// Left panel: company list sorted by runway. Right panel: detail tabs.
-// Fetches company detail (KPIs, milestones, initiatives, intelligence,
-// interactions, contacts, reports, signals) on selection.
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type {
   Company, PortfolioKpi, PortfolioMilestone, PortfolioInitiative,
-  PortfolioIntelligence, PortfolioReport, Interaction, Contact, FeedArticle,
+  PortfolioIntelligence, PortfolioReport, PortfolioValueAdd,
+  Interaction, Contact, FeedArticle,
 } from "@/lib/types";
 import { PortfolioStatTiles } from "./portfolio-stat-tiles";
 import { PortfolioCompanyList } from "./portfolio-company-list";
 import { PortfolioDetailPanel } from "./portfolio-detail-panel";
 import { BarChart3 } from "lucide-react";
 
-interface CompanyDetail {
+export interface CompanyDetail {
   kpis: PortfolioKpi[];
   milestones: PortfolioMilestone[];
   initiatives: PortfolioInitiative[];
@@ -24,6 +22,7 @@ interface CompanyDetail {
   contacts: Contact[];
   reports: PortfolioReport[];
   signals: FeedArticle[];
+  valueAdd: PortfolioValueAdd[];
 }
 
 interface Props {
@@ -31,7 +30,6 @@ interface Props {
 }
 
 export function PortfolioClient({ companies: initial }: Props) {
-  const supabase = createClient();
   const [companies, setCompanies] = useState<Company[]>(initial);
   const [selectedId, setSelectedId] = useState<string | null>(initial[0]?.id ?? null);
   const [detail, setDetail] = useState<CompanyDetail | null>(null);
@@ -41,39 +39,59 @@ export function PortfolioClient({ companies: initial }: Props) {
 
   const fetchDetail = useCallback(async (companyId: string) => {
     setLoadingDetail(true);
-    const [kpisRes, milestonesRes, initiativesRes, intelligenceRes, interactionsRes, contactsRes, reportsRes, signalsRes] =
-      await Promise.all([
-        supabase.from("portfolio_kpis").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(4),
-        supabase.from("portfolio_milestones").select("*").eq("company_id", companyId).order("created_at", { ascending: false }),
-        supabase.from("portfolio_initiatives").select("*").eq("company_id", companyId).order("created_at", { ascending: false }),
-        supabase.from("portfolio_intelligence").select("*").eq("company_id", companyId).order("last_refreshed", { ascending: false }),
-        supabase.from("interactions").select("*").eq("company_id", companyId).order("date", { ascending: false }).limit(10),
-        supabase.from("contacts").select("*").eq("company_id", companyId).order("last_contact_date", { ascending: false }).limit(10),
-        supabase.from("portfolio_reports").select("*").eq("company_id", companyId).order("uploaded_at", { ascending: false }).limit(10),
-        supabase.from("feed_articles").select("*").contains("matched_company_ids", [companyId]).order("published_at", { ascending: false }).limit(10),
-      ]);
+    const supabase = createClient();
+    try {
+      const [kpisRes, milestonesRes, initiativesRes, intelligenceRes,
+             interactionsRes, contactsRes, reportsRes, signalsRes, valueAddRes] =
+        await Promise.all([
+          supabase.from("portfolio_kpis").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(4),
+          supabase.from("portfolio_milestones").select("*").eq("company_id", companyId).order("created_at", { ascending: false }),
+          supabase.from("portfolio_initiatives").select("*").eq("company_id", companyId).order("created_at", { ascending: false }),
+          supabase.from("portfolio_intelligence").select("*").eq("company_id", companyId).order("last_refreshed", { ascending: false }),
+          supabase.from("interactions").select("*").eq("company_id", companyId).order("date", { ascending: false }).limit(10),
+          supabase.from("contacts").select("*").eq("company_id", companyId).order("last_contact_date", { ascending: false }).limit(10),
+          supabase.from("portfolio_reports").select("*").eq("company_id", companyId).order("uploaded_at", { ascending: false }).limit(10),
+          supabase.from("feed_articles").select("*").contains("matched_company_ids", [companyId]).order("published_at", { ascending: false }).limit(10),
+          supabase.from("portfolio_value_add").select("*").eq("company_id", companyId).order("date", { ascending: false }).limit(20),
+        ]);
 
-    setDetail({
-      kpis:         (kpisRes.data ?? []) as PortfolioKpi[],
-      milestones:   (milestonesRes.data ?? []) as PortfolioMilestone[],
-      initiatives:  (initiativesRes.data ?? []) as PortfolioInitiative[],
-      intelligence: (intelligenceRes.data ?? []) as PortfolioIntelligence[],
-      interactions: (interactionsRes.data ?? []) as Interaction[],
-      contacts:     (contactsRes.data ?? []) as Contact[],
-      reports:      (reportsRes.data ?? []) as PortfolioReport[],
-      signals:      (signalsRes.data ?? []) as FeedArticle[],
-    });
-    setLoadingDetail(false);
-  }, [supabase]);
+      if (kpisRes.error) console.error("[portfolio] kpis:", kpisRes.error.message);
+      if (milestonesRes.error) console.error("[portfolio] milestones:", milestonesRes.error.message);
+      if (intelligenceRes.error) console.error("[portfolio] intelligence:", intelligenceRes.error.message);
+
+      setDetail({
+        kpis:         (kpisRes.data ?? []) as PortfolioKpi[],
+        milestones:   (milestonesRes.data ?? []) as PortfolioMilestone[],
+        initiatives:  (initiativesRes.data ?? []) as PortfolioInitiative[],
+        intelligence: (intelligenceRes.data ?? []) as PortfolioIntelligence[],
+        interactions: (interactionsRes.data ?? []) as Interaction[],
+        contacts:     (contactsRes.data ?? []) as Contact[],
+        reports:      (reportsRes.data ?? []) as PortfolioReport[],
+        signals:      (signalsRes.data ?? []) as FeedArticle[],
+        valueAdd:     (valueAddRes.data ?? []) as PortfolioValueAdd[],
+      });
+    } finally {
+      setLoadingDetail(false);
+    }
+  }, []);
+
+  // Auto-fetch detail on initial mount and when selected company changes
+  useEffect(() => {
+    if (selectedId) fetchDetail(selectedId);
+  }, [selectedId, fetchDetail]);
 
   async function handleSelect(id: string) {
+    if (id === selectedId) return;
     setSelectedId(id);
     setDetail(null);
-    await fetchDetail(id);
+  }
+
+  function handleCompanyUpdate(id: string, updates: Partial<Company>) {
+    setCompanies(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   }
 
   async function handleUploadSuccess() {
-    // Re-fetch company list to get updated health_status / runway
+    const supabase = createClient();
     const { data: updated } = await supabase
       .from("companies")
       .select("*")
@@ -83,7 +101,7 @@ export function PortfolioClient({ companies: initial }: Props) {
     if (selectedId) await fetchDetail(selectedId);
   }
 
-  async function handleIntelligenceRefresh() {
+  async function handleDetailRefresh() {
     if (selectedId) await fetchDetail(selectedId);
   }
 
@@ -101,28 +119,23 @@ export function PortfolioClient({ companies: initial }: Props) {
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Stat tiles */}
       <div className="px-5 pt-4 flex-shrink-0">
         <PortfolioStatTiles companies={companies} />
       </div>
-
-      {/* Split pane */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: company list */}
         <PortfolioCompanyList
           companies={companies}
           selectedId={selectedId}
           onSelect={handleSelect}
         />
-
-        {/* Right: detail panel */}
         <div className="flex-1 overflow-hidden">
           {selectedCompany ? (
             <PortfolioDetailPanel
               company={selectedCompany}
               detail={loadingDetail ? null : detail}
               onUploadSuccess={handleUploadSuccess}
-              onIntelligenceRefresh={handleIntelligenceRefresh}
+              onDetailRefresh={handleDetailRefresh}
+              onCompanyUpdate={handleCompanyUpdate}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-slate-400 text-sm">
