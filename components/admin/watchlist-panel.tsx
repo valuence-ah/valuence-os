@@ -68,13 +68,33 @@ function WatchlistModal({ item, onClose, onSaved }: ModalProps) {
       if (err) { setError(err.message); setSaving(false); return; }
       onSaved(data as FeedWatchlistItem);
     } else {
-      const { data, error: err } = await supabase
+      // Check for existing entry with same name (case-insensitive)
+      const { data: existing } = await supabase
         .from("feed_watchlist")
-        .insert(payload)
-        .select()
-        .single();
-      if (err) { setError(err.message); setSaving(false); return; }
-      onSaved(data as FeedWatchlistItem);
+        .select("id, keywords")
+        .ilike("name", name.trim())
+        .maybeSingle();
+
+      if (existing) {
+        // Merge keywords and update instead of creating a duplicate
+        const merged = Array.from(new Set([...(existing.keywords ?? []), ...keywords]));
+        const { data, error: err } = await supabase
+          .from("feed_watchlist")
+          .update({ type, keywords: merged, notify })
+          .eq("id", existing.id)
+          .select()
+          .single();
+        if (err) { setError(err.message); setSaving(false); return; }
+        onSaved(data as FeedWatchlistItem);
+      } else {
+        const { data, error: err } = await supabase
+          .from("feed_watchlist")
+          .insert(payload)
+          .select()
+          .single();
+        if (err) { setError(err.message); setSaving(false); return; }
+        onSaved(data as FeedWatchlistItem);
+      }
     }
     setSaving(false);
     onClose();
@@ -203,6 +223,8 @@ export function WatchlistPanel() {
   const [modal, setModal]           = useState<{ open: boolean; item?: FeedWatchlistItem | null }>({ open: false });
   const [deleteId, setDeleteId]     = useState<string | null>(null);
   const [deleting, setDeleting]     = useState(false);
+  const [deduping, setDeduping]     = useState(false);
+  const [dedupMsg, setDedupMsg]     = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -250,6 +272,20 @@ export function WatchlistPanel() {
       .select()
       .single();
     if (data) handleSaved(data as FeedWatchlistItem);
+  }
+
+  async function handleDeduplicate() {
+    setDeduping(true);
+    setDedupMsg(null);
+    try {
+      const res = await fetch("/api/admin/deduplicate-watchlist", { method: "POST" });
+      const data = await res.json() as { message?: string };
+      setDedupMsg(data.message ?? "Done.");
+      await load();
+    } catch {
+      setDedupMsg("Deduplication failed.");
+    }
+    setDeduping(false);
   }
 
   async function confirmDelete() {
@@ -317,12 +353,25 @@ export function WatchlistPanel() {
         </button>
 
         <button
+          onClick={handleDeduplicate}
+          disabled={deduping}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-amber-300 text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100 transition-colors disabled:opacity-50"
+          title="Merge duplicate entries"
+        >
+          <RefreshCw size={12} className={deduping ? "animate-spin" : ""} />
+          Deduplicate
+        </button>
+
+        <button
           onClick={() => setModal({ open: true, item: null })}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
           <Plus size={13} /> Add Entry
         </button>
       </div>
+      {dedupMsg && (
+        <div className="px-5 py-1.5 bg-amber-50 border-b border-amber-200 text-[11px] text-amber-800">{dedupMsg}</div>
+      )}
 
       {/* ── Table ── */}
       <div className="flex-1 overflow-y-auto">

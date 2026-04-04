@@ -74,6 +74,11 @@ export interface Company {
   latest_report_summary: string | null;
   fundraise_tracker: Record<string, unknown> | null;
   risk_flags: string[] | null;
+  // Fundraise tracker extended fields (migration 025)
+  raise_round: string | null;
+  raise_target_close: string | null;
+  investors_approached: number | null;
+  term_sheets: number | null;
 }
 
 export interface Contact {

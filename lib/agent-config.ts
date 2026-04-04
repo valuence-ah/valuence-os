@@ -74,6 +74,12 @@ export interface NrelAgentConfig {
   minScore: number;
 }
 
+export interface BiorxivAgentConfig {
+  keywords: string[];
+  lookbackDays: number;
+  minScore: number;
+}
+
 const DEFAULTS = {
   exa: {
     queries: [
@@ -159,6 +165,12 @@ const DEFAULTS = {
     apiKey: process.env.NREL_API_KEY ?? "",
     minScore: 0.35,
   } satisfies NrelAgentConfig,
+
+  biorxiv: {
+    keywords: ["synthetic biology", "biomanufacturing", "precision fermentation", "metabolic engineering", "bioengineering", "protein engineering", "CRISPR", "biosynthesis"],
+    lookbackDays: 14,
+    minScore: 0.35,
+  } satisfies BiorxivAgentConfig,
 };
 
 type AgentName = keyof typeof DEFAULTS;

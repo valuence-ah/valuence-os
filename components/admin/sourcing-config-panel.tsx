@@ -16,6 +16,7 @@ interface AgentConfig {
 
 const AGENT_LABELS: Record<string, string> = {
   arxiv:            "arXiv",
+  biorxiv:          "bioRxiv / medRxiv",
   sbir:             "SBIR",
   nsf:              "NSF",
   exa:              "Exa AI",
@@ -115,6 +116,11 @@ const AGENT_FIELDS: Record<string, { key: string; label: string; type: "text" | 
     { key: "queries", label: "Search Queries", type: "array", hint: "One query per line" },
     { key: "maxResults", label: "Max Results per Query", type: "number" },
     { key: "minScore", label: "Min Relevance Score (0–1)", type: "number", hint: "Signals below this threshold are skipped" },
+  ],
+  biorxiv: [
+    { key: "keywords", label: "Keywords", type: "array", hint: "One keyword per line — used to filter preprints" },
+    { key: "lookbackDays", label: "Lookback (days)", type: "number" },
+    { key: "minScore", label: "Min Relevance Score (0–1)", type: "number" },
   ],
   sbir: [
     { key: "keywords", label: "Keywords", type: "array", hint: "One keyword per line" },

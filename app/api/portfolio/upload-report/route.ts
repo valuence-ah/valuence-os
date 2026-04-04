@@ -15,49 +15,80 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const formData = await request.formData();
-  const file = formData.get("file") as File | null;
-  const companyId = formData.get("company_id") as string | null;
-  const reportType = (formData.get("report_type") as string) || "quarterly";
-  const period = (formData.get("period") as string) || "";
+  const contentType = request.headers.get("content-type") ?? "";
+  const isJsonBody = contentType.includes("application/json");
 
-  if (!file || !companyId) {
-    return NextResponse.json({ error: "File and company_id required" }, { status: 400 });
-  }
-
-  // 1. Upload to Supabase storage
-  const fileName = `${Date.now()}-${file.name}`;
-  const storagePath = `portfolio-reports/${companyId}/${fileName}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-
-  const { error: uploadError } = await supabase.storage
-    .from("documents")
-    .upload(storagePath, buffer, { contentType: file.type });
-
-  if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 });
-  }
-
-  // 2. Create report record
-  const { data: report } = await supabase
-    .from("portfolio_reports")
-    .insert({
-      company_id: companyId,
-      file_name: file.name,
-      storage_path: storagePath,
-      report_type: reportType,
-      period: period || null,
-    })
-    .select("id")
-    .single();
-
-  // 3. Extract text from PDF
+  let companyId: string | null;
+  let reportType: string;
+  let period: string;
   let extractedText = "";
-  try {
-    const { extractPdfText } = await import("@/lib/extract-pdf-text");
-    extractedText = await extractPdfText(buffer);
-  } catch {
-    extractedText = buffer.toString("utf-8").substring(0, 15000);
+  let reportId: string | null = null;
+
+  if (isJsonBody) {
+    // Text paste mode — no file upload needed
+    const body = await request.json() as { text_content?: string; company_id?: string; report_type?: string; period?: string };
+    companyId = body.company_id ?? null;
+    reportType = body.report_type ?? "quarterly";
+    period = body.period ?? "";
+    extractedText = (body.text_content ?? "").substring(0, 15000);
+
+    if (!companyId || !extractedText.trim()) {
+      return NextResponse.json({ error: "company_id and text_content required" }, { status: 400 });
+    }
+
+    // Create a lightweight report record for text-paste mode
+    const { data: r } = await supabase
+      .from("portfolio_reports")
+      .insert({ company_id: companyId, file_name: "pasted-text", storage_path: "text-paste", report_type: reportType, period: period || null })
+      .select("id")
+      .single();
+    reportId = r?.id ?? null;
+  } else {
+    // File upload mode
+    const formData = await request.formData();
+    const file = formData.get("file") as File | null;
+    companyId = formData.get("company_id") as string | null;
+    reportType = (formData.get("report_type") as string) || "quarterly";
+    period = (formData.get("period") as string) || "";
+
+    if (!file || !companyId) {
+      return NextResponse.json({ error: "File and company_id required" }, { status: 400 });
+    }
+
+    // 1. Upload to Supabase storage
+    const fileName = `${Date.now()}-${file.name}`;
+    const storagePath = `portfolio-reports/${companyId}/${fileName}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    const { error: uploadError } = await supabase.storage
+      .from("documents")
+      .upload(storagePath, buffer, { contentType: file.type });
+
+    if (uploadError) {
+      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    }
+
+    // 2. Create report record
+    const { data: r } = await supabase
+      .from("portfolio_reports")
+      .insert({
+        company_id: companyId,
+        file_name: file.name,
+        storage_path: storagePath,
+        report_type: reportType,
+        period: period || null,
+      })
+      .select("id")
+      .single();
+    reportId = r?.id ?? null;
+
+    // 3. Extract text from PDF
+    try {
+      const { extractPdfText } = await import("@/lib/extract-pdf-text");
+      extractedText = await extractPdfText(buffer);
+    } catch {
+      extractedText = buffer.toString("utf-8").substring(0, 15000);
+    }
   }
 
   // 4. Get company context
@@ -148,7 +179,7 @@ Return JSON:
       ai_summary: extracted.summary ?? null,
       extracted_data: extracted,
     })
-    .eq("id", report?.id);
+    .eq("id", reportId);
 
   // 7. Upsert KPIs
   if (extracted.kpis) {
@@ -172,7 +203,7 @@ Return JSON:
         pilots_active: kpis.pilots_active as number | null ?? null,
         custom_kpis: (kpis.custom_kpis as Record<string, number>) ?? {},
         source: "report_upload",
-        source_report_id: report?.id ?? null,
+        source_report_id: reportId ?? null,
       }, { onConflict: "company_id,period" });
   }
 
@@ -219,7 +250,7 @@ Return JSON:
       } else {
         await supabase
           .from("portfolio_initiatives")
-          .insert({ company_id: companyId, title: init.title, description: init.description ?? null, status: init.status ?? "in_progress", category: init.category ?? "general", source: "report_upload", source_report_id: report?.id ?? null });
+          .insert({ company_id: companyId, title: init.title, description: init.description ?? null, status: init.status ?? "in_progress", category: init.category ?? "general", source: "report_upload", source_report_id: reportId ?? null });
       }
     }
   }
@@ -251,7 +282,7 @@ Return JSON:
 
   return NextResponse.json({
     success: true,
-    report_id: report?.id,
+    report_id: reportId,
     extracted: {
       summary: extracted.summary,
       kpi_count: Object.entries(extracted.kpis ?? {}).filter(([k, v]) => k !== "custom_kpis" && v !== null).length,

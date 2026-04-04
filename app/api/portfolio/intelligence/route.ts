@@ -78,7 +78,7 @@ For each entry, return:
   "results": [
     {
       "entity_name": "Company or organization name",
-      "description": "1-2 sentences on why this is a relevant ${type.replace("_", " ")} and what the angle is",
+      "description": "Specific strategic rationale in UNDER 50 words. State exactly WHY this entity would want to acquire or partner with ${company.name}, naming the specific capability gap, market access benefit, or technology synergy. Be concrete, not generic.",
       "fit_level": "high" | "medium" | "low",
       "warmth": "warm" | "lp_connection" | "cold"
     }

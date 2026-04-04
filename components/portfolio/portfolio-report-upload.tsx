@@ -14,7 +14,9 @@ type UploadState = "idle" | "uploading" | "success" | "error";
 export function PortfolioReportUpload({ company, onClose, onSuccess }: Props) {
   const [reportType, setReportType] = useState("quarterly");
   const [period, setPeriod] = useState("");
+  const [inputMode, setInputMode] = useState<"file" | "text">("file");
   const [file, setFile] = useState<File | null>(null);
+  const [textContent, setTextContent] = useState("");
   const [dragging, setDragging] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [result, setResult] = useState<{ kpi_count: number; milestone_count: number; initiative_count: number } | null>(null);
@@ -34,18 +36,32 @@ export function PortfolioReportUpload({ company, onClose, onSuccess }: Props) {
   }, [handleFile]);
 
   async function handleUpload() {
-    if (!file) return;
+    if (inputMode === "file" && !file) return;
+    if (inputMode === "text" && !textContent.trim()) return;
     setUploadState("uploading");
     setErrorMsg("");
 
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("company_id", company.id);
-    fd.append("report_type", reportType);
-    fd.append("period", period);
-
     try {
-      const res = await fetch("/api/portfolio/upload-report", { method: "POST", body: fd });
+      let res: Response;
+      if (inputMode === "text") {
+        res = await fetch("/api/portfolio/upload-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text_content: textContent.trim(),
+            company_id: company.id,
+            report_type: reportType,
+            period,
+          }),
+        });
+      } else {
+        const fd = new FormData();
+        fd.append("file", file!);
+        fd.append("company_id", company.id);
+        fd.append("report_type", reportType);
+        fd.append("period", period);
+        res = await fetch("/api/portfolio/upload-report", { method: "POST", body: fd });
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Upload failed");
       setResult(data.extracted);
@@ -99,6 +115,24 @@ export function PortfolioReportUpload({ company, onClose, onSuccess }: Props) {
           </div>
         ) : (
           <>
+            {/* Input mode toggle */}
+            <div className="flex rounded-lg border border-slate-200 overflow-hidden mb-4">
+              <button
+                type="button"
+                onClick={() => setInputMode("file")}
+                className={`flex-1 py-2 text-xs font-medium transition-colors ${inputMode === "file" ? "bg-slate-800 text-white" : "bg-white text-slate-500 hover:text-slate-700"}`}
+              >
+                Upload file
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode("text")}
+                className={`flex-1 py-2 text-xs font-medium transition-colors ${inputMode === "text" ? "bg-slate-800 text-white" : "bg-white text-slate-500 hover:text-slate-700"}`}
+              >
+                Paste text
+              </button>
+            </div>
+
             {/* Report type + period */}
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div>
@@ -127,33 +161,43 @@ export function PortfolioReportUpload({ company, onClose, onSuccess }: Props) {
               </div>
             </div>
 
-            {/* Drop zone */}
-            <div
-              onDragOver={e => { e.preventDefault(); setDragging(true); }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={onDrop}
-              onClick={() => inputRef.current?.click()}
-              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                dragging ? "border-teal-400 bg-teal-50/30" : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
-              }`}
-            >
-              <Upload size={24} className="mx-auto text-slate-300 mb-2" />
-              {file ? (
-                <p className="text-sm font-medium text-teal-700">{file.name}</p>
-              ) : (
-                <>
-                  <p className="text-sm text-slate-500">Drop PDF, DOCX, or XLSX here</p>
-                  <p className="text-xs text-slate-400 mt-1">or click to browse</p>
-                </>
-              )}
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".pdf,.docx,.xlsx"
-                className="hidden"
-                onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
+            {/* File drop zone or text paste */}
+            {inputMode === "file" ? (
+              <div
+                onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={onDrop}
+                onClick={() => inputRef.current?.click()}
+                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                  dragging ? "border-teal-400 bg-teal-50/30" : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
+                }`}
+              >
+                <Upload size={24} className="mx-auto text-slate-300 mb-2" />
+                {file ? (
+                  <p className="text-sm font-medium text-teal-700">{file.name}</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-slate-500">Drop PDF, DOCX, or XLSX here</p>
+                    <p className="text-xs text-slate-400 mt-1">or click to browse</p>
+                  </>
+                )}
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept=".pdf,.docx,.xlsx"
+                  className="hidden"
+                  onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
+                />
+              </div>
+            ) : (
+              <textarea
+                value={textContent}
+                onChange={e => setTextContent(e.target.value)}
+                placeholder="Paste report text here — board update, investor memo, monthly metrics email, etc."
+                rows={8}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-500/20 resize-none leading-relaxed"
               />
-            </div>
+            )}
 
             {errorMsg && (
               <p className="text-xs text-red-600 mt-2">{errorMsg}</p>
@@ -170,15 +214,15 @@ export function PortfolioReportUpload({ company, onClose, onSuccess }: Props) {
               </button>
               <button
                 onClick={handleUpload}
-                disabled={!file || uploadState === "uploading"}
+                disabled={(inputMode === "file" ? !file : !textContent.trim()) || uploadState === "uploading"}
                 className="flex-1 py-2.5 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
               >
                 {uploadState === "uploading" ? (
                   <>
                     <Loader2 size={14} className="animate-spin" />
-                    Uploading and extracting…
+                    Extracting…
                   </>
-                ) : "Upload + Extract"}
+                ) : inputMode === "file" ? "Upload + Extract" : "Extract from text"}
               </button>
             </div>
           </>

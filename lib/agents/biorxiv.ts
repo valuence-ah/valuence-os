@@ -8,6 +8,7 @@ import {
   saveSignals,
   type RawSignal,
 } from "@/lib/sourcing-agents";
+import { loadAgentConfig } from "@/lib/agent-config";
 
 const BIORXIV_API = "https://api.biorxiv.org/details";
 
@@ -46,9 +47,21 @@ function getDateRange(lookbackDays = 14): { start: string; end: string } {
   return { start: fmt(start), end: fmt(end) };
 }
 
-export async function runBiorxivAgent(lookbackDays = 14): Promise<{ fetched: number; saved: number }> {
-  const { start, end } = getDateRange(lookbackDays);
+export async function runBiorxivAgent(): Promise<{ fetched: number; saved: number }> {
+  const cfg = await loadAgentConfig("biorxiv");
+  const { start, end } = getDateRange(cfg.lookbackDays);
   const allSignals = new Map<string, RawSignal>(); // dedup by DOI URL
+
+  // Build a combined keyword check from both passesKeywordFilter + admin-configured keywords
+  const cfgKeywords = cfg.keywords.map(k => k.toLowerCase());
+
+  function matchesThesis(content: string, category: string): boolean {
+    const lower = content.toLowerCase();
+    if (passesKeywordFilter(content)) return true;
+    if (cfgKeywords.some(k => lower.includes(k))) return true;
+    if (RELEVANT_SUBJECTS.some(s => category.toLowerCase().includes(s))) return true;
+    return false;
+  }
 
   // Fetch from both bioRxiv and medRxiv
   for (const server of ["biorxiv", "medrxiv"]) {
@@ -74,14 +87,11 @@ export async function runBiorxivAgent(lookbackDays = 14): Promise<{ fetched: num
         const paperUrl = `https://www.biorxiv.org/content/${paper.doi}`;
         const content = `${paper.title}. ${paper.abstract ?? ""}`;
 
-        // Filter: must match thesis keywords
-        if (!passesKeywordFilter(content) && !RELEVANT_SUBJECTS.some(s => (paper.category ?? "").toLowerCase().includes(s))) {
-          continue;
-        }
+        if (!matchesThesis(content, paper.category ?? "")) continue;
 
         if (!allSignals.has(paperUrl)) {
           allSignals.set(paperUrl, {
-            source: "other" as const, // biorxiv not in enum, map to 'other'
+            source: "other" as const, // biorxiv not in SignalSource enum, map to 'other'
             signal_type: "paper",
             title: paper.title,
             url: paperUrl,
@@ -101,7 +111,7 @@ export async function runBiorxivAgent(lookbackDays = 14): Promise<{ fetched: num
   if (fetched === 0) return { fetched: 0, saved: 0 };
 
   const scored = await scoreSignals(signals);
-  const saved = await saveSignals(scored, 3); // min score 3/10
+  const saved = await saveSignals(scored, cfg.minScore * 10); // convert 0-1 to 0-10 scale
 
   return { fetched, saved };
 }

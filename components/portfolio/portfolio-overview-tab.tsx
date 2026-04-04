@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Loader2, RefreshCw, FileText, Plus, X, Check } from "lucide-react";
+import { Loader2, RefreshCw, FileText, Plus, X, Check, Pencil, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, PortfolioKpi, PortfolioMilestone, PortfolioInitiative, PortfolioIntelligence, Interaction, FeedArticle } from "@/lib/types";
 
@@ -82,6 +82,26 @@ export function PortfolioOverviewTab({
 }: Props) {
   const [refreshing, setRefreshing] = useState<"ma_acquirer" | "pilot_partner" | null>(null);
 
+  // Fundraise tracker editing
+  const [editingFt, setEditingFt] = useState(false);
+  const [ftForm, setFtForm] = useState({
+    raise_round: "",
+    current_raise_status: "not_raising",
+    current_raise_target: "",
+    raise_target_close: "",
+    investors_approached: 0,
+    term_sheets: 0,
+  });
+  const [savingFt, setSavingFt] = useState(false);
+
+  // Strategic initiatives editing
+  const [editingInitId, setEditingInitId] = useState<string | null>(null);
+  const [editInitForm, setEditInitForm] = useState({ title: "", description: "", status: "in_progress" });
+  const [savingInitEdit, setSavingInitEdit] = useState(false);
+  const [addingInit, setAddingInit] = useState(false);
+  const [addInitForm, setAddInitForm] = useState({ title: "", description: "", status: "in_progress" });
+  const [savingInitAdd, setSavingInitAdd] = useState(false);
+
   // Milestone state
   const [addingMilestone, setAddingMilestone] = useState(false);
   const [msForm, setMsForm] = useState({ title: "", status: "upcoming" as PortfolioMilestone["status"], target_date: "" });
@@ -91,10 +111,6 @@ export function PortfolioOverviewTab({
   // Risk flags state
   const [riskInput, setRiskInput] = useState("");
   const [savingRisk, setSavingRisk] = useState(false);
-
-  // Fundraise tracker fields (from JSONB)
-  const ft = (company.fundraise_tracker ?? {}) as Record<string, string | number>;
-  const isRaising = company.current_raise_status && company.current_raise_status !== "not_raising";
 
   const latestKpi = kpis[0] ?? null;
   const prevKpi = kpis[1] ?? null;
@@ -155,6 +171,82 @@ export function PortfolioOverviewTab({
     const supabase = createClient();
     await supabase.from("companies").update({ risk_flags: updated }).eq("id", company.id);
     onCompanyUpdate(company.id, { risk_flags: updated });
+  }
+
+  function handleStartEditFt() {
+    setFtForm({
+      raise_round: company.raise_round ?? "",
+      current_raise_status: company.current_raise_status ?? "not_raising",
+      current_raise_target: company.current_raise_target ?? "",
+      raise_target_close: company.raise_target_close ?? "",
+      investors_approached: company.investors_approached ?? 0,
+      term_sheets: company.term_sheets ?? 0,
+    });
+    setEditingFt(true);
+  }
+
+  async function handleSaveFundraiseTracker() {
+    setSavingFt(true);
+    const supabase = createClient();
+    await supabase.from("companies").update({
+      raise_round: ftForm.raise_round || null,
+      current_raise_status: ftForm.current_raise_status || null,
+      current_raise_target: ftForm.current_raise_target || null,
+      raise_target_close: ftForm.raise_target_close || null,
+      investors_approached: Number(ftForm.investors_approached) || 0,
+      term_sheets: Number(ftForm.term_sheets) || 0,
+    }).eq("id", company.id);
+    onCompanyUpdate(company.id, {
+      current_raise_status: ftForm.current_raise_status as Company["current_raise_status"],
+      current_raise_target: ftForm.current_raise_target || null,
+      raise_round: ftForm.raise_round || null,
+    });
+    setSavingFt(false);
+    setEditingFt(false);
+  }
+
+  function handleStartEditInit(init: PortfolioInitiative) {
+    setEditingInitId(init.id);
+    setEditInitForm({ title: init.title, description: init.description ?? "", status: init.status });
+  }
+
+  async function handleSaveInitEdit() {
+    if (!editingInitId) return;
+    setSavingInitEdit(true);
+    const supabase = createClient();
+    await supabase.from("portfolio_initiatives").update({
+      title: editInitForm.title,
+      description: editInitForm.description || null,
+      status: editInitForm.status,
+      updated_at: new Date().toISOString(),
+    }).eq("id", editingInitId);
+    setEditingInitId(null);
+    setSavingInitEdit(false);
+    onDetailRefresh();
+  }
+
+  async function handleDeleteInit(id: string) {
+    const supabase = createClient();
+    await supabase.from("portfolio_initiatives").delete().eq("id", id);
+    onDetailRefresh();
+  }
+
+  async function handleAddInit() {
+    if (!addInitForm.title.trim()) return;
+    setSavingInitAdd(true);
+    const supabase = createClient();
+    await supabase.from("portfolio_initiatives").insert({
+      company_id: company.id,
+      title: addInitForm.title.trim(),
+      description: addInitForm.description || null,
+      status: addInitForm.status,
+      category: "general",
+      source: "manual",
+    });
+    setAddInitForm({ title: "", description: "", status: "in_progress" });
+    setAddingInit(false);
+    setSavingInitAdd(false);
+    onDetailRefresh();
   }
 
   const acquirers = intelligence.filter(i => i.type === "ma_acquirer");
@@ -305,63 +397,229 @@ export function PortfolioOverviewTab({
         )}
       </div>
 
-      {/* Fundraise tracker — only when raising */}
-      {isRaising && (
-        <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-4 py-3">
-          <h3 className="text-[10px] font-bold text-emerald-700 uppercase tracking-[0.1em] mb-2">Fundraise tracker</h3>
+      {/* Fundraise tracker — always visible, fully editable */}
+      <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-4 py-3">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-[10px] font-bold text-emerald-700 uppercase tracking-[0.1em]">Fundraise tracker</h3>
+          {!editingFt ? (
+            <button onClick={handleStartEditFt} className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-800">
+              <Pencil size={10} /> Edit
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button onClick={() => setEditingFt(false)} className="text-[10px] text-slate-500 hover:text-slate-700">Cancel</button>
+              <button onClick={handleSaveFundraiseTracker} disabled={savingFt} className="text-[10px] text-emerald-700 font-semibold hover:text-emerald-900 disabled:opacity-50">
+                {savingFt ? "Saving…" : "Save"}
+              </button>
+            </div>
+          )}
+        </div>
+        {!editingFt ? (
           <div className="grid grid-cols-3 gap-3">
             <div>
               <p className="text-[10px] text-emerald-600 mb-0.5">Round</p>
-              <p className="text-xs font-semibold text-slate-800">{(ft.round_type as string) ?? company.stage ?? "—"}</p>
+              <p className="text-xs font-semibold text-slate-800">{company.raise_round ?? company.stage ?? "—"}</p>
             </div>
             <div>
-              <p className="text-[10px] text-emerald-600 mb-0.5">Target</p>
+              <p className="text-[10px] text-emerald-600 mb-0.5">Target amount</p>
               <p className="text-xs font-semibold text-slate-800">{company.current_raise_target ?? "—"}</p>
             </div>
             <div>
-              <p className="text-[10px] text-emerald-600 mb-0.5">Lead investor</p>
-              <p className="text-xs font-semibold text-slate-800">{(ft.lead_investor as string) || "—"}</p>
+              <p className="text-[10px] text-emerald-600 mb-0.5">Target close</p>
+              <p className="text-xs font-semibold text-slate-800">{company.raise_target_close ?? "—"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-emerald-600 mb-0.5">Status</p>
+              <p className="text-xs font-semibold text-slate-800">{(company.current_raise_status ?? "not_raising").replace(/_/g, " ")}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-emerald-600 mb-0.5">Investors approached</p>
+              <p className="text-xs font-semibold text-slate-800">{company.investors_approached ?? 0}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-emerald-600 mb-0.5">Term sheets</p>
+              <p className="text-xs font-semibold text-slate-800">{company.term_sheets ?? 0}</p>
             </div>
           </div>
-          {ft.amount_closed_usd !== undefined && ft.total_target_usd !== undefined && (
-            <div className="mt-2">
-              <div className="flex justify-between items-center mb-1">
-                <p className="text-[10px] text-emerald-600">Closed</p>
-                <p className="text-[10px] font-semibold text-slate-700">
-                  {fmtMoney(ft.amount_closed_usd as number)} / {fmtMoney(ft.total_target_usd as number)}
-                </p>
+        ) : (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[10px] text-emerald-600 mb-0.5">Round</p>
+                <select
+                  value={ftForm.raise_round}
+                  onChange={e => setFtForm(p => ({ ...p, raise_round: e.target.value }))}
+                  className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                >
+                  <option value="">—</option>
+                  <option value="Pre-seed">Pre-seed</option>
+                  <option value="Seed">Seed</option>
+                  <option value="Series A">Series A</option>
+                  <option value="Series B">Series B</option>
+                  <option value="Bridge">Bridge</option>
+                  <option value="SAFE">SAFE</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
-              <div className="w-full bg-emerald-200 rounded-full h-1.5">
-                <div
-                  className="bg-emerald-500 h-1.5 rounded-full"
-                  style={{ width: `${Math.min(100, ((ft.amount_closed_usd as number) / (ft.total_target_usd as number)) * 100)}%` }}
+              <div>
+                <p className="text-[10px] text-emerald-600 mb-0.5">Status</p>
+                <select
+                  value={ftForm.current_raise_status}
+                  onChange={e => setFtForm(p => ({ ...p, current_raise_status: e.target.value }))}
+                  className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                >
+                  <option value="not_raising">Not raising</option>
+                  <option value="preparing">Preparing</option>
+                  <option value="actively_raising">Actively raising</option>
+                  <option value="closing">Closing</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[10px] text-emerald-600 mb-0.5">Target amount</p>
+                <input
+                  type="text"
+                  value={ftForm.current_raise_target}
+                  onChange={e => setFtForm(p => ({ ...p, current_raise_target: e.target.value }))}
+                  placeholder="e.g. $5M"
+                  className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] text-emerald-600 mb-0.5">Target close</p>
+                <input
+                  type="text"
+                  value={ftForm.raise_target_close}
+                  onChange={e => setFtForm(p => ({ ...p, raise_target_close: e.target.value }))}
+                  placeholder="e.g. Q3 2026"
+                  className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                 />
               </div>
             </div>
-          )}
-          <p className="text-[10px] text-emerald-600 mt-1.5">
-            Status: <span className="font-semibold text-slate-700">{(company.current_raise_status ?? "").replace("_", " ")}</span>
-          </p>
-        </div>
-      )}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[10px] text-emerald-600 mb-0.5">Investors approached</p>
+                <input
+                  type="number"
+                  min={0}
+                  value={ftForm.investors_approached}
+                  onChange={e => setFtForm(p => ({ ...p, investors_approached: Number(e.target.value) }))}
+                  className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] text-emerald-600 mb-0.5">Term sheets</p>
+                <input
+                  type="number"
+                  min={0}
+                  value={ftForm.term_sheets}
+                  onChange={e => setFtForm(p => ({ ...p, term_sheets: Number(e.target.value) }))}
+                  className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* 2-col: Strategic initiatives + Recent interactions */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-2">Strategic initiatives</h3>
-          {initiatives.length === 0 ? (
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Strategic initiatives</h3>
+            <button onClick={() => setAddingInit(true)} className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-700">
+              <Plus size={10} /> Add
+            </button>
+          </div>
+          {addingInit && (
+            <div className="mb-2 p-2.5 bg-slate-50 rounded-lg space-y-1.5 border border-slate-200">
+              <input
+                autoFocus
+                placeholder="Initiative title"
+                value={addInitForm.title}
+                onChange={e => setAddInitForm(p => ({ ...p, title: e.target.value }))}
+                className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              <input
+                placeholder="Short description (optional)"
+                value={addInitForm.description}
+                onChange={e => setAddInitForm(p => ({ ...p, description: e.target.value }))}
+                className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              <div className="flex items-center gap-2">
+                <select
+                  value={addInitForm.status}
+                  onChange={e => setAddInitForm(p => ({ ...p, status: e.target.value }))}
+                  className="flex-1 text-xs border border-slate-200 rounded px-2 py-1.5"
+                >
+                  <option value="planned">Planned</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="complete">Complete</option>
+                  <option value="paused">Paused</option>
+                </select>
+                <button onClick={() => setAddingInit(false)} className="text-[11px] px-2 py-1 text-slate-500 border border-slate-200 rounded hover:bg-slate-50">Cancel</button>
+                <button onClick={handleAddInit} disabled={savingInitAdd || !addInitForm.title.trim()} className="text-[11px] px-2 py-1 bg-blue-600 text-white rounded disabled:opacity-50">
+                  {savingInitAdd ? "…" : "Add"}
+                </button>
+              </div>
+            </div>
+          )}
+          {initiatives.length === 0 && !addingInit ? (
             <p className="text-xs text-slate-400">No initiatives yet</p>
           ) : (
             <div className="space-y-1.5">
               {initiatives.slice(0, 5).map(init => (
-                <div key={init.id} className="flex items-start gap-2">
-                  <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${INITIATIVE_STATUS_DOT[init.status] ?? "bg-slate-300"}`} />
-                  <div className="min-w-0">
-                    <p className="text-[12px] font-medium text-slate-800 leading-tight">{init.title}</p>
-                    {init.description && (
-                      <p className="text-[11px] text-slate-500 line-clamp-1">{init.description}</p>
-                    )}
-                  </div>
+                <div key={init.id}>
+                  {editingInitId === init.id ? (
+                    <div className="p-2 bg-slate-50 rounded-lg space-y-1.5 border border-slate-200">
+                      <input
+                        value={editInitForm.title}
+                        onChange={e => setEditInitForm(p => ({ ...p, title: e.target.value }))}
+                        className="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                      <input
+                        value={editInitForm.description}
+                        onChange={e => setEditInitForm(p => ({ ...p, description: e.target.value }))}
+                        placeholder="Description"
+                        className="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={editInitForm.status}
+                          onChange={e => setEditInitForm(p => ({ ...p, status: e.target.value }))}
+                          className="flex-1 text-xs border border-slate-200 rounded px-2 py-1"
+                        >
+                          <option value="planned">Planned</option>
+                          <option value="in_progress">In progress</option>
+                          <option value="complete">Complete</option>
+                          <option value="paused">Paused</option>
+                        </select>
+                        <button onClick={() => setEditingInitId(null)} className="text-[11px] px-2 py-1 text-slate-500 border border-slate-200 rounded hover:bg-slate-50">Cancel</button>
+                        <button onClick={handleSaveInitEdit} disabled={savingInitEdit} className="text-[11px] px-2 py-1 bg-blue-600 text-white rounded disabled:opacity-50">
+                          {savingInitEdit ? "…" : "Save"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2 group">
+                      <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${INITIATIVE_STATUS_DOT[init.status] ?? "bg-slate-300"}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] font-medium text-slate-800 leading-tight">{init.title}</p>
+                        {init.description && (
+                          <p className="text-[11px] text-slate-500 line-clamp-1">{init.description}</p>
+                        )}
+                      </div>
+                      <div className="flex-shrink-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => handleStartEditInit(init)} className="text-slate-400 hover:text-slate-600">
+                          <Pencil size={10} />
+                        </button>
+                        <button onClick={() => handleDeleteInit(init.id)} className="text-red-300 hover:text-red-500">
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -369,7 +627,10 @@ export function PortfolioOverviewTab({
         </div>
 
         <div>
-          <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-2">Recent interactions</h3>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Interaction timeline</h3>
+            <a href={`/crm/pipeline?company=${company.id}`} className="text-[10px] text-blue-500 hover:text-blue-700">View full timeline →</a>
+          </div>
           {interactions.length === 0 ? (
             <p className="text-xs text-slate-400">No interactions yet</p>
           ) : (
