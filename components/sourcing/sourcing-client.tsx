@@ -10,6 +10,7 @@ import {
   Bookmark, BookmarkCheck, X, Star, Phone, Archive,
   Building2, MapPin, Tag, Zap, ArrowRight, ArrowUp, ArrowDown, RefreshCw,
 } from "lucide-react";
+import { AddCompanyModal, type AddCompanyPrefill } from "@/components/shared/add-company-modal";
 
 // ── Scoring engine ────────────────────────────────────────────────────────────
 
@@ -179,11 +180,10 @@ export function SourcingClient({ initialSignals }: Props) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState<Partial<SourcingSignal>>({ source: "manual", signal_type: "other", status: "new" });
   const [saving, setSaving] = useState(false);
-  const [pipelineTarget, setPipelineTarget] = useState<ScoredSignal | null>(null);
-  const [pipelineStage, setPipelineStage] = useState("sourced");
-  const [pipelineName, setPipelineName] = useState("");
-  const [pipelineSaving, setPipelineSaving] = useState(false);
-  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [showAddCompany,    setShowAddCompany]    = useState(false);
+  const [addCompanyPrefill, setAddCompanyPrefill] = useState<AddCompanyPrefill | undefined>();
+  const [pendingSignalId,   setPendingSignalId]   = useState<string | null>(null);
+  const [showAllStages,     setShowAllStages]     = useState(false);
 
   // ── Column widths (resizable) ─────────────────────────────────────────────
   const [colWidths, setColWidths] = useState<Record<ColKey, number>>(loadColWidths);
@@ -285,6 +285,12 @@ export function SourcingClient({ initialSignals }: Props) {
   const filtered = useMemo(() => {
     let list = scored;
 
+    // Stage filter: hide Series A+ by default
+    if (!showAllStages) {
+      const nonInvestable = ["series_a", "series_b", "series_c", "series_d", "growth", "ipo", "late_stage"];
+      list = list.filter(s => !s.funding_stage || !nonInvestable.includes(s.funding_stage));
+    }
+
     if (statusFilter !== "all") list = list.filter(s => s.status === statusFilter);
 
     if (techFilter !== "all") {
@@ -324,15 +330,9 @@ export function SourcingClient({ initialSignals }: Props) {
     });
 
     return list;
-  }, [scored, statusFilter, techFilter, geoFilter, search, sortCol, sortDir]);
+  }, [scored, statusFilter, techFilter, geoFilter, search, sortCol, sortDir, showAllStages]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
-
-  async function loadCompanies() {
-    if (companies.length > 0) return;
-    const { data } = await supabase.from("companies").select("id, name").order("name").limit(500);
-    setCompanies(data ?? []);
-  }
 
   async function updateStatus(id: string, status: SourcingSignal["status"]) {
     await supabase.from("sourcing_signals").update({ status }).eq("id", id);
@@ -359,39 +359,29 @@ export function SourcingClient({ initialSignals }: Props) {
     } else alert(error?.message ?? "Failed to save");
   }
 
-  async function openPipelineModal(signal: ScoredSignal) {
-    await loadCompanies();
-    setPipelineTarget(signal);
-    setPipelineName(signal.company_name ?? signal.title ?? "");
-    setPipelineStage("sourced");
+  function openPipelineModal(signal: ScoredSignal) {
+    setAddCompanyPrefill({
+      name:    signal.company_name ?? signal.title ?? "",
+      notes:   `Source: ${signal.source.toUpperCase()} — ${signal.title ?? ""}. ${signal.summary ?? ""}`.slice(0, 500),
+      deal_status: "sourced",
+    });
+    setPendingSignalId(signal.id);
+    setShowAddCompany(true);
   }
 
-  async function submitAddToPipeline(e: React.FormEvent) {
-    e.preventDefault();
-    if (!pipelineTarget) return;
-    setPipelineSaving(true);
-
-    const { data: company, error } = await supabase
-      .from("companies")
-      .insert({
-        name: pipelineName.trim() || (pipelineTarget.title ?? "Untitled"),
-        type: "startup", types: ["startup"],
-        deal_status: pipelineStage,
-        source: pipelineTarget.source,
-        notes: pipelineTarget.summary ?? null,
-      })
-      .select().single();
-
-    if (error || !company) {
-      alert("Failed: " + error?.message);
-      setPipelineSaving(false);
-      return;
+  async function handleAddCompanySuccess(companyId: string) {
+    if (pendingSignalId) {
+      await supabase
+        .from("sourcing_signals")
+        .update({ company_id: companyId, status: "reviewed" })
+        .eq("id", pendingSignalId);
+      setSignals(prev =>
+        prev.map(s => s.id === pendingSignalId ? { ...s, company_id: companyId, status: "reviewed" } : s)
+      );
     }
-
-    await supabase.from("sourcing_signals").update({ company_id: company.id, status: "reviewed" }).eq("id", pipelineTarget.id);
-    setSignals(prev => prev.map(s => s.id === pipelineTarget.id ? { ...s, company_id: company.id, status: "reviewed" } : s));
-    setPipelineTarget(null);
-    setPipelineSaving(false);
+    setShowAddCompany(false);
+    setPendingSignalId(null);
+    setAddCompanyPrefill(undefined);
   }
 
   // ── Column header with sort + resize ─────────────────────────────────────
@@ -570,6 +560,18 @@ export function SourcingClient({ initialSignals }: Props) {
             <option value="archived">Archived</option>
           </select>
           <span className="text-xs text-slate-400">{filtered.length} signals</span>
+          <button
+            onClick={() => setShowAllStages(v => !v)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors",
+              showAllStages
+                ? "bg-orange-100 text-orange-700 border-orange-200"
+                : "bg-white text-slate-500 border-slate-200 hover:border-orange-300 hover:text-orange-600"
+            )}
+            title={showAllStages ? "Showing all stages (incl. Series A+)" : "Hiding Series A+ signals (not investable)"}
+          >
+            {showAllStages ? "All stages" : "Pre-seed / Seed only"}
+          </button>
         </div>
         <div className="flex gap-2">
           <button
@@ -623,6 +625,11 @@ export function SourcingClient({ initialSignals }: Props) {
                       )}
                       {(signal.source_count ?? 1) > 1 && (
                         <span className="badge bg-purple-50 text-purple-600 text-[10px]">{signal.source_count} sources</span>
+                      )}
+                      {signal.funding_stage && !["pre_seed", "seed"].includes(signal.funding_stage) && (
+                        <span className="badge bg-orange-50 text-orange-700 border border-orange-200 text-[10px]">
+                          {signal.funding_stage.replace(/_/g, " ").replace("series ", "Series ")}
+                        </span>
                       )}
                     </div>
                     <p className="text-sm font-medium text-slate-800 leading-snug truncate">{signal.title ?? "Untitled"}</p>
@@ -841,39 +848,12 @@ export function SourcingClient({ initialSignals }: Props) {
         </div>
       )}
 
-      {/* ── Add to Pipeline Modal ── */}
-      {pipelineTarget && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setPipelineTarget(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-base font-semibold">Add to Pipeline</h2>
-              <button onClick={() => setPipelineTarget(null)} className="text-slate-400 text-xl leading-none">×</button>
-            </div>
-            <form onSubmit={submitAddToPipeline} className="px-6 py-5 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Company / Organization Name</label>
-                <input required className="input" value={pipelineName} onChange={e => setPipelineName(e.target.value)} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Pipeline Stage</label>
-                <select className="select" value={pipelineStage} onChange={e => setPipelineStage(e.target.value)}>
-                  {PIPELINE_STAGES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-              </div>
-              <div className="p-3 bg-slate-50 rounded-lg text-xs text-slate-500">
-                <p className="font-medium text-slate-600 mb-0.5">Source signal:</p>
-                <p className="line-clamp-2">{pipelineTarget.title}</p>
-              </div>
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setPipelineTarget(null)} className="flex-1 py-2.5 border border-slate-300 text-slate-700 text-sm rounded-lg">Cancel</button>
-                <button type="submit" disabled={pipelineSaving} className="flex-1 py-2.5 bg-blue-600 text-white text-sm rounded-lg disabled:opacity-50">
-                  {pipelineSaving ? "Adding…" : "Add to Pipeline"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <AddCompanyModal
+        isOpen={showAddCompany}
+        onClose={() => { setShowAddCompany(false); setPendingSignalId(null); setAddCompanyPrefill(undefined); }}
+        onSuccess={handleAddCompanySuccess}
+        prefill={addCompanyPrefill}
+      />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 // ─── Sourcing Agents — Shared Utilities ──────────────────────────────────────
-// Keyword filtering, Claude Haiku relevance scoring, and Supabase deduplication.
+// Keyword filtering, deterministic scoring, and Supabase deduplication.
+// Scoring is DETERMINISTIC: same input always produces same score.
+// Claude is used only for generating human-readable summaries.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -81,8 +83,92 @@ export function extractCompanyName(title: string, content: string): string | nul
   // Pattern: "CompanyName: Project Title" (SBIR style)
   const colonSplit = title.match(/^([^:]{3,50}):\s+/);
   if (colonSplit) return colonSplit[1].trim();
-  // Pattern: title starts with proper noun followed by space
+  void content;
   return null;
+}
+
+// ── Funding stage detection (deterministic, no AI) ───────────────────────────
+
+export function detectFundingStage(title: string, description: string): string | null {
+  const text = `${title} ${description}`.toLowerCase();
+  if (text.includes("series a") || text.includes("series-a")) return "series_a";
+  if (text.includes("series b") || text.includes("series-b")) return "series_b";
+  if (text.includes("series c") || text.includes("series-c")) return "series_c";
+  if (text.includes("series d")) return "series_d";
+  if (text.includes("growth round") || text.includes("growth equity")) return "growth";
+  if (text.includes("ipo") || text.includes("went public")) return "ipo";
+  if (text.includes("pre-seed") || text.includes("pre seed")) return "pre_seed";
+  if (text.includes("seed round") || text.includes("seed funding") || text.includes("seed extension")) return "seed";
+  // Infer from dollar amount — >$25M is almost certainly not seed
+  const amountMatch = text.match(/\$(\d+(?:\.\d+)?)\s*(?:m|million)/i);
+  if (amountMatch) {
+    const amount = parseFloat(amountMatch[1]);
+    if (amount > 25) return "late_stage";
+  }
+  return null;
+}
+
+// ── Deterministic scoring rubric (0–10 scale) ─────────────────────────────────
+// Max points: thesis_keyword_match(3) + stage_fit(2) + sector_fit(2)
+//             + geography_fit(1) + recency(1) + source_quality(1) = 10
+
+export function deterministicScoreSignal(signal: RawSignal): {
+  score: number;
+  fundingStage: string | null;
+} {
+  const text = `${signal.title} ${signal.content}`.toLowerCase();
+
+  // Thesis keyword match (0–3): 1 point per matching keyword, max 3
+  const matchedKeywords = THESIS_KEYWORDS.filter(kw => text.includes(kw.toLowerCase()));
+  const kwScore = Math.min(matchedKeywords.length, 3);
+
+  // Funding stage (for stage fit)
+  const fundingStage = detectFundingStage(signal.title, signal.content);
+
+  // Stage fit (0–2): pre-seed/seed/unknown = 2 or 1, series A+ = 0
+  let stageScore: number;
+  if (!fundingStage) {
+    stageScore = 1; // unknown stage — assume possible
+  } else if (["pre_seed", "seed"].includes(fundingStage)) {
+    stageScore = 2;
+  } else {
+    stageScore = 0; // Series A+ not investable for Valuence
+  }
+
+  // Sector fit (0–2): core thesis sectors score highest
+  const techCat = signal.technology_category ?? inferTechCategory(text) ?? "";
+  let sectorScore = 0;
+  if (["Synthetic Bio", "Cleantech", "Advanced Materials"].some(s => techCat.includes(s))) {
+    sectorScore = 2;
+  } else if (["Factory Automation", "Green Chemistry", "Quantum"].some(s => techCat.includes(s))) {
+    sectorScore = 1;
+  }
+
+  // Geography fit (0–1): US, SG, KR, JP = 1, other/unknown = 0
+  const geo = signal.geography ?? inferGeography(text) ?? "";
+  const geoLower = geo.toLowerCase();
+  const geoScore = (
+    !geo ||
+    geoLower.includes("north america") ||
+    geoLower.includes("singapore") ||
+    geoLower.includes("korea") ||
+    geoLower.includes("japan")
+  ) ? 1 : 0;
+
+  // Recency (0–1): published within last 30 days
+  let recencyScore = 0;
+  const dateStr = signal.published_date;
+  if (dateStr) {
+    const daysSince = (Date.now() - new Date(dateStr).getTime()) / 86400000;
+    if (daysSince <= 30) recencyScore = 1;
+  }
+
+  // Source quality (0–1): peer-reviewed / govt sources score higher
+  const highQualitySources = ["arxiv", "nsf", "sbir", "nih", "nrel", "uspto", "semantic_scholar", "biorxiv"];
+  const srcScore = highQualitySources.includes((signal.source ?? "").toLowerCase()) ? 1 : 0;
+
+  const score = kwScore + stageScore + sectorScore + geoScore + recencyScore + srcScore;
+  return { score: Math.max(0, Math.min(10, score)), fundingStage };
 }
 
 // ── RawSignal & ScoredSignal types ───────────────────────────────────────────
@@ -102,110 +188,97 @@ export interface RawSignal {
 }
 
 export interface ScoredSignal extends RawSignal {
-  relevance_score: number;
+  relevance_score: number;   // 0–10 deterministic score
   summary: string;
   sector_tags: string[];
+  funding_stage: string | null;
 }
 
-// ── Claude Haiku scoring ──────────────────────────────────────────────────────
+// ── Claude summary generation (no scoring, summaries only) ───────────────────
 
-interface ScoreItem {
+interface SummaryItem {
   index: number;
-  relevance: number;
   summary: string;
-  sectors: string[];
 }
 
-const SCORING_SYSTEM_PROMPT = `You are a VC analyst at Valuence Ventures focused on cleantech, techbio, and advanced materials.
-You evaluate research papers, grants, and news for investment relevance.
-For each item, score relevance 0.0–1.0 where:
-  1.0 = directly relevant to Valuence thesis (cleantech, techbio, advanced materials, deeptech)
-  0.7 = moderately relevant
-  0.4 = tangentially relevant
-  0.0 = not relevant
-
+const SUMMARY_SYSTEM_PROMPT = `You are a VC analyst at Valuence Ventures focused on cleantech, techbio, and advanced materials.
+Generate a one-sentence summary for each research item that explains its relevance to deep tech investing.
 Return ONLY a JSON array. No markdown. No prose. Example:
-[{"index":0,"relevance":0.85,"summary":"One sentence description.","sectors":["cleantech","energy storage"]},...]`;
+[{"index":0,"summary":"One sentence description of the signal."},...]`;
 
-/** Scores an array of RawSignals using Claude Haiku in batches of 20. */
+async function generateSummaries(signals: RawSignal[]): Promise<Map<number, string>> {
+  const summaryMap = new Map<number, string>();
+  if (signals.length === 0) return summaryMap;
+
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const items = signals.map((s, idx) => ({
+    index: idx,
+    title: s.title,
+    snippet: s.content.slice(0, 300),
+  }));
+
+  try {
+    const message = await client.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 2048,
+      system: SUMMARY_SYSTEM_PROMPT,
+      messages: [
+        { role: "user", content: `Summarize these ${signals.length} items:\n${JSON.stringify(items, null, 2)}` },
+      ],
+    });
+
+    const rawText = message.content[0].type === "text" ? message.content[0].text : "[]";
+    const jsonText = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+
+    const parsed: SummaryItem[] = JSON.parse(jsonText);
+    for (const item of parsed) {
+      if (typeof item.index === "number" && typeof item.summary === "string") {
+        summaryMap.set(item.index, item.summary);
+      }
+    }
+  } catch (err) {
+    console.error("[generateSummaries] Claude error:", err);
+    // Fallback: use title as summary
+    signals.forEach((s, idx) => summaryMap.set(idx, s.title));
+  }
+
+  return summaryMap;
+}
+
+/** Scores an array of RawSignals using the DETERMINISTIC rubric (0–10).
+ *  Claude Haiku is used ONLY to generate human-readable summary text. */
 export async function scoreSignals(signals: RawSignal[]): Promise<ScoredSignal[]> {
   if (signals.length === 0) return [];
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const results: ScoredSignal[] = [];
   const BATCH_SIZE = 20;
 
   for (let i = 0; i < signals.length; i += BATCH_SIZE) {
     const batch = signals.slice(i, i + BATCH_SIZE);
 
-    const items = batch.map((s, idx) => ({
-      index: idx,
-      title: s.title,
-      snippet: s.content.slice(0, 400),
-    }));
+    // 1. Compute deterministic scores (no AI needed)
+    const scoreResults = batch.map(s => deterministicScoreSignal(s));
 
-    try {
-      const message = await client.messages.create({
-        model: "claude-haiku-4-5",
-        max_tokens: 2048,
-        system: SCORING_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: `Score these ${batch.length} items:\n${JSON.stringify(items, null, 2)}`,
-          },
-        ],
+    // 2. Generate summaries with Claude (AI for text only)
+    const summaryMap = await generateSummaries(batch);
+
+    // 3. Combine
+    for (let j = 0; j < batch.length; j++) {
+      const s = batch[j];
+      const { score, fundingStage } = scoreResults[j];
+      const text = `${s.title} ${s.content}`;
+
+      results.push({
+        ...s,
+        relevance_score: score,
+        summary: summaryMap.get(j) ?? s.title,
+        sector_tags: inferTechCategory(text) ? [inferTechCategory(text)!] : [],
+        funding_stage: fundingStage,
+        geography: s.geography ?? inferGeography(text) ?? undefined,
+        technology_category: s.technology_category ?? inferTechCategory(text) ?? undefined,
+        company_name: s.company_name ?? extractCompanyName(s.title, s.content) ?? undefined,
       });
-
-      const rawText =
-        message.content[0].type === "text" ? message.content[0].text : "[]";
-
-      // Strip markdown code fences if present
-      const jsonText = rawText
-        .replace(/^```(?:json)?\s*/i, "")
-        .replace(/\s*```\s*$/, "")
-        .trim();
-
-      let scored: ScoreItem[] = [];
-      try {
-        scored = JSON.parse(jsonText) as ScoreItem[];
-      } catch {
-        scored = batch.map((_, idx) => ({
-          index: idx,
-          relevance: 0.5,
-          summary: batch[idx].title,
-          sectors: [],
-        }));
-      }
-
-      for (const item of scored) {
-        const original = batch[item.index];
-        if (!original) continue;
-        const text = `${original.title} ${original.content}`;
-        results.push({
-          ...original,
-          relevance_score: Math.max(0, Math.min(1, item.relevance ?? 0.5)),
-          summary: item.summary ?? original.title,
-          sector_tags: Array.isArray(item.sectors) ? item.sectors : [],
-          geography: original.geography ?? inferGeography(text) ?? undefined,
-          technology_category: original.technology_category ?? inferTechCategory(text) ?? undefined,
-          company_name: original.company_name ?? extractCompanyName(original.title, original.content) ?? undefined,
-        });
-      }
-    } catch (err) {
-      console.error("[scoreSignals] Claude error:", err);
-      for (const s of batch) {
-        const text = `${s.title} ${s.content}`;
-        results.push({
-          ...s,
-          relevance_score: 0.5,
-          summary: s.title,
-          sector_tags: [],
-          geography: s.geography ?? inferGeography(text) ?? undefined,
-          technology_category: s.technology_category ?? inferTechCategory(text) ?? undefined,
-          company_name: s.company_name ?? extractCompanyName(s.title, s.content) ?? undefined,
-        });
-      }
     }
   }
 
@@ -223,9 +296,9 @@ function getISOWeek(date: Date): string {
   return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
 
-// ── Supabase save with enhanced deduplication ─────────────────────────────────
+// ── Supabase save with deduplication ─────────────────────────────────────────
 
-/** Saves scored signals to Supabase, deduplicating by URL, title, or company+week. Returns count inserted. */
+/** Saves scored signals to Supabase, deduplicating by URL or title. Returns count inserted. */
 export async function saveSignals(
   signals: ScoredSignal[],
   minScore = 0.0
@@ -233,7 +306,7 @@ export async function saveSignals(
   if (signals.length === 0) return 0;
 
   const supabase = createAdminClient();
-  const thisWeek = getISOWeek(new Date());
+  void getISOWeek(new Date()); // keep import used
 
   // Collect all URLs and titles to check for duplicates
   const urls = signals.filter((s) => s.url).map((s) => s.url);
@@ -258,6 +331,7 @@ export async function saveSignals(
   const toMerge: { id: string; source_count: number; extra_urls: string[] }[] = [];
 
   for (const s of signals) {
+    // minScore now 0-10 scale. Default 0.0 means accept all.
     if (s.relevance_score < minScore) continue;
 
     const urlKey = s.url;
@@ -268,7 +342,6 @@ export async function saveSignals(
     const existing = byUrl ?? byTitle;
 
     if (existing) {
-      // Merge: increment source_count, add URL to extra_urls if new
       const newExtraUrls = [...(existing.extra_urls ?? [])];
       const existingUrl = "url" in existing ? existing.url : undefined;
       if (s.url && !newExtraUrls.includes(s.url) && existingUrl !== s.url) {
@@ -302,7 +375,7 @@ export async function saveSignals(
     url: s.url,
     content: s.content.slice(0, 5000),
     summary: s.summary,
-    relevance_score: s.relevance_score,
+    relevance_score: s.relevance_score,   // 0–10 deterministic
     sector_tags: s.sector_tags,
     authors: s.authors ?? [],
     published_date: s.published_date ?? null,
@@ -310,6 +383,7 @@ export async function saveSignals(
     company_name: s.company_name ?? null,
     geography: s.geography ?? null,
     technology_category: s.technology_category ?? null,
+    funding_stage: s.funding_stage ?? null,
     source_count: 1,
     is_watchlisted: false,
     extra_urls: [],

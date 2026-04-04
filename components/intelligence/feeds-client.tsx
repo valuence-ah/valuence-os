@@ -5,10 +5,11 @@
 // Right: AI daily brief (380px) — only relevance_score >= 2
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { X, Loader2, Rss } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { FeedArticle, FeedSource } from "@/lib/types";
+import { AddCompanyModal, type AddCompanyPrefill } from "@/components/shared/add-company-modal";
+import { AddFundModal, type AddFundPrefill } from "@/components/shared/add-fund-modal";
 import { FeedsThesisPulse }  from "./feeds-thesis-pulse";
 import { FeedsSourcePanel }  from "./feeds-source-panel";
 import { FeedsNewsColumn }   from "./feeds-news-column";
@@ -48,8 +49,6 @@ function buildBriefSummary(articles: FeedArticle[]): string {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function FeedsClient() {
-  const router = useRouter();
-
   // Data
   const [allArticles,    setAllArticles]    = useState<FeedArticle[]>([]);
   const [briefArticles,  setBriefArticles]  = useState<FeedArticle[]>([]);
@@ -71,6 +70,15 @@ export function FeedsClient() {
   const [addForm,         setAddForm]         = useState({ name: "", website_url: "", feed_url: "", keywords: "" });
   const [adding,          setAdding]          = useState(false);
   const [detecting,       setDetecting]       = useState(false);
+
+  // Add Company modal state
+  const [showAddCompany,    setShowAddCompany]    = useState(false);
+  const [addCompanyPrefill, setAddCompanyPrefill] = useState<AddCompanyPrefill | undefined>();
+  const [pendingArticle,    setPendingArticle]    = useState<FeedArticle | null>(null);
+
+  // Add Fund modal state
+  const [showAddFund,    setShowAddFund]    = useState(false);
+  const [addFundPrefill, setAddFundPrefill] = useState<AddFundPrefill | undefined>();
 
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -217,92 +225,49 @@ export function FeedsClient() {
     }
   }
 
-  // ── Add to Pipeline ──────────────────────────────────────────────────────────
+  // ── Add to Pipeline (opens modal with prefill) ───────────────────────────────
 
-  async function handleAddToPipeline(article: FeedArticle) {
-    const companyName = article.mentioned_companies?.[0];
-    if (!companyName) {
-      alert("No company name detected. Add manually from the Pipeline page.");
-      return;
-    }
-    const supabase = createClient();
-    const { data: existing } = await supabase
-      .from("companies")
-      .select("id")
-      .ilike("name", `%${companyName}%`)
-      .limit(1)
-      .maybeSingle();
-
-    if (existing) { router.push("/crm/pipeline"); return; }
-
-    const { data: created, error } = await supabase
-      .from("companies")
-      .insert({
-        name:        companyName,
-        type:        "startup",
-        types:       ["startup"],
-        deal_status: "identified_introduced",
-        sectors:     article.sectors?.length ? article.sectors : null,
-        notes:       `Source: ${sourceMap[article.source_id ?? ""] ?? "feed"} — ${article.title}`,
-      })
-      .select("id")
-      .single();
-
-    if (error || !created) {
-      console.error("[feeds] Create company error:", error);
-      alert("Could not create company. Add manually from the Pipeline page.");
-      return;
-    }
-
-    await supabase
-      .from("feed_articles")
-      .update({ matched_company_ids: [created.id] })
-      .eq("id", article.id);
-
-    setAllArticles(prev =>
-      prev.map(a => a.id === article.id
-        ? { ...a, matched_company_ids: [created.id] }
-        : a
-      )
-    );
-    router.push("/crm/pipeline");
+  function handleAddToPipeline(article: FeedArticle) {
+    const companyName = article.mentioned_companies?.[0] ?? "";
+    const sourceName  = sourceMap[article.source_id ?? ""] ?? "feed";
+    setAddCompanyPrefill({
+      name:        companyName,
+      deal_status: "sourced",
+      notes:       `Source: ${sourceName} — ${article.title ?? ""}`.slice(0, 400),
+    });
+    setPendingArticle(article);
+    setShowAddCompany(true);
   }
 
-  // ── Add to Funds CRM ─────────────────────────────────────────────────────────
-
-  async function handleAddToFunds(article: FeedArticle) {
-    const fundName = article.mentioned_investors?.[0] ?? article.mentioned_companies?.[0];
-    if (!fundName) {
-      alert("No fund name detected. Add manually from the Funds page.");
-      return;
+  async function handleAddCompanySuccess(companyId: string) {
+    if (pendingArticle) {
+      const supabase = createClient();
+      await supabase
+        .from("feed_articles")
+        .update({ matched_company_ids: [companyId] })
+        .eq("id", pendingArticle.id);
+      setAllArticles(prev =>
+        prev.map(a => a.id === pendingArticle!.id
+          ? { ...a, matched_company_ids: [companyId] }
+          : a
+        )
+      );
     }
-    const supabase = createClient();
-    const { data: existing } = await supabase
-      .from("companies")
-      .select("id")
-      .ilike("name", `%${fundName}%`)
-      .in("type", ["investor", "lp", "limited partner"])
-      .limit(1)
-      .maybeSingle();
+    setShowAddCompany(false);
+    setPendingArticle(null);
+    setAddCompanyPrefill(undefined);
+  }
 
-    if (existing) { router.push("/crm/funds"); return; }
+  // ── Add to Funds CRM (opens modal with prefill) ───────────────────────────────
 
-    const { data: created, error } = await supabase
-      .from("companies")
-      .insert({
-        name:  fundName,
-        type:  "investor",
-        types: ["investor"],
-        notes: `Discovered via news feed: ${article.title}`,
-      })
-      .select("id")
-      .single();
-
-    if (error || !created) {
-      alert(`Could not create fund "${fundName}". Add manually from the Funds page.`);
-      return;
-    }
-    router.push("/crm/funds");
+  function handleAddToFunds(article: FeedArticle) {
+    const fundName   = article.mentioned_investors?.[0] ?? article.mentioned_companies?.[0] ?? "";
+    const sourceName = sourceMap[article.source_id ?? ""] ?? "feed";
+    setAddFundPrefill({
+      name:  fundName,
+      notes: `Discovered via ${sourceName}: ${article.title ?? ""}`.slice(0, 400),
+    });
+    setShowAddFund(true);
   }
 
   // ── Add source ───────────────────────────────────────────────────────────────
@@ -389,6 +354,21 @@ export function FeedsClient() {
           onAddToFunds={handleAddToFunds}
         />
       </div>
+
+      {/* Add Company Modal */}
+      <AddCompanyModal
+        isOpen={showAddCompany}
+        onClose={() => { setShowAddCompany(false); setPendingArticle(null); setAddCompanyPrefill(undefined); }}
+        onSuccess={handleAddCompanySuccess}
+        prefill={addCompanyPrefill}
+      />
+
+      {/* Add Fund Modal */}
+      <AddFundModal
+        isOpen={showAddFund}
+        onClose={() => { setShowAddFund(false); setAddFundPrefill(undefined); }}
+        prefill={addFundPrefill}
+      />
 
       {/* Add Feed Modal */}
       {showAddModal && (

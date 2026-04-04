@@ -325,6 +325,45 @@ export function SourcingConfigPanel() {
           No agent configurations found. Run the DB migration to initialize defaults.
         </div>
       )}
+
+      {/* Scoring rubric */}
+      <div className="mt-2 border border-slate-200 rounded-xl p-5 bg-white">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] mb-3">
+          Scoring criteria (0–10 scale · deterministic)
+        </p>
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-slate-200">
+              <th className="text-left pb-2 text-slate-500 font-medium">Criterion</th>
+              <th className="text-right pb-2 text-slate-500 font-medium pr-6">Max pts</th>
+              <th className="text-left pb-2 pl-4 text-slate-500 font-medium">How scored</th>
+            </tr>
+          </thead>
+          <tbody className="text-slate-700">
+            {[
+              { label: "Thesis keyword match", max: 3, how: "1 pt per matching thesis keyword (max 3)" },
+              { label: "Stage fit",            max: 2, how: "Pre-seed / Seed = 2 · Unknown = 1 · Series A+ = 0" },
+              { label: "Sector fit",           max: 2, how: "Cleantech / Biotech / Adv. Materials = 2 · Adjacent = 1 · Other = 0" },
+              { label: "Geography fit",        max: 1, how: "US / Singapore / Korea / Japan = 1 · Other = 0" },
+              { label: "Recency",              max: 1, how: "Published within 30 days = 1" },
+              { label: "Source quality",       max: 1, how: "Peer-reviewed / govt (arXiv, NSF, SBIR, NIH…) = 1 · News = 0" },
+            ].map(row => (
+              <tr key={row.label} className="border-b border-slate-100 last:border-0">
+                <td className="py-2 font-medium">{row.label}</td>
+                <td className="py-2 text-right pr-6 font-bold text-slate-800">{row.max}</td>
+                <td className="py-2 pl-4 text-slate-400">{row.how}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-slate-200">
+              <td className="pt-2 font-semibold text-slate-800">Total</td>
+              <td className="pt-2 text-right pr-6 font-bold text-slate-800">10</td>
+              <td className="pt-2 pl-4 text-slate-400">≥ 7 = High · 4–6 = Medium · &lt; 4 = Low</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }

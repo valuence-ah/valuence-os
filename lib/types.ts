@@ -236,6 +236,8 @@ export interface SourcingSignal {
   source_count: number;
   is_watchlisted: boolean;
   extra_urls: string[] | null;
+  // v3 stage fields
+  funding_stage: string | null;
 }
 
 export interface LpRelationship {
