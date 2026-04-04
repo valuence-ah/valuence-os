@@ -102,6 +102,40 @@ export function PortfolioRelationshipsTab({ companyId, interactions, contacts, v
 
   return (
     <div className="p-5 space-y-5 overflow-y-auto h-full">
+      {/* Key contacts — now first */}
+      <div>
+        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-3">Key contacts</h3>
+        {contacts.length === 0 ? (
+          <p className="text-xs text-slate-400">No contacts linked to this company.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {contacts.map(c => (
+              <div key={c.id} className="bg-slate-50 rounded-lg p-3">
+                <p className="text-[13px] font-semibold text-slate-800">{c.first_name} {c.last_name}</p>
+                {c.title && <p className="text-[11px] text-slate-500 mt-0.5">{c.title}</p>}
+                <div className="flex flex-col gap-0.5 mt-1.5">
+                  {c.email && (
+                    <div className="flex items-center gap-1">
+                      <Mail size={10} className="text-slate-400" />
+                      <a href={`mailto:${c.email}`} className="text-[11px] text-blue-600 hover:underline truncate">{c.email}</a>
+                    </div>
+                  )}
+                  {c.phone && (
+                    <div className="flex items-center gap-1">
+                      <Phone size={10} className="text-slate-400" />
+                      <span className="text-[11px] text-slate-600">{c.phone}</span>
+                    </div>
+                  )}
+                </div>
+                {c.last_contact_date && (
+                  <p className="text-[10px] text-slate-400 mt-1">Last contact: {timeAgo(c.last_contact_date)}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Interaction timeline */}
       <div>
         <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-3">Interaction timeline</h3>
@@ -139,40 +173,6 @@ export function PortfolioRelationshipsTab({ companyId, interactions, contacts, v
                     )}
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Key contacts */}
-      <div>
-        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-3">Key contacts</h3>
-        {contacts.length === 0 ? (
-          <p className="text-xs text-slate-400">No contacts linked to this company.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {contacts.map(c => (
-              <div key={c.id} className="bg-slate-50 rounded-lg p-3">
-                <p className="text-[13px] font-semibold text-slate-800">{c.first_name} {c.last_name}</p>
-                {c.title && <p className="text-[11px] text-slate-500 mt-0.5">{c.title}</p>}
-                <div className="flex flex-col gap-0.5 mt-1.5">
-                  {c.email && (
-                    <div className="flex items-center gap-1">
-                      <Mail size={10} className="text-slate-400" />
-                      <a href={`mailto:${c.email}`} className="text-[11px] text-blue-600 hover:underline truncate">{c.email}</a>
-                    </div>
-                  )}
-                  {c.phone && (
-                    <div className="flex items-center gap-1">
-                      <Phone size={10} className="text-slate-400" />
-                      <span className="text-[11px] text-slate-600">{c.phone}</span>
-                    </div>
-                  )}
-                </div>
-                {c.last_contact_date && (
-                  <p className="text-[10px] text-slate-400 mt-1">Last contact: {timeAgo(c.last_contact_date)}</p>
-                )}
               </div>
             ))}
           </div>

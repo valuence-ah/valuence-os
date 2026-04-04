@@ -107,6 +107,9 @@ export function PortfolioOverviewTab({
   const [msForm, setMsForm] = useState({ title: "", status: "upcoming" as PortfolioMilestone["status"], target_date: "" });
   const [savingMs, setSavingMs] = useState(false);
   const [updatingMsId, setUpdatingMsId] = useState<string | null>(null);
+  const [editingMsId, setEditingMsId] = useState<string | null>(null);
+  const [editMsForm, setEditMsForm] = useState({ title: "", status: "upcoming" as PortfolioMilestone["status"], target_date: "" });
+  const [savingMsEdit, setSavingMsEdit] = useState(false);
 
   // Risk flags state
   const [riskInput, setRiskInput] = useState("");
@@ -149,6 +152,32 @@ export function PortfolioOverviewTab({
     setMsForm({ title: "", status: "upcoming", target_date: "" });
     setAddingMilestone(false);
     setSavingMs(false);
+    onDetailRefresh();
+  }
+
+  function handleStartEditMs(ms: PortfolioMilestone) {
+    setEditingMsId(ms.id);
+    setEditMsForm({ title: ms.title, status: ms.status, target_date: ms.target_date ?? "" });
+  }
+
+  async function handleSaveEditMs() {
+    if (!editingMsId) return;
+    setSavingMsEdit(true);
+    const supabase = createClient();
+    await supabase.from("portfolio_milestones").update({
+      title: editMsForm.title,
+      status: editMsForm.status,
+      target_date: editMsForm.target_date || null,
+      updated_at: new Date().toISOString(),
+    }).eq("id", editingMsId);
+    setEditingMsId(null);
+    setSavingMsEdit(false);
+    onDetailRefresh();
+  }
+
+  async function handleDeleteMs(id: string) {
+    const supabase = createClient();
+    await supabase.from("portfolio_milestones").delete().eq("id", id);
     onDetailRefresh();
   }
 
@@ -333,25 +362,71 @@ export function PortfolioOverviewTab({
         ) : (
           <div className="space-y-1.5">
             {milestones.map(ms => (
-              <div key={ms.id} className="flex items-center gap-2.5 group">
-                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${MILESTONE_STATUS_DOT[ms.status] ?? "bg-slate-300"}`} />
-                <p className="text-[13px] text-slate-800 flex-1 min-w-0 truncate">{ms.title}</p>
-                {updatingMsId === ms.id ? (
-                  <Loader2 size={11} className="animate-spin text-slate-400 flex-shrink-0" />
+              <div key={ms.id}>
+                {editingMsId === ms.id ? (
+                  <div className="p-2.5 bg-slate-50 rounded-lg space-y-1.5 border border-slate-200">
+                    <input
+                      autoFocus
+                      value={editMsForm.title}
+                      onChange={e => setEditMsForm(p => ({ ...p, title: e.target.value }))}
+                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                    <div className="flex gap-2">
+                      <select
+                        value={editMsForm.status}
+                        onChange={e => setEditMsForm(p => ({ ...p, status: e.target.value as PortfolioMilestone["status"] }))}
+                        className="flex-1 text-xs border border-slate-200 rounded px-2 py-1.5"
+                      >
+                        <option value="upcoming">Upcoming</option>
+                        <option value="in_progress">In progress</option>
+                        <option value="done">Done</option>
+                        <option value="blocked">Blocked</option>
+                      </select>
+                      <input
+                        type="text"
+                        placeholder="Target date (e.g. Q3 2026)"
+                        value={editMsForm.target_date}
+                        onChange={e => setEditMsForm(p => ({ ...p, target_date: e.target.value }))}
+                        className="flex-1 text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditingMsId(null)} className="text-[11px] px-2.5 py-1 text-slate-500 border border-slate-200 rounded hover:bg-slate-50">Cancel</button>
+                      <button onClick={handleSaveEditMs} disabled={savingMsEdit || !editMsForm.title.trim()} className="text-[11px] px-2.5 py-1 bg-blue-600 text-white rounded disabled:opacity-50">
+                        {savingMsEdit ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                  </div>
                 ) : (
-                  <select
-                    value={ms.status}
-                    onChange={e => handleMilestoneStatusChange(ms.id, e.target.value as PortfolioMilestone["status"])}
-                    className={`text-[10px] font-medium border-none bg-transparent cursor-pointer flex-shrink-0 focus:outline-none ${MILESTONE_STATUS_COLOR[ms.status] ?? "text-slate-400"}`}
-                  >
-                    <option value="upcoming">Upcoming</option>
-                    <option value="in_progress">In progress</option>
-                    <option value="done">Done</option>
-                    <option value="blocked">Blocked</option>
-                  </select>
-                )}
-                {ms.target_date && (
-                  <span className="text-[10px] text-slate-400 flex-shrink-0">{ms.target_date}</span>
+                  <div className="flex items-center gap-2.5 group">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${MILESTONE_STATUS_DOT[ms.status] ?? "bg-slate-300"}`} />
+                    <p className="text-[13px] text-slate-800 flex-1 min-w-0 truncate">{ms.title}</p>
+                    {updatingMsId === ms.id ? (
+                      <Loader2 size={11} className="animate-spin text-slate-400 flex-shrink-0" />
+                    ) : (
+                      <select
+                        value={ms.status}
+                        onChange={e => handleMilestoneStatusChange(ms.id, e.target.value as PortfolioMilestone["status"])}
+                        className={`text-[10px] font-medium border-none bg-transparent cursor-pointer flex-shrink-0 focus:outline-none ${MILESTONE_STATUS_COLOR[ms.status] ?? "text-slate-400"}`}
+                      >
+                        <option value="upcoming">Upcoming</option>
+                        <option value="in_progress">In progress</option>
+                        <option value="done">Done</option>
+                        <option value="blocked">Blocked</option>
+                      </select>
+                    )}
+                    {ms.target_date && (
+                      <span className="text-[10px] text-slate-400 flex-shrink-0">{ms.target_date}</span>
+                    )}
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                      <button onClick={() => handleStartEditMs(ms)} className="text-slate-400 hover:text-slate-600">
+                        <Pencil size={10} />
+                      </button>
+                      <button onClick={() => handleDeleteMs(ms.id)} className="text-red-300 hover:text-red-500">
+                        <Trash2 size={10} />
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
