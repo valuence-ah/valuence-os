@@ -699,10 +699,14 @@ export function SourcingClient({ initialSignals }: Props) {
                 {/* ── Expanded Detail ── */}
                 {isExpanded && (
                   <div className="px-5 pb-5 pt-3 bg-slate-50/80 border-t border-slate-100 space-y-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
                       <div>
                         <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1">Company</div>
                         <div className="text-slate-700 font-medium">{signal.company_name ?? "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1">Source</div>
+                        <div className="text-slate-700 capitalize">{signal.source.replace(/_/g, " ")}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1">Technology</div>

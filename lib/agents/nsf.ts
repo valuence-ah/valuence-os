@@ -15,7 +15,9 @@ interface NsfAward {
   title?: string;
   abstractText?: string;
   id?: string;
-  pdPIName?: string;
+  pdPIName?: string;        // Principal Investigator name
+  awardee?: string;         // Recipient institution (university/org)
+  awardeeName?: string;     // Alternate field name used by some NSF endpoints
   startDate?: string;
   expDate?: string;
 }
@@ -55,7 +57,7 @@ export async function runNsfAgent(): Promise<{ fetched: number; saved: number }>
         rpp: String(cfg.resultsPerPage),
         offset: "1",
         dateStart,
-        printFields: "id,title,abstractText,pdPIName,startDate",
+        printFields: "id,title,abstractText,pdPIName,awardee,awardeeName,startDate",
       });
 
       const res = await fetch(`${NSF_BASE}?${params.toString()}`, {
@@ -87,6 +89,9 @@ export async function runNsfAgent(): Promise<{ fetched: number; saved: number }>
         if (!passesKeywordFilter(content)) continue;
 
         const authors: string[] = award.pdPIName ? [award.pdPIName] : [];
+        // `awardee` / `awardeeName` is the recipient institution (university/org),
+        // not the PI name or grant type. Use it as company_name.
+        const companyName = award.awardee ?? award.awardeeName ?? undefined;
 
         allSignals.set(url, {
           source: "nsf",
@@ -96,6 +101,7 @@ export async function runNsfAgent(): Promise<{ fetched: number; saved: number }>
           content,
           authors,
           published_date: award.startDate ?? undefined,
+          company_name: companyName,
         });
       }
     } catch (err) {
