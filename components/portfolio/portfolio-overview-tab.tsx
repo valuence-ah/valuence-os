@@ -481,6 +481,9 @@ export function PortfolioOverviewTab({
                     <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${MILESTONE_STATUS_DOT[ms.status] ?? "bg-slate-300"}`} />
                     <div className="min-w-0 flex-1">
                       <p className="text-[12px] font-medium text-slate-800 leading-tight truncate">{ms.title}</p>
+                      {ms.description && (
+                        <p className="text-[11px] text-slate-500 leading-tight line-clamp-1">{ms.description}</p>
+                      )}
                       {ms.target_date && (
                         <p className="text-[10px] text-slate-400 leading-tight">{ms.target_date}</p>
                       )}
