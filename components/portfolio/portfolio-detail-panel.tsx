@@ -363,6 +363,8 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
             {activeTab === "intelligence" && (
               <PortfolioIntelligenceTab
                 companyId={company.id}
+                companyName={company.name}
+                companyDescription={company.description ?? null}
                 companySectors={company.sectors ?? []}
                 intelligence={detail.intelligence}
                 onRefresh={onDetailRefresh}

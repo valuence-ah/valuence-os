@@ -1,11 +1,13 @@
 "use client";
-import { useState, useEffect } from "react";
-import { RefreshCw, Plus, X, Users } from "lucide-react";
-import type { PortfolioIntelligence, Company } from "@/lib/types";
+import { useState, useEffect, useCallback } from "react";
+import { RefreshCw, Plus, X, Users, Loader2, AlertTriangle } from "lucide-react";
+import type { PortfolioIntelligence } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {
   companyId: string;
+  companyName: string;
+  companyDescription: string | null;
   companySectors: string[];
   intelligence: PortfolioIntelligence[];
   onRefresh: () => void;
@@ -21,6 +23,26 @@ const WARMTH_BADGE: Record<string, string> = {
   warm:           "bg-orange-100 text-orange-700",
   lp_connection:  "bg-violet-100 text-violet-700",
   cold:           "bg-slate-100 text-slate-500",
+};
+
+const TIMING_BADGE: Record<string, string> = {
+  near_term: "bg-blue-100 text-blue-700",
+  mid_term:  "bg-indigo-100 text-indigo-600",
+  long_term: "bg-slate-100 text-slate-500",
+};
+
+const TIMING_LABEL: Record<string, string> = {
+  near_term: "near-term",
+  mid_term:  "mid-term",
+  long_term: "long-term",
+};
+
+const PARTNER_TYPE_BADGE: Record<string, string> = {
+  pilot:         "bg-sky-100 text-sky-700",
+  commercial:    "bg-teal-100 text-teal-700",
+  channel:       "bg-purple-100 text-purple-700",
+  strategic:     "bg-amber-100 text-amber-700",
+  manufacturing: "bg-orange-100 text-orange-700",
 };
 
 type IntelType = "ma_acquirer" | "pilot_partner" | "competitor";
@@ -71,14 +93,44 @@ const LP_STAGE_BADGE: Record<string, string> = {
   passed:            "bg-red-50 text-red-500",
 };
 
-export function PortfolioIntelligenceTab({ companyId, companySectors, intelligence, onRefresh }: Props) {
+const TYPE_LABELS: Record<IntelType, string> = {
+  ma_acquirer:   "acquirers",
+  pilot_partner: "pilot partners",
+  competitor:    "competitors",
+};
+
+export function PortfolioIntelligenceTab({
+  companyId,
+  companyName,
+  companyDescription,
+  companySectors,
+  intelligence,
+  onRefresh,
+}: Props) {
   const [refreshing, setRefreshing] = useState<IntelType | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [addingFor, setAddingFor] = useState<IntelType | null>(null);
   const [addForm, setAddForm] = useState<AddForm>({ entity_name: "", description: "", fit_level: "medium", warmth: "cold" });
   const [saving, setSaving] = useState(false);
   const [lpConnections, setLpConnections] = useState<LpConnection[]>([]);
 
-  // Fetch LP connections that share sectors with this portfolio company
+  // Local intelligence state — cleared immediately when company changes (prevents cross-contamination)
+  const [localIntelligence, setLocalIntelligence] = useState<PortfolioIntelligence[]>([]);
+
+  // GUARD: clear all local state immediately when companyId changes
+  useEffect(() => {
+    setLocalIntelligence([]);
+    setRefreshing(null);
+    setRefreshError(null);
+    setAddingFor(null);
+  }, [companyId]);
+
+  // Sync from parent prop after each refresh
+  useEffect(() => {
+    setLocalIntelligence(intelligence);
+  }, [intelligence]);
+
+  // Fetch LP connections with matching sectors
   useEffect(() => {
     if (companySectors.length === 0) return;
     const supabase = createClient();
@@ -97,23 +149,37 @@ export function PortfolioIntelligenceTab({ companyId, companySectors, intelligen
       });
   }, [companySectors]);
 
-  const acquirers = intelligence.filter(i => i.type === "ma_acquirer");
-  const pilots = intelligence.filter(i => i.type === "pilot_partner");
-  const competitors = intelligence.filter(i => i.type === "competitor");
+  const acquirers   = localIntelligence.filter(i => i.type === "ma_acquirer");
+  const pilots      = localIntelligence.filter(i => i.type === "pilot_partner");
+  const competitors = localIntelligence.filter(i => i.type === "competitor");
 
-  async function handleRefreshType(type: IntelType) {
+  // useCallback with companyId dependency — always sends current company
+  const handleRefreshType = useCallback(async (type: IntelType) => {
+    if (!companyDescription || companyDescription.length < 30) {
+      setRefreshError("Company description is too short. Please add a detailed description in the Overview tab first.");
+      return;
+    }
+    setRefreshError(null);
     setRefreshing(type);
     try {
-      await fetch("/api/portfolio/intelligence", {
+      const res = await fetch("/api/portfolio/intelligence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ company_id: companyId, type }),
       });
-      onRefresh();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        setRefreshError(err.error ?? "Intelligence generation failed.");
+      } else {
+        setRefreshError(null);
+        onRefresh();
+      }
+    } catch {
+      setRefreshError("Network error — please try again.");
     } finally {
       setRefreshing(null);
     }
-  }
+  }, [companyId, companyDescription, onRefresh]);
 
   async function handleAdd() {
     if (!addingFor || !addForm.entity_name.trim()) return;
@@ -140,7 +206,184 @@ export function PortfolioIntelligenceTab({ companyId, companySectors, intelligen
     onRefresh();
   }
 
-  function Section({ title, type, items }: { title: string; type: IntelType; items: PortfolioIntelligence[] }) {
+  // ── M&A Acquirer card ────────────────────────────────────────────────────────
+  function MaCard({ item }: { item: PortfolioIntelligence }) {
+    return (
+      <div className="py-3 border-b border-slate-100 last:border-0 group relative">
+        <button
+          onClick={() => handleDelete(item.id)}
+          className="absolute top-3 right-0 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-opacity p-0.5"
+        >
+          <X size={12} />
+        </button>
+
+        {/* Header row */}
+        <div className="flex items-center gap-1.5 flex-wrap mb-1 pr-5">
+          <p className="text-[13px] font-semibold text-slate-800">{item.entity_name}</p>
+          <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${FIT_BADGE[item.fit_level] ?? "bg-slate-100 text-slate-500"}`}>
+            {item.fit_level} fit
+          </span>
+          {item.timing_view && (
+            <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${TIMING_BADGE[item.timing_view] ?? "bg-slate-100 text-slate-500"}`}>
+              {TIMING_LABEL[item.timing_view] ?? item.timing_view}
+            </span>
+          )}
+          <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${WARMTH_BADGE[item.warmth] ?? "bg-slate-100 text-slate-500"}`}>
+            {item.warmth.replace("_", " ")}
+          </span>
+        </div>
+
+        {/* Description */}
+        {item.description && (
+          <p className="text-[11px] text-slate-600 leading-snug mb-2">{item.description}</p>
+        )}
+
+        {/* Structured tags */}
+        {(item.business_unit || item.evidence_type || item.strategic_value) && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {item.business_unit && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">
+                {item.business_unit}
+              </span>
+            )}
+            {item.evidence_type && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                {item.evidence_type.replace(/_/g, " ")}
+              </span>
+            )}
+            {item.strategic_value && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">
+                {item.strategic_value.replace(/_/g, " ")}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Geography */}
+        {item.geography_relevance && (
+          <p className="text-[10px] text-slate-400 mt-1">{item.geography_relevance}</p>
+        )}
+      </div>
+    );
+  }
+
+  // ── Pilot Partner card ───────────────────────────────────────────────────────
+  function PilotCard({ item }: { item: PortfolioIntelligence }) {
+    const hasDetail = item.specific_problem || item.use_case || item.pilot_description || item.success_criteria;
+
+    return (
+      <div className="py-3 border-b border-slate-100 last:border-0 group relative">
+        <button
+          onClick={() => handleDelete(item.id)}
+          className="absolute top-3 right-0 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-opacity p-0.5"
+        >
+          <X size={12} />
+        </button>
+
+        {/* Header row */}
+        <div className="flex items-center gap-1.5 flex-wrap mb-1 pr-5">
+          <p className="text-[13px] font-semibold text-slate-800">{item.entity_name}</p>
+          <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${FIT_BADGE[item.fit_level] ?? "bg-slate-100 text-slate-500"}`}>
+            {item.fit_level} fit
+          </span>
+          <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${WARMTH_BADGE[item.warmth] ?? "bg-slate-100 text-slate-500"}`}>
+            {item.warmth.replace("_", " ")}
+          </span>
+          {item.partner_type && (
+            <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${PARTNER_TYPE_BADGE[item.partner_type] ?? "bg-slate-100 text-slate-500"}`}>
+              {item.partner_type}
+            </span>
+          )}
+        </div>
+
+        {/* Description */}
+        {item.description && (
+          <p className="text-[11px] text-slate-600 leading-snug mb-2">{item.description}</p>
+        )}
+
+        {/* Expanded detail block */}
+        {hasDetail && (
+          <div className="bg-slate-50 rounded-lg px-3 py-2 mt-1.5 space-y-1">
+            {item.specific_problem && (
+              <p className="text-[10px] text-slate-700">
+                <span className="font-semibold text-slate-400 uppercase tracking-wide mr-1">Problem</span>
+                {item.specific_problem}
+              </p>
+            )}
+            {item.use_case && (
+              <p className="text-[10px] text-slate-700">
+                <span className="font-semibold text-slate-400 uppercase tracking-wide mr-1">Use case</span>
+                {item.use_case}
+              </p>
+            )}
+            {item.pilot_description && (
+              <p className="text-[10px] text-slate-700">
+                <span className="font-semibold text-slate-400 uppercase tracking-wide mr-1">Pilot</span>
+                {item.pilot_description}
+              </p>
+            )}
+            {item.success_criteria && (
+              <p className="text-[10px] text-slate-700">
+                <span className="font-semibold text-slate-400 uppercase tracking-wide mr-1">Success</span>
+                {item.success_criteria}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Partner value tag */}
+        {item.partner_value && (
+          <div className="mt-1.5">
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">
+              {item.partner_value.replace(/_/g, " ")}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Simple competitor card ───────────────────────────────────────────────────
+  function CompetitorCard({ item }: { item: PortfolioIntelligence }) {
+    return (
+      <div className="flex items-start gap-2 p-2.5 bg-slate-50 rounded-lg group">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-[13px] font-semibold text-slate-800">{item.entity_name}</p>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${FIT_BADGE[item.fit_level] ?? "bg-slate-100 text-slate-500"}`}>
+              {item.fit_level} threat
+            </span>
+          </div>
+          {item.description && (
+            <p className="text-[11px] text-slate-500 mt-0.5">{item.description}</p>
+          )}
+        </div>
+        <button
+          onClick={() => handleDelete(item.id)}
+          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity p-0.5 flex-shrink-0"
+        >
+          <X size={12} />
+        </button>
+      </div>
+    );
+  }
+
+  // ── Section wrapper ──────────────────────────────────────────────────────────
+  function Section({
+    title,
+    type,
+    items,
+    renderCard,
+    cardLayout = "list",
+  }: {
+    title: string;
+    type: IntelType;
+    items: PortfolioIntelligence[];
+    renderCard: (item: PortfolioIntelligence) => React.ReactNode;
+    cardLayout?: "list" | "grid";
+  }) {
+    const isRefreshing = refreshing === type;
+
     return (
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <div className="flex items-center justify-between mb-3">
@@ -157,12 +400,13 @@ export function PortfolioIntelligenceTab({ companyId, companySectors, intelligen
               disabled={refreshing !== null}
               className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-700 disabled:opacity-50"
             >
-              <RefreshCw size={11} className={refreshing === type ? "animate-spin" : ""} />
-              Refresh with AI
+              {isRefreshing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+              {isRefreshing ? `Researching ${TYPE_LABELS[type]} for ${companyName}…` : "Refresh with AI"}
             </button>
           </div>
         </div>
 
+        {/* Add form */}
         {addingFor === type && (
           <div className="mb-3 p-3 bg-slate-50 rounded-lg space-y-2">
             <input
@@ -205,33 +449,22 @@ export function PortfolioIntelligenceTab({ companyId, companySectors, intelligen
           </div>
         )}
 
-        {items.length === 0 ? (
+        {/* Content */}
+        {isRefreshing ? (
+          <div className="flex items-center gap-2 py-5 text-xs text-slate-400">
+            <Loader2 size={14} className="animate-spin text-blue-400 flex-shrink-0" />
+            <span>
+              Researching {TYPE_LABELS[type]} for{" "}
+              <span className="font-medium text-slate-600">{companyName}</span>…
+              <span className="text-slate-300 ml-1">(may take 15–20 seconds with web search)</span>
+            </span>
+          </div>
+        ) : items.length === 0 ? (
           <p className="text-xs text-slate-400">No entries yet. Click &quot;Refresh with AI&quot; to generate candidates.</p>
         ) : (
-          <div className="space-y-2">
+          <div className={cardLayout === "grid" ? "space-y-2" : ""}>
             {items.map(item => (
-              <div key={item.id} className="flex items-start gap-2 p-2.5 bg-slate-50 rounded-lg group">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="text-[13px] font-semibold text-slate-800">{item.entity_name}</p>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${FIT_BADGE[item.fit_level] ?? "bg-slate-100 text-slate-500"}`}>
-                      {item.fit_level} fit
-                    </span>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${WARMTH_BADGE[item.warmth] ?? "bg-slate-100 text-slate-500"}`}>
-                      {item.warmth.replace("_", " ")}
-                    </span>
-                  </div>
-                  {item.description && (
-                    <p className="text-[11px] text-slate-500 mt-0.5">{item.description}</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity p-0.5"
-                >
-                  <X size={12} />
-                </button>
-              </div>
+              <div key={item.id}>{renderCard(item)}</div>
             ))}
           </div>
         )}
@@ -239,11 +472,48 @@ export function PortfolioIntelligenceTab({ companyId, companySectors, intelligen
     );
   }
 
+  const hasDescription = companyDescription && companyDescription.length >= 30;
+
   return (
     <div className="p-5 space-y-4 overflow-y-auto h-full">
-      <Section title="M&A acquirer candidates" type="ma_acquirer" items={acquirers} />
-      <Section title="Potential pilot partners" type="pilot_partner" items={pilots} />
-      <Section title="Competitor landscape" type="competitor" items={competitors} />
+      {/* Description missing warning */}
+      {!hasDescription && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+          <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-800">
+            <span className="font-semibold">No company description.</span>{" "}
+            Add a detailed description in the Overview tab before generating AI intelligence — Claude needs it to produce company-specific results.
+          </p>
+        </div>
+      )}
+
+      {/* API error banner */}
+      {refreshError && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+          <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-800">{refreshError}</p>
+        </div>
+      )}
+
+      <Section
+        title="M&A acquirer candidates"
+        type="ma_acquirer"
+        items={acquirers}
+        renderCard={item => <MaCard item={item} />}
+      />
+      <Section
+        title="Potential pilot partners"
+        type="pilot_partner"
+        items={pilots}
+        renderCard={item => <PilotCard item={item} />}
+      />
+      <Section
+        title="Competitor landscape"
+        type="competitor"
+        items={competitors}
+        renderCard={item => <CompetitorCard item={item} />}
+        cardLayout="grid"
+      />
 
       {/* LP connections */}
       <div className="bg-white rounded-xl border border-slate-200 p-4">

@@ -414,6 +414,19 @@ export interface PortfolioIntelligence {
   source: string;
   last_refreshed: string;
   created_at: string;
+  // M&A structured fields
+  evidence_type: "direct_acquisition" | "adjacent_acquisition" | "strategic_overlap" | "announced_interest" | null;
+  business_unit: string | null;
+  geography_relevance: string | null;
+  timing_view: "near_term" | "mid_term" | "long_term" | null;
+  strategic_value: string | null;
+  // Pilot partner structured fields
+  partner_type: "pilot" | "commercial" | "channel" | "strategic" | "manufacturing" | null;
+  specific_problem: string | null;
+  use_case: string | null;
+  pilot_description: string | null;
+  success_criteria: string | null;
+  partner_value: string | null;
 }
 
 // ── Supabase Database type (used to type the Supabase client) ─────────────────

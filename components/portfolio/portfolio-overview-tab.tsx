@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import { Loader2, RefreshCw, FileText, Plus, X, Check, Pencil, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { RefreshCw, FileText, Plus, X, Check, Pencil, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, PortfolioKpi, PortfolioMilestone, PortfolioInitiative, PortfolioIntelligence, Interaction, FeedArticle } from "@/lib/types";
 
@@ -66,6 +66,56 @@ const WARMTH_BADGE: Record<string, string> = {
   cold:           "bg-slate-100 text-slate-500",
 };
 
+const statusColors: Record<string, { bg: string; text: string; border: string }> = {
+  done:        { bg: "#E1F5EE", text: "#085041", border: "#5DCAA5" },
+  in_progress: { bg: "#FAEEDA", text: "#633806", border: "#EF9F27" },
+  upcoming:    { bg: "#F1EFE8", text: "#5F5E5A", border: "#B4B2A9" },
+  blocked:     { bg: "#FCEBEB", text: "#791F1F", border: "#F09595" },
+};
+
+function EditableText({
+  value,
+  onSave,
+  className = "",
+  placeholder = "",
+}: {
+  value: string;
+  onSave: (val: string) => void;
+  className?: string;
+  placeholder?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => { setDraft(value); }, [value]);
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type="text"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { onSave(draft); setEditing(false); }}
+        onKeyDown={e => {
+          if (e.key === "Enter") { onSave(draft); setEditing(false); }
+          if (e.key === "Escape") { setDraft(value); setEditing(false); }
+        }}
+        className={`${className} px-1 py-0.5 border border-blue-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-400/40 w-full`}
+        placeholder={placeholder}
+      />
+    );
+  }
+  return (
+    <div
+      onDoubleClick={() => setEditing(true)}
+      className={`${className} cursor-pointer hover:bg-slate-100 rounded px-1 py-0.5 -mx-1 transition-colors min-h-[18px]`}
+      title="Double-click to edit"
+    >
+      {value || <span className="text-slate-300 italic text-[10px]">{placeholder}</span>}
+    </div>
+  );
+}
+
 function RunwayBar({ months }: { months: number }) {
   const pct = Math.min(100, (months / 24) * 100);
   const color = months >= 12 ? "bg-emerald-500" : months >= 6 ? "bg-amber-500" : "bg-red-500";
@@ -102,14 +152,15 @@ export function PortfolioOverviewTab({
   const [addInitForm, setAddInitForm] = useState({ title: "", description: "", status: "in_progress" });
   const [savingInitAdd, setSavingInitAdd] = useState(false);
 
-  // Milestone state
+  // Milestone state — local copy for optimistic updates
+  const [localMilestones, setLocalMilestones] = useState<PortfolioMilestone[]>(milestones);
   const [addingMilestone, setAddingMilestone] = useState(false);
   const [msForm, setMsForm] = useState({ title: "", status: "upcoming" as PortfolioMilestone["status"], target_date: "" });
   const [savingMs, setSavingMs] = useState(false);
-  const [updatingMsId, setUpdatingMsId] = useState<string | null>(null);
-  const [editingMsId, setEditingMsId] = useState<string | null>(null);
-  const [editMsForm, setEditMsForm] = useState({ title: "", status: "upcoming" as PortfolioMilestone["status"], target_date: "" });
-  const [savingMsEdit, setSavingMsEdit] = useState(false);
+
+  // Interaction timeline slide-out
+  const [showFullTimeline, setShowFullTimeline] = useState(false);
+  const [selectedInteraction, setSelectedInteraction] = useState<Interaction | null>(null);
 
   // Risk flags state
   const [riskInput, setRiskInput] = useState("");
@@ -129,12 +180,21 @@ export function PortfolioOverviewTab({
     setRefreshing(null);
   }
 
-  async function handleMilestoneStatusChange(id: string, status: PortfolioMilestone["status"]) {
-    setUpdatingMsId(id);
+  // Sync local milestones when parent re-fetches
+  useEffect(() => { setLocalMilestones(milestones); }, [milestones]);
+
+  async function handleUpdateMilestone(id: string, updates: Partial<PortfolioMilestone>) {
+    setLocalMilestones(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
     const supabase = createClient();
-    await supabase.from("portfolio_milestones").update({ status }).eq("id", id);
-    setUpdatingMsId(null);
-    onDetailRefresh();
+    await supabase.from("portfolio_milestones")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", id);
+  }
+
+  async function handleDeleteMilestone(id: string) {
+    setLocalMilestones(prev => prev.filter(m => m.id !== id));
+    const supabase = createClient();
+    await supabase.from("portfolio_milestones").delete().eq("id", id);
   }
 
   async function handleAddMilestone() {
@@ -152,33 +212,7 @@ export function PortfolioOverviewTab({
     setMsForm({ title: "", status: "upcoming", target_date: "" });
     setAddingMilestone(false);
     setSavingMs(false);
-    onDetailRefresh();
-  }
-
-  function handleStartEditMs(ms: PortfolioMilestone) {
-    setEditingMsId(ms.id);
-    setEditMsForm({ title: ms.title, status: ms.status, target_date: ms.target_date ?? "" });
-  }
-
-  async function handleSaveEditMs() {
-    if (!editingMsId) return;
-    setSavingMsEdit(true);
-    const supabase = createClient();
-    await supabase.from("portfolio_milestones").update({
-      title: editMsForm.title,
-      status: editMsForm.status,
-      target_date: editMsForm.target_date || null,
-      updated_at: new Date().toISOString(),
-    }).eq("id", editingMsId);
-    setEditingMsId(null);
-    setSavingMsEdit(false);
-    onDetailRefresh();
-  }
-
-  async function handleDeleteMs(id: string) {
-    const supabase = createClient();
-    await supabase.from("portfolio_milestones").delete().eq("id", id);
-    onDetailRefresh();
+    onDetailRefresh(); // re-fetch to get the new row's ID into local state
   }
 
   async function handleAddRiskFlag() {
@@ -357,77 +391,66 @@ export function PortfolioOverviewTab({
             <Plus size={11} /> Add
           </button>
         </div>
-        {milestones.length === 0 && !addingMilestone ? (
+        {localMilestones.length === 0 && !addingMilestone ? (
           <p className="text-xs text-slate-400">No milestones yet.</p>
         ) : (
           <div className="space-y-1.5">
-            {milestones.map(ms => (
-              <div key={ms.id}>
-                {editingMsId === ms.id ? (
-                  <div className="p-2.5 bg-slate-50 rounded-lg space-y-1.5 border border-slate-200">
-                    <input
-                      autoFocus
-                      value={editMsForm.title}
-                      onChange={e => setEditMsForm(p => ({ ...p, title: e.target.value }))}
-                      className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                    />
-                    <div className="flex gap-2">
-                      <select
-                        value={editMsForm.status}
-                        onChange={e => setEditMsForm(p => ({ ...p, status: e.target.value as PortfolioMilestone["status"] }))}
-                        className="flex-1 text-xs border border-slate-200 rounded px-2 py-1.5"
-                      >
-                        <option value="upcoming">Upcoming</option>
-                        <option value="in_progress">In progress</option>
-                        <option value="done">Done</option>
-                        <option value="blocked">Blocked</option>
-                      </select>
-                      <input
-                        type="text"
-                        placeholder="Target date (e.g. Q3 2026)"
-                        value={editMsForm.target_date}
-                        onChange={e => setEditMsForm(p => ({ ...p, target_date: e.target.value }))}
-                        className="flex-1 text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setEditingMsId(null)} className="text-[11px] px-2.5 py-1 text-slate-500 border border-slate-200 rounded hover:bg-slate-50">Cancel</button>
-                      <button onClick={handleSaveEditMs} disabled={savingMsEdit || !editMsForm.title.trim()} className="text-[11px] px-2.5 py-1 bg-blue-600 text-white rounded disabled:opacity-50">
-                        {savingMsEdit ? "Saving…" : "Save"}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2.5 group">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${MILESTONE_STATUS_DOT[ms.status] ?? "bg-slate-300"}`} />
-                    <p className="text-[13px] text-slate-800 flex-1 min-w-0 truncate">{ms.title}</p>
-                    {updatingMsId === ms.id ? (
-                      <Loader2 size={11} className="animate-spin text-slate-400 flex-shrink-0" />
-                    ) : (
-                      <select
-                        value={ms.status}
-                        onChange={e => handleMilestoneStatusChange(ms.id, e.target.value as PortfolioMilestone["status"])}
-                        className={`text-[10px] font-medium border-none bg-transparent cursor-pointer flex-shrink-0 focus:outline-none ${MILESTONE_STATUS_COLOR[ms.status] ?? "text-slate-400"}`}
-                      >
-                        <option value="upcoming">Upcoming</option>
-                        <option value="in_progress">In progress</option>
-                        <option value="done">Done</option>
-                        <option value="blocked">Blocked</option>
-                      </select>
-                    )}
-                    {ms.target_date && (
-                      <span className="text-[10px] text-slate-400 flex-shrink-0">{ms.target_date}</span>
-                    )}
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                      <button onClick={() => handleStartEditMs(ms)} className="text-slate-400 hover:text-slate-600">
-                        <Pencil size={10} />
-                      </button>
-                      <button onClick={() => handleDeleteMs(ms.id)} className="text-red-300 hover:text-red-500">
-                        <Trash2 size={10} />
-                      </button>
-                    </div>
-                  </div>
-                )}
+            {localMilestones.map(ms => (
+              <div key={ms.id} className="flex items-start gap-2 p-2 bg-slate-50 rounded-lg group">
+                <div className={`w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0 ${MILESTONE_STATUS_DOT[ms.status] ?? "bg-slate-300"}`} />
+                <div className="flex-1 min-w-0">
+                  <EditableText
+                    value={ms.title}
+                    onSave={val => handleUpdateMilestone(ms.id, { title: val })}
+                    className="text-[12px] font-medium text-slate-800"
+                    placeholder="Milestone title"
+                  />
+                  <EditableText
+                    value={ms.description ?? ""}
+                    onSave={val => handleUpdateMilestone(ms.id, { description: (val || null) as string | null })}
+                    className="text-[11px] text-slate-500 mt-0.5"
+                    placeholder="Add description…"
+                  />
+                  <EditableText
+                    value={ms.target_date ?? ""}
+                    onSave={val => handleUpdateMilestone(ms.id, { target_date: (val || null) as string | null })}
+                    className="text-[10px] text-slate-400 mt-0.5"
+                    placeholder="e.g. Q3 2026"
+                  />
+                </div>
+                <select
+                  value={ms.status}
+                  onChange={e => handleUpdateMilestone(ms.id, { status: e.target.value as PortfolioMilestone["status"] })}
+                  className="text-[10px] px-2 py-0.5 rounded-full border appearance-none cursor-pointer font-medium flex-shrink-0 focus:outline-none"
+                  style={{
+                    backgroundColor: statusColors[ms.status]?.bg ?? "#F1EFE8",
+                    color: statusColors[ms.status]?.text ?? "#5F5E5A",
+                    borderColor: statusColors[ms.status]?.border ?? "#B4B2A9",
+                  }}
+                >
+                  <option value="upcoming">Upcoming</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="done">Done</option>
+                  <option value="blocked">Blocked</option>
+                </select>
+                <select
+                  value={ms.category ?? "general"}
+                  onChange={e => handleUpdateMilestone(ms.id, { category: e.target.value })}
+                  className="text-[10px] px-2 py-0.5 rounded-full border border-slate-200 bg-white text-slate-500 appearance-none cursor-pointer flex-shrink-0 focus:outline-none"
+                >
+                  <option value="fundraise">Fundraise</option>
+                  <option value="regulatory">Regulatory</option>
+                  <option value="product">Product</option>
+                  <option value="partnership">Partnership</option>
+                  <option value="hiring">Hiring</option>
+                  <option value="general">General</option>
+                </select>
+                <button
+                  onClick={() => handleDeleteMilestone(ms.id)}
+                  className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1"
+                >
+                  <Trash2 size={11} />
+                </button>
               </div>
             ))}
           </div>
@@ -456,7 +479,8 @@ export function PortfolioOverviewTab({
                 <option value="blocked">Blocked</option>
               </select>
               <input
-                type="date"
+                type="text"
+                placeholder="Target date (e.g. Q3 2026)"
                 value={msForm.target_date}
                 onChange={e => setMsForm(p => ({ ...p, target_date: e.target.value }))}
                 className="flex-1 text-xs border border-slate-200 rounded px-2.5 py-1.5"
@@ -704,20 +728,34 @@ export function PortfolioOverviewTab({
         <div>
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Interaction timeline</h3>
-            <a href={`/crm/pipeline?company=${company.id}`} className="text-[10px] text-blue-500 hover:text-blue-700">View full timeline →</a>
+            <button
+              onClick={() => setShowFullTimeline(true)}
+              className="text-[10px] text-blue-500 hover:text-blue-700"
+            >
+              View full timeline →
+            </button>
           </div>
           {interactions.length === 0 ? (
             <p className="text-xs text-slate-400">No interactions yet</p>
           ) : (
             <div className="space-y-2">
               {interactions.slice(0, 5).map(i => (
-                <div key={i.id} className="flex items-start gap-2">
-                  <FileText size={12} className="text-slate-300 mt-0.5 flex-shrink-0" />
+                <button
+                  key={i.id}
+                  onClick={() => setSelectedInteraction(i)}
+                  className="flex items-start gap-2 w-full text-left hover:bg-slate-50 rounded-lg p-1 -mx-1 transition-colors"
+                >
+                  <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                    i.type === "meeting" ? "bg-blue-400" :
+                    i.type === "email"   ? "bg-slate-400" :
+                    i.type === "call"    ? "bg-emerald-400" :
+                    i.type === "intro"   ? "bg-violet-400" : "bg-amber-400"
+                  }`} />
                   <div className="min-w-0">
-                    <p className="text-[12px] font-medium text-slate-700 truncate">{i.subject ?? "Meeting"}</p>
+                    <p className="text-[12px] font-medium text-slate-700 truncate">{i.subject ?? i.type}</p>
                     <p className="text-[11px] text-slate-400">{timeAgo(i.date)}</p>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -771,7 +809,9 @@ export function PortfolioOverviewTab({
                     <span className={`text-[9px] px-1 py-px rounded font-medium ${FIT_BADGE[a.fit_level] ?? "bg-slate-100 text-slate-500"}`}>{a.fit_level}</span>
                     <span className={`text-[9px] px-1 py-px rounded font-medium ${WARMTH_BADGE[a.warmth] ?? "bg-slate-100 text-slate-500"}`}>{a.warmth.replace("_", " ")}</span>
                   </div>
-                  {a.description && <p className="text-[11px] text-slate-500 line-clamp-2">{a.description}</p>}
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    {a.description || "No rationale yet — click Refresh to generate."}
+                  </p>
                 </div>
               ))}
             </div>
@@ -801,7 +841,9 @@ export function PortfolioOverviewTab({
                     <span className={`text-[9px] px-1 py-px rounded font-medium ${FIT_BADGE[p.fit_level] ?? "bg-slate-100 text-slate-500"}`}>{p.fit_level}</span>
                     <span className={`text-[9px] px-1 py-px rounded font-medium ${WARMTH_BADGE[p.warmth] ?? "bg-slate-100 text-slate-500"}`}>{p.warmth.replace("_", " ")}</span>
                   </div>
-                  {p.description && <p className="text-[11px] text-slate-500 line-clamp-2">{p.description}</p>}
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    {p.description || "No rationale yet — click Refresh to generate."}
+                  </p>
                 </div>
               ))}
             </div>
@@ -842,6 +884,147 @@ export function PortfolioOverviewTab({
           </button>
         </div>
       </div>
+
+      {/* Full timeline slide-out panel */}
+      {showFullTimeline && (
+        <div
+          className="fixed inset-0 bg-black/30 z-50 flex justify-end"
+          onClick={e => { if (e.target === e.currentTarget) setShowFullTimeline(false); }}
+        >
+          <div className="w-[560px] bg-white h-full overflow-y-auto shadow-xl flex flex-col">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Interaction timeline</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {company.name} — {interactions.length} interaction{interactions.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <button onClick={() => setShowFullTimeline(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-4 flex-1">
+              {interactions.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-sm text-slate-400">No interactions recorded</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {interactions.map((i, idx) => (
+                    <div
+                      key={i.id}
+                      className="relative pl-6 pb-4 cursor-pointer hover:bg-slate-50 rounded-lg px-3 -mx-3 transition-colors"
+                      onClick={() => setSelectedInteraction(i)}
+                    >
+                      {idx < interactions.length - 1 && (
+                        <div className="absolute left-[19px] top-8 bottom-0 w-px bg-slate-200" />
+                      )}
+                      <div className={`absolute left-3 top-4 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                        i.type === "meeting" ? "bg-blue-500" :
+                        i.type === "email"   ? "bg-slate-400" :
+                        i.type === "call"    ? "bg-emerald-500" :
+                        i.type === "intro"   ? "bg-violet-500" : "bg-amber-500"
+                      }`} />
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">{i.subject ?? i.type}</p>
+                          {i.attendees && i.attendees.length > 0 && (
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {i.attendees.slice(0, 3).map(a => a.name).join(", ")}
+                              {i.attendees.length > 3 ? ` +${i.attendees.length - 3}` : ""}
+                            </p>
+                          )}
+                          {i.summary && (
+                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">{i.summary}</p>
+                          )}
+                          <div className="flex gap-1.5 mt-1.5">
+                            {i.transcript_url && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">Transcript</span>
+                            )}
+                            {i.ai_summary && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700">AI summary</span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-slate-400 flex-shrink-0 ml-3">
+                          {new Date(i.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Individual interaction detail modal — z-[60] floats above slide-out */}
+      {selectedInteraction && (
+        <div
+          className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center p-4"
+          onClick={e => { if (e.target === e.currentTarget) setSelectedInteraction(null); }}
+        >
+          <div className="bg-white rounded-xl w-[640px] max-h-[80vh] overflow-y-auto shadow-2xl">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-900">{selectedInteraction.subject ?? selectedInteraction.type}</p>
+              <button onClick={() => setSelectedInteraction(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <div className="flex gap-4 text-xs text-slate-500">
+                <span>{new Date(selectedInteraction.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
+                <span className="capitalize">{selectedInteraction.type}</span>
+                {selectedInteraction.attendees && selectedInteraction.attendees.length > 0 && (
+                  <span>{selectedInteraction.attendees.map(a => a.name).join(", ")}</span>
+                )}
+              </div>
+              {selectedInteraction.summary && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] mb-1">Summary</p>
+                  <p className="text-xs text-slate-700 leading-relaxed">{selectedInteraction.summary}</p>
+                </div>
+              )}
+              {selectedInteraction.ai_summary && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] mb-1">AI summary</p>
+                  <p className="text-xs text-slate-700 leading-relaxed">{selectedInteraction.ai_summary}</p>
+                </div>
+              )}
+              {selectedInteraction.body && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] mb-1">Notes</p>
+                  <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{selectedInteraction.body}</p>
+                </div>
+              )}
+              {selectedInteraction.action_items && selectedInteraction.action_items.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] mb-1">Action items</p>
+                  <ul className="space-y-1">
+                    {selectedInteraction.action_items.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-xs text-slate-700">
+                        <span className="text-slate-300 mt-0.5">•</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {selectedInteraction.transcript_url && (
+                <a
+                  href={selectedInteraction.transcript_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                >
+                  <FileText size={12} /> View transcript
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

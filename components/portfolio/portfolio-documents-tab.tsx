@@ -97,6 +97,7 @@ export function PortfolioDocumentsTab({ companyId, reports, onReportReExtracted 
             <p className="text-[11px] text-slate-400 mt-1">Use the &quot;Upload report&quot; button at the top to add quarterly or board reports</p>
           </div>
         ) : (
+          <>
           <div className="space-y-2">
             {reports.map(r => (
               <div key={r.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors group">
@@ -216,6 +217,7 @@ export function PortfolioDocumentsTab({ companyId, reports, onReportReExtracted 
               </div>
             </div>
           )}
+          </>
         )}
       </div>
 
