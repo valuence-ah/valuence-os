@@ -157,6 +157,9 @@ export function PortfolioOverviewTab({
   const [addingMilestone, setAddingMilestone] = useState(false);
   const [msForm, setMsForm] = useState({ title: "", status: "upcoming" as PortfolioMilestone["status"], target_date: "" });
   const [savingMs, setSavingMs] = useState(false);
+  const [editingMsId, setEditingMsId] = useState<string | null>(null);
+  const [editMsForm, setEditMsForm] = useState({ title: "", description: "", status: "upcoming" as PortfolioMilestone["status"], target_date: "", category: "general" });
+  const [savingMsEdit, setSavingMsEdit] = useState(false);
 
   // Interaction timeline slide-out
   const [showFullTimeline, setShowFullTimeline] = useState(false);
@@ -195,6 +198,25 @@ export function PortfolioOverviewTab({
     setLocalMilestones(prev => prev.filter(m => m.id !== id));
     const supabase = createClient();
     await supabase.from("portfolio_milestones").delete().eq("id", id);
+  }
+
+  function handleStartEditMs(ms: PortfolioMilestone) {
+    setEditingMsId(ms.id);
+    setEditMsForm({ title: ms.title, description: ms.description ?? "", status: ms.status, target_date: ms.target_date ?? "", category: ms.category ?? "general" });
+  }
+
+  async function handleSaveEditMs() {
+    if (!editingMsId) return;
+    setSavingMsEdit(true);
+    await handleUpdateMilestone(editingMsId, {
+      title: editMsForm.title,
+      description: (editMsForm.description || null) as string | null,
+      status: editMsForm.status,
+      target_date: (editMsForm.target_date || null) as string | null,
+      category: editMsForm.category,
+    });
+    setEditingMsId(null);
+    setSavingMsEdit(false);
   }
 
   async function handleAddMilestone() {
@@ -312,8 +334,13 @@ export function PortfolioOverviewTab({
     onDetailRefresh();
   }
 
-  const acquirers = intelligence.filter(i => i.type === "ma_acquirer");
-  const pilots = intelligence.filter(i => i.type === "pilot_partner");
+  const FIT_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+  const acquirers = intelligence
+    .filter(i => i.type === "ma_acquirer")
+    .sort((a, b) => (FIT_ORDER[a.fit_level] ?? 3) - (FIT_ORDER[b.fit_level] ?? 3));
+  const pilots = intelligence
+    .filter(i => i.type === "pilot_partner")
+    .sort((a, b) => (FIT_ORDER[a.fit_level] ?? 3) - (FIT_ORDER[b.fit_level] ?? 3));
 
   return (
     <div className="p-5 space-y-5 overflow-y-auto h-full">
@@ -394,63 +421,89 @@ export function PortfolioOverviewTab({
         {localMilestones.length === 0 && !addingMilestone ? (
           <p className="text-xs text-slate-400">No milestones yet.</p>
         ) : (
-          <div className="space-y-1.5">
+          <div className="max-h-[200px] overflow-y-auto space-y-1 pr-0.5">
             {localMilestones.map(ms => (
-              <div key={ms.id} className="flex items-start gap-2 p-2 bg-slate-50 rounded-lg group">
-                <div className={`w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0 ${MILESTONE_STATUS_DOT[ms.status] ?? "bg-slate-300"}`} />
-                <div className="flex-1 min-w-0">
-                  <EditableText
-                    value={ms.title}
-                    onSave={val => handleUpdateMilestone(ms.id, { title: val })}
-                    className="text-[12px] font-medium text-slate-800"
-                    placeholder="Milestone title"
-                  />
-                  <EditableText
-                    value={ms.description ?? ""}
-                    onSave={val => handleUpdateMilestone(ms.id, { description: (val || null) as string | null })}
-                    className="text-[11px] text-slate-500 mt-0.5"
-                    placeholder="Add description…"
-                  />
-                  <EditableText
-                    value={ms.target_date ?? ""}
-                    onSave={val => handleUpdateMilestone(ms.id, { target_date: (val || null) as string | null })}
-                    className="text-[10px] text-slate-400 mt-0.5"
-                    placeholder="e.g. Q3 2026"
-                  />
-                </div>
-                <select
-                  value={ms.status}
-                  onChange={e => handleUpdateMilestone(ms.id, { status: e.target.value as PortfolioMilestone["status"] })}
-                  className="text-[10px] px-2 py-0.5 rounded-full border appearance-none cursor-pointer font-medium flex-shrink-0 focus:outline-none"
-                  style={{
-                    backgroundColor: statusColors[ms.status]?.bg ?? "#F1EFE8",
-                    color: statusColors[ms.status]?.text ?? "#5F5E5A",
-                    borderColor: statusColors[ms.status]?.border ?? "#B4B2A9",
-                  }}
-                >
-                  <option value="upcoming">Upcoming</option>
-                  <option value="in_progress">In progress</option>
-                  <option value="done">Done</option>
-                  <option value="blocked">Blocked</option>
-                </select>
-                <select
-                  value={ms.category ?? "general"}
-                  onChange={e => handleUpdateMilestone(ms.id, { category: e.target.value })}
-                  className="text-[10px] px-2 py-0.5 rounded-full border border-slate-200 bg-white text-slate-500 appearance-none cursor-pointer flex-shrink-0 focus:outline-none"
-                >
-                  <option value="fundraise">Fundraise</option>
-                  <option value="regulatory">Regulatory</option>
-                  <option value="product">Product</option>
-                  <option value="partnership">Partnership</option>
-                  <option value="hiring">Hiring</option>
-                  <option value="general">General</option>
-                </select>
-                <button
-                  onClick={() => handleDeleteMilestone(ms.id)}
-                  className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1"
-                >
-                  <Trash2 size={11} />
-                </button>
+              <div key={ms.id}>
+                {editingMsId === ms.id ? (
+                  <div className="p-2 bg-slate-50 rounded-lg space-y-1.5 border border-slate-200">
+                    <input
+                      autoFocus
+                      value={editMsForm.title}
+                      onChange={e => setEditMsForm(p => ({ ...p, title: e.target.value }))}
+                      placeholder="Milestone title"
+                      className="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                    <input
+                      value={editMsForm.description}
+                      onChange={e => setEditMsForm(p => ({ ...p, description: e.target.value }))}
+                      placeholder="Description (optional)"
+                      className="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                    <div className="flex gap-1.5">
+                      <select
+                        value={editMsForm.status}
+                        onChange={e => setEditMsForm(p => ({ ...p, status: e.target.value as PortfolioMilestone["status"] }))}
+                        className="flex-1 text-xs border border-slate-200 rounded px-2 py-1"
+                      >
+                        <option value="upcoming">Upcoming</option>
+                        <option value="in_progress">In progress</option>
+                        <option value="done">Done</option>
+                        <option value="blocked">Blocked</option>
+                      </select>
+                      <select
+                        value={editMsForm.category}
+                        onChange={e => setEditMsForm(p => ({ ...p, category: e.target.value }))}
+                        className="flex-1 text-xs border border-slate-200 rounded px-2 py-1"
+                      >
+                        <option value="fundraise">Fundraise</option>
+                        <option value="regulatory">Regulatory</option>
+                        <option value="product">Product</option>
+                        <option value="partnership">Partnership</option>
+                        <option value="hiring">Hiring</option>
+                        <option value="general">General</option>
+                      </select>
+                      <input
+                        value={editMsForm.target_date}
+                        onChange={e => setEditMsForm(p => ({ ...p, target_date: e.target.value }))}
+                        placeholder="Target date"
+                        className="flex-1 text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => setEditingMsId(null)} className="text-[11px] px-2 py-1 text-slate-500 border border-slate-200 rounded hover:bg-slate-50">Cancel</button>
+                      <button onClick={handleSaveEditMs} disabled={savingMsEdit || !editMsForm.title.trim()} className="text-[11px] px-2 py-1 bg-blue-600 text-white rounded disabled:opacity-50">
+                        {savingMsEdit ? "…" : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 group py-1">
+                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${MILESTONE_STATUS_DOT[ms.status] ?? "bg-slate-300"}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-medium text-slate-800 leading-tight truncate">{ms.title}</p>
+                      {ms.target_date && (
+                        <p className="text-[10px] text-slate-400 leading-tight">{ms.target_date}</p>
+                      )}
+                    </div>
+                    <span
+                      className="text-[9px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
+                      style={{
+                        backgroundColor: statusColors[ms.status]?.bg ?? "#F1EFE8",
+                        color: statusColors[ms.status]?.text ?? "#5F5E5A",
+                      }}
+                    >
+                      {ms.status.replace("_", " ")}
+                    </span>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                      <button onClick={() => handleStartEditMs(ms)} className="text-slate-400 hover:text-slate-600">
+                        <Pencil size={10} />
+                      </button>
+                      <button onClick={() => handleDeleteMilestone(ms.id)} className="text-red-300 hover:text-red-500">
+                        <Trash2 size={10} />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
