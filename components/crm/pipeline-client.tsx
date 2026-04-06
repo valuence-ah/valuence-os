@@ -3102,10 +3102,11 @@ export function PipelineClient({ initialCompanies }: Props) {
                         <span className="text-xs text-slate-400">{formatDate(memo.created_at)}</span>
                       </div>
                     </div>
-                    <a href={`/memos/${memo.id}`}
+                    <button
+                      onClick={() => window.open(`/memos/${memo.id}`, "_blank")}
                       className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 flex items-center gap-1">
                       View Full <ChevronRight size={12} />
-                    </a>
+                    </button>
                   </div>
                   {memo.executive_summary && (
                     <p className="text-sm text-slate-600 leading-relaxed line-clamp-4">{memo.executive_summary}</p>

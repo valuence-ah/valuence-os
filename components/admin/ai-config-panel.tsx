@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2, Save, Check, Bot, FileText, Sparkles, Mail, ClipboardList, Mic, Radar, Search } from "lucide-react";
+import { Loader2, Save, Check, Bot, FileText, Sparkles, Mail, ClipboardList, Mic, Radar, Search, Building2, Handshake } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Model options ─────────────────────────────────────────────────────────────
@@ -111,6 +111,26 @@ const TABS = [
     description: "Extracts structured insights (description, funding, tech highlights) from Exa search results for a specific company.",
     variables: ["{{company_name}}", "{{sectors}}", "{{research}}"],
     promptLabel: "Extraction Instructions",
+  },
+  {
+    name: "ma_intelligence",
+    label: "M&A Intelligence",
+    icon: Building2,
+    color: "text-blue-600",
+    bg: "bg-blue-50",
+    description: "Generates M&A acquirer candidates for portfolio companies. Prompts read from DB at runtime.",
+    variables: ["{{company_name}}", "{{description}}", "{{sectors}}", "{{stage}}", "{{kpi_context}}", "{{milestones}}", "{{lp_names}}"],
+    promptLabel: "M&A User Prompt Template",
+  },
+  {
+    name: "pilot_intelligence",
+    label: "Pilot Intelligence",
+    icon: Handshake,
+    color: "text-emerald-600",
+    bg: "bg-emerald-50",
+    description: "Generates pilot/commercial partner candidates for portfolio companies. Prompts read from DB at runtime.",
+    variables: ["{{company_name}}", "{{description}}", "{{sectors}}", "{{stage}}", "{{kpi_context}}", "{{milestones}}", "{{lp_names}}"],
+    promptLabel: "Pilot User Prompt Template",
   },
 ] as const;
 

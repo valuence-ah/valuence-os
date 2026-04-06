@@ -9,6 +9,7 @@ import { runUsptoAgent } from "@/lib/agents/uspto";
 import { runSemanticScholarAgent } from "@/lib/agents/semantic-scholar";
 import { runNihReporterAgent } from "@/lib/agents/nih-reporter";
 import { runNrelAgent } from "@/lib/agents/nrel";
+import { runRedditAgent } from "@/lib/agents/reddit";
 
 export const maxDuration = 300;
 
@@ -25,7 +26,7 @@ function settle(r: PromiseSettledResult<{ fetched: number; saved: number }>): Ag
 }
 
 export async function POST() {
-  const [arxiv, sbir, nsf, exa, uspto, semanticScholar, nih, nrel] =
+  const [arxiv, sbir, nsf, exa, uspto, semanticScholar, nih, nrel, reddit] =
     (await Promise.allSettled([
       runArxivAgent(),
       runSbirAgent(),
@@ -35,16 +36,17 @@ export async function POST() {
       runSemanticScholarAgent(),
       runNihReporterAgent(),
       runNrelAgent(),
+      runRedditAgent(),
     ])).map(settle);
 
   const totalSaved =
     (arxiv.saved ?? 0) + (sbir.saved ?? 0) + (nsf.saved ?? 0) +
     (exa.saved ?? 0) + (uspto.saved ?? 0) + (semanticScholar.saved ?? 0) +
-    (nih.saved ?? 0) + (nrel.saved ?? 0);
+    (nih.saved ?? 0) + (nrel.saved ?? 0) + (reddit.saved ?? 0);
 
   return NextResponse.json({
     success: true,
     totalSaved,
-    results: { arxiv, sbir, nsf, exa, uspto, semanticScholar, nih, nrel },
+    results: { arxiv, sbir, nsf, exa, uspto, semanticScholar, nih, nrel, reddit },
   });
 }

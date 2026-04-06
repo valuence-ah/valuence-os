@@ -35,10 +35,13 @@ function computeScore(signal: SourcingSignal): number {
   for (const kw of PRIMARY_KW) if (text.includes(kw)) score += 3;
   for (const kw of SECONDARY_KW) if (text.includes(kw)) score += 2;
 
-  if (text.includes("north america") || text.includes("united states") || text.includes(" usa ") || text.includes("canada")) score += 1;
-  if (text.includes("singapore")) score += 1;
-  if (text.includes("korea") || text.includes("korean")) score += 1;
+  // Geography scoring — expanded target regions
+  if (text.includes("north america") || text.includes("united states") || text.includes(" usa ") || text.includes("canada") || text.includes("canadian")) score += 1;
+  if (text.includes("singapore") || text.includes(" sg ")) score += 1;
+  if (text.includes("korea") || text.includes("korean") || text.includes("south korea")) score += 1;
   if (text.includes("japan") || text.includes("japanese")) score += 1;
+  if (text.includes("united kingdom") || text.includes(" uk ") || text.includes("england") || text.includes("britain")) score += 1;
+  if (text.includes("france") || text.includes("french")) score += 1;
 
   if (signal.signal_type === "patent") score += 1;
   else if (signal.signal_type === "grant") score += 1;
@@ -47,7 +50,7 @@ function computeScore(signal: SourcingSignal): number {
   const dateStr = signal.published_date ?? signal.created_at;
   const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
   if (days < 7) score += 1;
-  else if (days > 30) score -= 1;
+  else if (days > 90) score -= 1;
 
   return Math.max(0, Math.min(10, score));
 }

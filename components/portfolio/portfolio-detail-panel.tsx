@@ -1,7 +1,8 @@
 "use client";
 import { useState, useRef } from "react";
-import { ExternalLink, Upload, Check, X, Pencil } from "lucide-react";
+import { ExternalLink, Upload, Check, X, Pencil, GitBranch } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 import type { Company } from "@/lib/types";
 import type { CompanyDetail } from "./portfolio-client";
 import { PortfolioOverviewTab } from "./portfolio-overview-tab";
@@ -118,7 +119,44 @@ function InlineTextField({
   );
 }
 
+function extractDomain(website: string | null | undefined): string | null {
+  if (!website) return null;
+  try {
+    return website.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
+  } catch {
+    return null;
+  }
+}
+
+function CompanyLogoHeader({ company }: { company: Company }) {
+  const [imgErr, setImgErr] = useState(false);
+  const domain = extractDomain(company.website);
+  const logoSrc = company.logo_url
+    ? company.logo_url
+    : domain
+    ? `https://logo.clearbit.com/${domain}`
+    : null;
+  const initials = (company.name ?? "?").split(/\s+/).map((w: string) => w[0] ?? "").join("").slice(0, 2).toUpperCase();
+
+  if (logoSrc && !imgErr) {
+    return (
+      <img
+        src={logoSrc}
+        alt={company.name}
+        onError={() => setImgErr(true)}
+        className="w-8 h-8 rounded-lg object-contain bg-white border border-slate-200 p-0.5 flex-shrink-0"
+      />
+    );
+  }
+  return (
+    <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+      <span className="text-white text-[10px] font-bold">{initials}</span>
+    </div>
+  );
+}
+
 export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetailRefresh, onCompanyUpdate }: Props) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [showUpload, setShowUpload] = useState(false);
   const [editingWebsite, setEditingWebsite] = useState(false);
@@ -161,6 +199,7 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
       <div className="border-b border-slate-200 px-5 pt-4 pb-0 bg-white flex-shrink-0">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex items-center gap-3 min-w-0">
+            <CompanyLogoHeader company={company} />
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 {/* Editable company name */}
@@ -279,7 +318,14 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
             >
               <Upload size={12} /> Upload report
             </button>
-            {/* Website — editable */}
+            {/* View in Pipeline */}
+            <button
+              onClick={() => router.push(`/crm/pipeline?company=${company.id}`)}
+              className="flex items-center gap-1 px-2.5 py-1.5 border border-slate-200 text-slate-600 text-xs rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              <GitBranch size={12} /> Pipeline
+            </button>
+            {/* Website link (no edit pencil) */}
             {editingWebsite ? (
               <div className="flex items-center gap-1">
                 <input
@@ -296,19 +342,14 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
                 />
               </div>
             ) : company.website ? (
-              <div className="flex items-center gap-1">
-                <a
-                  href={company.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-2.5 py-1.5 border border-slate-200 text-slate-600 text-xs rounded-lg hover:bg-slate-50 transition-colors"
-                >
-                  <ExternalLink size={12} /> Website
-                </a>
-                <button onClick={() => { setWebsiteDraft(company.website ?? ""); setEditingWebsite(true); }} className="text-slate-400 hover:text-slate-600 p-1">
-                  <Pencil size={11} />
-                </button>
-              </div>
+              <a
+                href={company.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 px-2.5 py-1.5 border border-slate-200 text-slate-600 text-xs rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                <ExternalLink size={12} /> Website
+              </a>
             ) : (
               <button
                 onClick={() => { setWebsiteDraft(""); setEditingWebsite(true); }}
@@ -354,7 +395,6 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
                 initiatives={detail.initiatives}
                 intelligence={detail.intelligence}
                 interactions={detail.interactions}
-                signals={detail.signals}
                 onIntelligenceRefresh={handleIntelRefresh}
                 onDetailRefresh={onDetailRefresh}
                 onCompanyUpdate={onCompanyUpdate}

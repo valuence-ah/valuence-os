@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import type { Company } from "@/lib/types";
 import { getInitials } from "@/lib/utils";
 
@@ -82,6 +83,41 @@ function sectorBadgeClass(s: string): string {
   return SECTOR_BADGE[key] ?? "bg-slate-100 text-slate-500";
 }
 
+function extractDomain(website: string | null | undefined): string | null {
+  if (!website) return null;
+  try {
+    return website.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
+  } catch {
+    return null;
+  }
+}
+
+function CompanyLogo({ company }: { company: Company }) {
+  const [imgErr, setImgErr] = useState(false);
+  const domain = extractDomain(company.website);
+  const logoSrc = company.logo_url
+    ? company.logo_url
+    : domain
+    ? `https://logo.clearbit.com/${domain}`
+    : null;
+
+  if (logoSrc && !imgErr) {
+    return (
+      <img
+        src={logoSrc}
+        alt={company.name}
+        onError={() => setImgErr(true)}
+        className="w-7 h-7 rounded-md object-contain bg-white border border-slate-100 p-0.5 flex-shrink-0"
+      />
+    );
+  }
+  return (
+    <div className="w-7 h-7 rounded-md bg-blue-600 flex items-center justify-center flex-shrink-0">
+      <span className="text-white text-[9px] font-bold">{getInitials(company.name)}</span>
+    </div>
+  );
+}
+
 export function PortfolioCompanyCard({ company, selected, onClick }: Props) {
   const health = company.health_status ?? "unknown";
   const borderClass = HEALTH_BORDER[health] ?? "border-l-slate-200";
@@ -96,9 +132,7 @@ export function PortfolioCompanyCard({ company, selected, onClick }: Props) {
       }`}
     >
       <div className="flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-md bg-blue-600 flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-[9px] font-bold">{getInitials(company.name)}</span>
-        </div>
+        <CompanyLogo company={company} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1">
             <p className="text-[13px] font-medium text-slate-800 truncate leading-tight">{company.name}</p>

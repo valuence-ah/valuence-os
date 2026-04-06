@@ -45,93 +45,61 @@ export function PortfolioStatTiles({ companies }: Props) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
       {/* Tile 1: Needs attention */}
-      <div className={`rounded-xl p-4 ${attentionCompanies.length > 0 ? "bg-red-50" : "bg-slate-50"}`}>
-        <div className="flex items-center gap-2 mb-2">
-          <AlertTriangle size={14} className={attentionCompanies.length > 0 ? "text-red-500" : "text-slate-400"} />
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Needs attention</span>
+      <div className={`rounded-lg px-4 py-3 ${attentionCompanies.length > 0 ? "bg-red-50" : "bg-slate-50"}`}>
+        <div className="flex items-center gap-1.5 mb-1">
+          <AlertTriangle size={12} className={attentionCompanies.length > 0 ? "text-red-500" : "text-slate-400"} />
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Needs attention</p>
         </div>
-        {attentionCompanies.length > 0 ? (
-          <>
-            <div className="text-2xl font-bold text-red-700">{attentionCompanies.length}</div>
-            <div className="mt-1 space-y-0.5">
-              {attentionCompanies.slice(0, 2).map(c => (
-                <p key={c.id} className="text-[11px] text-red-600">
-                  {c.name}{c.runway_months !== null ? ` — ${c.runway_months}mo runway` : ""}
-                </p>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="text-2xl font-bold text-slate-400">0</div>
-            <p className="text-[11px] text-slate-400 mt-1">All healthy</p>
-          </>
-        )}
+        <p className={`text-lg font-semibold ${attentionCompanies.length > 0 ? "text-red-700" : "text-slate-400"}`}>
+          {attentionCompanies.length}
+        </p>
+        <p className="text-[11px] mt-0.5 line-clamp-1">
+          {attentionCompanies.length > 0
+            ? <span className="text-red-600">{attentionCompanies.map(c => c.name).join(", ")}</span>
+            : <span className="text-slate-400">All healthy</span>
+          }
+        </p>
       </div>
 
       {/* Tile 2: Actively raising */}
-      <div className="bg-slate-50 rounded-xl p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <TrendingUp size={14} className="text-emerald-500" />
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Actively raising</span>
+      <div className="bg-slate-50 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-1.5 mb-1">
+          <TrendingUp size={12} className="text-emerald-500" />
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Actively raising</p>
         </div>
-        {raisingCompanies.length > 0 ? (
-          <>
-            <div className="text-2xl font-bold text-emerald-700">{raisingCompanies.length}</div>
-            <div className="mt-1 space-y-0.5">
-              {raisingCompanies.slice(0, 2).map(c => (
-                <p key={c.id} className="text-[11px] text-emerald-700">
-                  {c.name}{c.current_raise_target ? ` — ${c.current_raise_target}` : ""}
-                </p>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="text-2xl font-bold text-slate-400">0</div>
-            <p className="text-[11px] text-slate-400 mt-1">No active raises</p>
-          </>
-        )}
+        <p className={`text-lg font-semibold ${raisingCompanies.length > 0 ? "text-emerald-700" : "text-slate-400"}`}>
+          {raisingCompanies.length}
+        </p>
+        <p className="text-[11px] mt-0.5 line-clamp-1">
+          {raisingCompanies.length > 0
+            ? <span className="text-emerald-700">{raisingCompanies.slice(0, 2).map(c => c.name).join(", ")}</span>
+            : <span className="text-slate-400">No active raises</span>
+          }
+        </p>
       </div>
 
       {/* Tile 3: Stale contact */}
-      <div className="bg-slate-50 rounded-xl p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Clock size={14} className="text-slate-400" />
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Stale contact</span>
+      <div className="bg-slate-50 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-1.5 mb-1">
+          <Clock size={12} className="text-slate-400" />
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Stale contact</p>
         </div>
-        {stalest ? (
-          <>
-            <div className={`text-2xl font-bold ${staleDays! > 60 ? "text-red-600" : staleDays! > 30 ? "text-amber-600" : "text-slate-700"}`}>
-              {staleDays}d
-            </div>
-            <p className="text-[11px] text-slate-500 mt-1">{stalest.name}</p>
-          </>
-        ) : (
-          <>
-            <div className="text-2xl font-bold text-slate-400">—</div>
-            <p className="text-[11px] text-slate-400 mt-1">No contact data</p>
-          </>
-        )}
+        <p className={`text-lg font-semibold ${staleDays !== null && staleDays > 60 ? "text-red-600" : staleDays !== null && staleDays > 30 ? "text-amber-600" : "text-slate-700"}`}>
+          {staleDays !== null ? `${staleDays}d` : "—"}
+        </p>
+        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{stalest?.name ?? "No contact data"}</p>
       </div>
 
       {/* Tile 4: Next board meeting */}
-      <div className="bg-slate-50 rounded-xl p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Calendar size={14} className="text-blue-400" />
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Next board</span>
+      <div className="bg-slate-50 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-1.5 mb-1">
+          <Calendar size={12} className="text-blue-400" />
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Next board</p>
         </div>
-        {nextBoard ? (
-          <>
-            <div className="text-2xl font-bold text-blue-700">{nextBoard.days}d</div>
-            <p className="text-[11px] text-slate-500 mt-1">{nextBoard.c.name}</p>
-          </>
-        ) : (
-          <>
-            <div className="text-2xl font-bold text-slate-400">—</div>
-            <p className="text-[11px] text-slate-400 mt-1">No board dates set</p>
-          </>
-        )}
+        <p className={`text-lg font-semibold ${nextBoard ? "text-blue-700" : "text-slate-400"}`}>
+          {nextBoard ? `${nextBoard.days}d` : "—"}
+        </p>
+        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{nextBoard?.c.name ?? "No board dates set"}</p>
       </div>
     </div>
   );
