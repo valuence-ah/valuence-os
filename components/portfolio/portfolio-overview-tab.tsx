@@ -167,8 +167,8 @@ function CompanyNewsPanel({ companyId }: { companyId: string }) {
       <div className="flex items-center justify-between mb-2">
         <p className="text-[10px] text-slate-400">
           {lastUpdated
-            ? `(updated ${lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`
-            : loading ? "" : "(not yet loaded)"}
+            ? `(updated ${lastUpdated.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" })})`
+            : loading ? "" : ""}
         </p>
         <button
           onClick={fetchNews}
