@@ -37,14 +37,16 @@ export async function GET(req: NextRequest) {
     published_at: string;
   }> = [];
 
-  // 1. Search sourcing_signals for company-tagged news
+  // 1. Search sourcing_signals for company-tagged news (last 30 days only)
+  const thirtyDaysAgoISO = new Date(Date.now() - 30 * 86400000).toISOString();
   const { data: signals } = await supabase
     .from("sourcing_signals")
     .select("id, title, url, summary, source, published_date")
     .or(`company_id.eq.${companyId},title.ilike.%${company.name}%`)
     .in("signal_type", ["news"])
+    .gte("published_date", thirtyDaysAgoISO)
     .order("published_date", { ascending: false })
-    .limit(10);
+    .limit(15);
 
   for (const a of signals ?? []) {
     articles.push({
@@ -101,10 +103,47 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Normalize URL for dedup (strip UTM params, trailing slashes, protocol differences)
+  function normalizeUrl(url: string): string {
+    try {
+      const u = new URL(url);
+      // Remove common tracking params
+      ["utm_source","utm_medium","utm_campaign","utm_term","utm_content","ref","source","fbclid","gclid"].forEach(p => u.searchParams.delete(p));
+      return u.hostname.replace(/^www\./, "") + u.pathname.replace(/\/$/, "") + u.search;
+    } catch { return url; }
+  }
+
+  // Normalize title for similarity dedup (lowercase, remove punctuation, collapse whitespace)
+  function normalizeTitle(t: string): string {
+    return t.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  // Deduplicate: first by normalized URL, then by title similarity (>= 70% word overlap)
+  const seenUrls = new Set<string>();
+  const seenTitles: string[] = [];
+  const deduplicated = articles.filter(a => {
+    const nu = normalizeUrl(a.url);
+    if (seenUrls.has(nu)) return false;
+    seenUrls.add(nu);
+
+    const nt = normalizeTitle(a.title);
+    const ntWords = new Set(nt.split(" ").filter(w => w.length > 3));
+    const isDupe = seenTitles.some(existing => {
+      const exWords = new Set(existing.split(" ").filter(w => w.length > 3));
+      if (!ntWords.size || !exWords.size) return false;
+      const intersection = [...ntWords].filter(w => exWords.has(w)).length;
+      const overlap = intersection / Math.min(ntWords.size, exWords.size);
+      return overlap >= 0.7;
+    });
+    if (isDupe) return false;
+    seenTitles.push(nt);
+    return true;
+  });
+
   // Sort by date, newest first
-  articles.sort((a, b) =>
+  deduplicated.sort((a, b) =>
     new Date(b.published_at).getTime() - new Date(a.published_at).getTime()
   );
 
-  return NextResponse.json({ articles: articles.slice(0, 10) });
+  return NextResponse.json({ articles: deduplicated.slice(0, 10) });
 }

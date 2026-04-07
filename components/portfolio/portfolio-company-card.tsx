@@ -98,7 +98,7 @@ function CompanyLogo({ company }: { company: Company }) {
   const logoSrc = company.logo_url
     ? company.logo_url
     : domain
-    ? `https://logo.clearbit.com/${domain}`
+    ? `https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=64`
     : null;
 
   if (logoSrc && !imgErr) {

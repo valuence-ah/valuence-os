@@ -17,13 +17,20 @@ export const maxDuration = 300;
 async function extractFromBuffer(buffer: Buffer, mimeType: string, fileName: string): Promise<string> {
   const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
 
-  // PDF — use pdf-parse (reliable in Node.js serverless)
+  // PDF — use pdf-parse (direct lib path avoids serverless test-harness issue)
   if (mimeType === "application/pdf" || ext === "pdf") {
     try {
+      // Use the internal lib file to avoid pdf-parse's test-file loader (@napi warning)
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse");
-      const result = await pdfParse(buffer);
-      return (result.text ?? "").slice(0, 100000);
+      const pdfParse = require("pdf-parse/lib/pdf-parse.js");
+      const result = await pdfParse(buffer, { max: 0 });
+      const text = (result.text ?? "").trim();
+      if (text.length >= 10) return text.slice(0, 100000);
+      // Fallback: try with default options
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse2 = require("pdf-parse/lib/pdf-parse.js");
+      const result2 = await pdfParse2(buffer);
+      return (result2.text ?? "").slice(0, 100000);
     } catch {
       return "";
     }

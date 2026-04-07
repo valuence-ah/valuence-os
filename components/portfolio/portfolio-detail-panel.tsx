@@ -134,7 +134,7 @@ function CompanyLogoHeader({ company }: { company: Company }) {
   const logoSrc = company.logo_url
     ? company.logo_url
     : domain
-    ? `https://logo.clearbit.com/${domain}`
+    ? `https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128`
     : null;
   const initials = (company.name ?? "?").split(/\s+/).map((w: string) => w[0] ?? "").join("").slice(0, 2).toUpperCase();
 

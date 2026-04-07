@@ -134,7 +134,9 @@ function RunwayBar({ months }: { months: number }) {
 }
 
 function CompanyNewsPanel({ companyId }: { companyId: string }) {
-  const [newsItems, setNewsItems] = useState<Array<{id: string; title: string; url: string; summary: string; source: string; published_at: string}>>([]);
+  type NewsItem = { id: string; title: string; url: string; summary: string; source: string; published_at: string };
+  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -152,14 +154,20 @@ function CompanyNewsPanel({ companyId }: { companyId: string }) {
     fetchNews();
   }, [companyId]);
 
+  function dismiss(id: string) {
+    setDismissed(prev => new Set([...prev, id]));
+  }
+
+  const visible = newsItems.filter(item => !dismissed.has(item.id));
+
   if (loading) return <div className="space-y-2">{[0,1,2].map(i => <div key={i} className="h-14 bg-slate-50 rounded-lg animate-pulse" />)}</div>;
 
-  if (newsItems.length === 0) return <p className="text-xs text-slate-400 py-4 text-center">No recent news found</p>;
+  if (visible.length === 0) return <p className="text-xs text-slate-400 py-4 text-center">No recent news found</p>;
 
   return (
     <div className="space-y-2 max-h-[240px] overflow-y-auto">
-      {newsItems.map(item => (
-        <div key={item.id} className="bg-blue-50 rounded-lg px-3 py-2.5 flex items-start gap-2.5">
+      {visible.map(item => (
+        <div key={item.id} className="bg-blue-50 rounded-lg px-3 py-2.5 flex items-start gap-2.5 group">
           <div className="flex-1 min-w-0">
             <a href={item.url} target="_blank" rel="noopener noreferrer"
               className="text-xs font-medium text-blue-900 hover:underline line-clamp-1 block">
@@ -170,6 +178,13 @@ function CompanyNewsPanel({ companyId }: { companyId: string }) {
             )}
             <p className="text-[10px] text-blue-500 mt-0.5">{item.source} · {timeAgo(item.published_at)}</p>
           </div>
+          <button
+            onClick={() => dismiss(item.id)}
+            title="Dismiss"
+            className="flex-shrink-0 mt-0.5 w-5 h-5 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors opacity-0 group-hover:opacity-100"
+          >
+            <X size={11} />
+          </button>
         </div>
       ))}
     </div>
