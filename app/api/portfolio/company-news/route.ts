@@ -37,12 +37,13 @@ export async function GET(req: NextRequest) {
     published_at: string;
   }> = [];
 
-  // 1. Search sourcing_signals for company-tagged news (last 30 days only)
+  // 1. Search sourcing_signals tagged explicitly to this company (last 30 days only)
+  // NOTE: No partial-title matching — only exact company_id matches to avoid false positives
   const thirtyDaysAgoISO = new Date(Date.now() - 30 * 86400000).toISOString();
   const { data: signals } = await supabase
     .from("sourcing_signals")
     .select("id, title, url, summary, source, published_date")
-    .or(`company_id.eq.${companyId},title.ilike.%${company.name}%`)
+    .eq("company_id", companyId)
     .in("signal_type", ["news"])
     .gte("published_date", thirtyDaysAgoISO)
     .order("published_date", { ascending: false })
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // 2. Exa API search for company news
+  // 2. Exa API search for company news (exact name, last 30 days)
   const exaKey = process.env.EXA_API_KEY;
   if (exaKey && company.name) {
     try {
@@ -71,12 +72,12 @@ export async function GET(req: NextRequest) {
           "x-api-key": exaKey,
         },
         body: JSON.stringify({
-          query: `"${company.name}" news funding startup`,
-          numResults: 5,
+          query: `"${company.name}"`,
+          numResults: 8,
           startPublishedDate: thirtyDaysAgo,
-          useAutoprompt: true,
+          useAutoprompt: false,
           contents: {
-            summary: { query: `${company.name} news` },
+            summary: { query: `${company.name} latest news` },
           },
         }),
       });
@@ -84,12 +85,16 @@ export async function GET(req: NextRequest) {
       if (exaRes.ok) {
         const exaData = await exaRes.json();
         const results = exaData.results ?? [];
+        const nameLower = company.name.toLowerCase();
         for (const r of results) {
+          const title: string = r.title ?? "";
+          // Only include if the exact company name appears in the title
+          if (!title.toLowerCase().includes(nameLower)) continue;
           // Deduplicate by URL
           if (!articles.find(a => a.url === r.url)) {
             articles.push({
               id: r.id ?? r.url,
-              title: r.title ?? "",
+              title,
               url: r.url ?? "",
               summary: r.summary ?? r.text?.substring(0, 200) ?? "",
               source: new URL(r.url).hostname.replace(/^www\./, ""),

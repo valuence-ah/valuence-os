@@ -10,8 +10,8 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
   // ── Pass 1: pdf-parse ─────────────────────────────────────────────────────
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require("pdf-parse");
-    const data = await pdfParse(buffer, { max: 0 });
+    const pdfParse = require("pdf-parse/lib/pdf-parse.js");
+    const data = await pdfParse(buffer);
     const text = (data.text ?? "").trim();
     if (text.length > 100) {
       return text.slice(0, 50000);

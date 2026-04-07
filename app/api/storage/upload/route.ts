@@ -29,8 +29,8 @@ async function extractTextFast(buffer: Buffer, mimeType: string, fileName: strin
   if (mimeType === "application/pdf" || ext === "pdf") {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse");
-      const data = await pdfParse(buffer, { max: 0 });
+      const pdfParse = require("pdf-parse/lib/pdf-parse.js");
+      const data = await pdfParse(buffer);
       return ((data.text ?? "").trim()).slice(0, 50000);
     } catch {
       return ""; // image-based PDF — backfill-deck will handle it

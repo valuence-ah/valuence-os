@@ -17,18 +17,15 @@ export const maxDuration = 300;
 async function extractFromBuffer(buffer: Buffer, mimeType: string, fileName: string): Promise<string> {
   const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
 
-  // PDF — use pdf-parse v2 API: new PDFParse({ data: buffer }).getText()
+  // PDF — use pdf-parse v1 (lib path skips the test-file loader that breaks in serverless)
   if (mimeType === "application/pdf" || ext === "pdf") {
     try {
-      // pdf-parse v2 uses a class-based API; { data: buffer } loads from a Buffer
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { PDFParse } = require("pdf-parse");
-      const parser = new PDFParse({ data: buffer });
-      const result = await parser.getText();
-      await parser.destroy().catch(() => {});
-      return (result.text ?? "").slice(0, 100000);
+      const pdfParse = require("pdf-parse/lib/pdf-parse.js");
+      const data = await pdfParse(buffer);
+      return (data.text ?? "").slice(0, 100000);
     } catch (e) {
-      console.error("pdf-parse error:", e instanceof Error ? e.message : String(e));
+      console.error("pdf-parse extraction error:", e instanceof Error ? e.message : String(e));
       return "";
     }
   }
