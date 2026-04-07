@@ -1,20 +1,38 @@
-// ─── Cron: Check Andrew's Inbox → New Contacts ───────────────────────────────
+// ─── Cron: Check Team Inboxes → New Contacts ─────────────────────────────────
 // Runs every 15 minutes via Vercel Cron (see vercel.json).
-// Fetches emails received in the last hour from andrew@valuence.vc,
-// skips noise (no-reply, newsletters), extracts contact info with Claude,
-// and creates pending contacts in Supabase.
+// Reads inbox + sent items for EVERY mailbox in OUTLOOK_MAILBOXES (comma-sep).
+// Skips noise, extracts contact info with Claude, creates pending contacts.
 //
-// Also callable manually via: POST /api/cron/check-inbox
-// Requires: MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET
+// Multi-user: just add new @valuence.vc addresses to OUTLOOK_MAILBOXES.
+// All mailboxes share one client_credentials token (tenant-wide Mail.Read).
+//
+// Callable manually: POST /api/cron/check-inbox
+// Required env vars:
+//   MICROSOFT_TENANT_ID      — Azure AD Directory (tenant) ID
+//   MICROSOFT_CLIENT_ID      — App registration client ID
+//   MICROSOFT_CLIENT_SECRET  — App registration client secret
+//   OUTLOOK_MAILBOXES        — comma-separated, e.g. "andrew@valuence.vc,partner@valuence.vc"
+//                              defaults to "andrew@valuence.vc"
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getRecentEmails } from "@/lib/microsoft-graph";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const ANDREW_MAILBOX = "andrew@valuence.vc";
+// ── Config ────────────────────────────────────────────────────────────────────
 
-// Patterns to skip (newsletters, no-reply, marketing, internal)
+// All @valuence.vc mailboxes to monitor — add new team members here via env var
+const MAILBOXES: string[] = (
+  process.env.OUTLOOK_MAILBOXES ?? "andrew@valuence.vc"
+)
+  .split(",")
+  .map((m) => m.trim().toLowerCase())
+  .filter(Boolean);
+
+// Internal domain — never create contacts for @valuence.vc addresses
+const INTERNAL_DOMAIN = "valuence.vc";
+
+// Noise patterns — newsletters, automated senders, no-reply addresses
 const SKIP_PATTERNS = [
   /no.?reply/i,
   /noreply/i,
@@ -24,13 +42,22 @@ const SKIP_PATTERNS = [
   /updates?@/i,
   /alerts?@/i,
   /support@/i,
-  /hello@valuence/i,
-  /andrew@valuence/i,
+  /mailer-daemon/i,
+  /postmaster/i,
+  /bounce/i,
+  /unsubscribe/i,
+  /linkedin\.com/i,
+  /twitter\.com/i,
+  /calendly\.com/i,
 ];
 
-function shouldSkip(email: string, name: string): boolean {
-  return SKIP_PATTERNS.some((p) => p.test(email) || p.test(name));
+function shouldSkip(email: string): boolean {
+  const lower = email.toLowerCase();
+  if (lower.endsWith(`@${INTERNAL_DOMAIN}`)) return true;
+  return SKIP_PATTERNS.some((p) => p.test(lower));
 }
+
+// ── Contact extraction ────────────────────────────────────────────────────────
 
 interface ExtractedContact {
   first_name: string;
@@ -48,8 +75,7 @@ async function extractContact(
   bodyPreview: string
 ): Promise<ExtractedContact> {
   const client = new Anthropic();
-
-  const prompt = `Extract contact information from this email metadata. Return ONLY valid JSON.
+  const prompt = `Extract contact information from this email metadata. Return ONLY valid JSON, nothing else.
 
 Sender name: ${senderName}
 Sender email: ${senderEmail}
@@ -61,9 +87,9 @@ Return JSON:
   "first_name": "...",
   "last_name": "...",
   "email": "${senderEmail}",
-  "company_name": "... or null",
-  "title": "... or null",
-  "notes": "one sentence about what they emailed about, or null"
+  "company_name": "company name if clear, otherwise null",
+  "title": "job title if mentioned, otherwise null",
+  "notes": "one sentence about context, or null"
 }`;
 
   const response = await client.messages.create({
@@ -73,106 +99,171 @@ Return JSON:
   });
 
   const text = response.content.find((b) => b.type === "text");
-  if (!text || text.type !== "text") throw new Error("No text response from Claude");
-
+  if (!text || text.type !== "text") throw new Error("No text response");
   const match = text.text.match(/\{[\s\S]*?\}/);
-  if (!match) throw new Error("No JSON in Claude response");
-
+  if (!match) throw new Error("No JSON in response");
   return JSON.parse(match[0]) as ExtractedContact;
 }
 
+// ── Candidate type ────────────────────────────────────────────────────────────
+
+interface EmailCandidate {
+  email: string;
+  name: string;
+  subject: string;
+  bodyPreview: string;
+  seenInMailbox: string;
+  direction: "inbound" | "outbound";
+}
+
+// ── Route handler ─────────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
-  // Verify Vercel cron secret or authenticated user
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get("authorization");
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Allow Vercel Cron or manual call with optional ?since= param
+  if (
+    !process.env.MICROSOFT_TENANT_ID ||
+    !process.env.MICROSOFT_CLIENT_ID ||
+    !process.env.MICROSOFT_CLIENT_SECRET
+  ) {
+    return NextResponse.json(
+      {
+        error: "Microsoft Graph not configured",
+        setup:
+          "Add MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET to Vercel env vars. " +
+          "See: https://learn.microsoft.com/en-us/graph/auth-v2-service",
+      },
+      { status: 503 }
+    );
+  }
+
   const url = new URL(req.url);
   const since =
     url.searchParams.get("since") ??
-    new Date(Date.now() - 60 * 60 * 1000).toISOString(); // default: last 1 hour
-
-  let emails;
-  try {
-    emails = await getRecentEmails(ANDREW_MAILBOX, since, 50);
-  } catch (err) {
-    const msg = String(err);
-    if (msg.includes("not configured")) {
-      return NextResponse.json(
-        {
-          error: "Microsoft Graph not configured",
-          setup:
-            "Add MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET to .env.local. See: https://learn.microsoft.com/en-us/graph/auth-v2-service",
-        },
-        { status: 503 }
-      );
-    }
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
+    new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
   const supabase = createAdminClient();
-  const results: { email: string; action: string }[] = [];
+  const perMailbox: Record<string, { inbox: number; sent: number; errors: string[] }> = {};
+  const contactResults: { email: string; mailbox: string; action: string }[] = [];
 
-  for (const msg of emails) {
-    const senderEmail = msg.from.emailAddress.address.toLowerCase();
-    const senderName = msg.from.emailAddress.name ?? "";
+  // Global dedup across all mailboxes in this cron run
+  const processedThisRun = new Set<string>();
 
-    if (shouldSkip(senderEmail, senderName)) {
-      results.push({ email: senderEmail, action: "skipped (noise)" });
-      continue;
-    }
+  for (const mailbox of MAILBOXES) {
+    perMailbox[mailbox] = { inbox: 0, sent: 0, errors: [] };
+    const candidates: EmailCandidate[] = [];
 
-    // Check if contact already exists
-    const { data: existing } = await supabase
-      .from("contacts")
-      .select("id")
-      .eq("email", senderEmail)
-      .maybeSingle();
-
-    if (existing) {
-      results.push({ email: senderEmail, action: "already exists" });
-      continue;
-    }
-
-    // Extract contact info with Claude
-    let contact: ExtractedContact;
+    // Inbox — contact is the sender
     try {
-      contact = await extractContact(
-        senderName,
-        senderEmail,
-        msg.subject,
-        msg.bodyPreview
+      const inbox = await getRecentEmails(mailbox, since, 50, "inbox");
+      perMailbox[mailbox].inbox = inbox.length;
+      for (const msg of inbox) {
+        candidates.push({
+          email: msg.from.emailAddress.address.toLowerCase(),
+          name: msg.from.emailAddress.name ?? "",
+          subject: msg.subject,
+          bodyPreview: msg.bodyPreview,
+          seenInMailbox: mailbox,
+          direction: "inbound",
+        });
+      }
+    } catch (err) {
+      perMailbox[mailbox].errors.push(
+        `inbox: ${err instanceof Error ? err.message : String(err)}`
       );
-    } catch {
-      // Fallback: use raw email data
-      const nameParts = senderName.trim().split(" ");
-      contact = {
-        first_name: nameParts[0] || senderEmail.split("@")[0],
-        last_name: nameParts.slice(1).join(" ") || "(unknown)",
-        email: senderEmail,
-        company_name: undefined,
-        title: undefined,
-        notes: `Emailed: ${msg.subject}`,
-      };
     }
 
-    // Find or create company stub
-    let companyId: string | null = null;
-    if (contact.company_name) {
-      const { data: company } = await supabase
-        .from("companies")
+    // Sent items — contacts are the recipients
+    try {
+      const sent = await getRecentEmails(mailbox, since, 50, "sentItems");
+      perMailbox[mailbox].sent = sent.length;
+      for (const msg of sent) {
+        for (const r of msg.toRecipients ?? []) {
+          candidates.push({
+            email: r.emailAddress.address.toLowerCase(),
+            name: r.emailAddress.name ?? "",
+            subject: msg.subject,
+            bodyPreview: msg.bodyPreview,
+            seenInMailbox: mailbox,
+            direction: "outbound",
+          });
+        }
+      }
+    } catch (err) {
+      perMailbox[mailbox].errors.push(
+        `sent: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+
+    // Process candidates
+    for (const candidate of candidates) {
+      if (shouldSkip(candidate.email)) continue;
+      if (processedThisRun.has(candidate.email)) continue;
+      processedThisRun.add(candidate.email);
+
+      // Skip if already in DB
+      const { data: existing } = await supabase
+        .from("contacts")
         .select("id")
-        .ilike("name", `%${contact.company_name}%`)
-        .limit(1)
+        .eq("email", candidate.email)
         .maybeSingle();
 
-      companyId = company?.id ?? null;
+      if (existing) {
+        contactResults.push({ email: candidate.email, mailbox, action: "already exists" });
+        continue;
+      }
 
-      if (!companyId) {
-        const domain = senderEmail.split("@")[1];
+      // Extract with Claude, fall back to raw data on error
+      let contact: ExtractedContact;
+      try {
+        contact = await extractContact(
+          candidate.name,
+          candidate.email,
+          candidate.subject,
+          candidate.bodyPreview
+        );
+      } catch {
+        const parts = candidate.name.trim().split(" ");
+        contact = {
+          first_name: parts[0] || candidate.email.split("@")[0],
+          last_name: parts.slice(1).join(" ") || "",
+          email: candidate.email,
+          notes: `${candidate.direction === "outbound" ? "Emailed by" : "Emailed"} ${mailbox}: ${candidate.subject}`,
+        };
+      }
+
+      // Find or create company stub
+      let companyId: string | null = null;
+      const domain = candidate.email.split("@")[1];
+
+      if (contact.company_name) {
+        // Try matching by name first
+        const { data: byName } = await supabase
+          .from("companies")
+          .select("id")
+          .ilike("name", `%${contact.company_name}%`)
+          .limit(1)
+          .maybeSingle();
+        companyId = byName?.id ?? null;
+      }
+
+      if (!companyId && domain) {
+        // Try matching by website domain
+        const { data: byDomain } = await supabase
+          .from("companies")
+          .select("id")
+          .ilike("website", `%${domain}%`)
+          .limit(1)
+          .maybeSingle();
+        companyId = byDomain?.id ?? null;
+      }
+
+      if (!companyId && contact.company_name) {
+        // Create new company stub
         const { data: newCo } = await supabase
           .from("companies")
           .insert({
@@ -185,25 +276,34 @@ export async function POST(req: NextRequest) {
           .single();
         companyId = newCo?.id ?? null;
       }
+
+      const sourceNote = [
+        contact.notes,
+        `Sourced from ${mailbox} (${candidate.direction})`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+      await supabase.from("contacts").insert({
+        first_name: contact.first_name,
+        last_name: contact.last_name,
+        email: candidate.email,
+        title: contact.title ?? null,
+        company_id: companyId,
+        type: "other",
+        status: "pending",
+        notes: sourceNote,
+      });
+
+      contactResults.push({ email: candidate.email, mailbox, action: "created" });
     }
-
-    await supabase.from("contacts").insert({
-      first_name: contact.first_name,
-      last_name: contact.last_name,
-      email: senderEmail,
-      title: contact.title ?? null,
-      company_id: companyId,
-      type: "other",
-      status: "pending",
-      notes: contact.notes ?? null,
-    });
-
-    results.push({ email: senderEmail, action: "created" });
   }
 
   return NextResponse.json({
     success: true,
-    checked: emails.length,
-    results,
+    mailboxes_checked: MAILBOXES.length,
+    mailboxes: perMailbox,
+    contacts_processed: contactResults.length,
+    results: contactResults,
   });
 }

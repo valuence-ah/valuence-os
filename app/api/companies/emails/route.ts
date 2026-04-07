@@ -11,7 +11,9 @@ import { anthropic } from "@ai-sdk/anthropic";
 
 export const maxDuration = 30;
 
-const MAILBOX = process.env.OUTLOOK_MAILBOX ?? "andrew@valuence.vc";
+// All configured mailboxes — same env var as check-inbox cron
+const MAILBOXES = (process.env.OUTLOOK_MAILBOXES ?? process.env.OUTLOOK_MAILBOX ?? "andrew@valuence.vc")
+  .split(",").map(m => m.trim()).filter(Boolean);
 
 const SKIP_PATTERNS = [
   /no.?reply/i, /noreply/i, /do.not.reply/i,
@@ -48,30 +50,29 @@ export async function GET(req: NextRequest) {
     contacts.map(c => c.email?.toLowerCase()).filter(Boolean) as string[]
   );
 
-  // Fetch inbox + sent items from Graph
-  let inbox: GraphEmail[] = [];
-  let sent: GraphEmail[] = [];
-  try {
-    [inbox, sent] = await Promise.all([
-      getRecentEmails(MAILBOX, undefined, 80, "inbox"),
-      getRecentEmails(MAILBOX, undefined, 80, "sentItems"),
-    ]);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("Graph email fetch error:", msg);
-
-    // If it's a config error (missing env vars), return 503
-    if (msg.includes("not configured")) {
-      return NextResponse.json({ emails: [], graphError: "not_configured", message: msg }, { status: 200 }); // 200 so UI doesn't break
+  // Fetch inbox + sent items from all configured mailboxes
+  const allFetched: GraphEmail[] = [];
+  for (const mailbox of MAILBOXES) {
+    try {
+      const [inbox, sent] = await Promise.all([
+        getRecentEmails(mailbox, undefined, 80, "inbox"),
+        getRecentEmails(mailbox, undefined, 80, "sentItems"),
+      ]);
+      allFetched.push(...inbox, ...sent);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`Graph email fetch error (${mailbox}):`, msg);
+      if (msg.includes("not configured")) {
+        return NextResponse.json({ emails: [], graphError: "not_configured", message: msg }, { status: 200 });
+      }
+      // Continue with other mailboxes on fetch error
     }
-    // Auth/fetch error
-    return NextResponse.json({ emails: [], graphError: "fetch_failed", message: msg }, { status: 200 });
   }
 
-  // Merge and deduplicate by subject+date
+  // Deduplicate across all mailboxes by subject+date
   const seen = new Set<string>();
   const allEmails: GraphEmail[] = [];
-  for (const e of [...inbox, ...sent]) {
+  for (const e of allFetched) {
     const key = `${e.subject}__${e.receivedDateTime}`;
     if (!seen.has(key)) { seen.add(key); allEmails.push(e); }
   }
