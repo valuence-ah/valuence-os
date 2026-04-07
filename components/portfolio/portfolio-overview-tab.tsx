@@ -138,21 +138,22 @@ function CompanyNewsPanel({ companyId }: { companyId: string }) {
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  useEffect(() => {
-    async function fetchNews() {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/portfolio/company-news?company_id=${companyId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setNewsItems(data.articles ?? []);
-        }
-      } catch { /* silent */ }
-      finally { setLoading(false); }
-    }
-    fetchNews();
-  }, [companyId]);
+  async function fetchNews() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/portfolio/company-news?company_id=${companyId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setNewsItems(data.articles ?? []);
+        setLastUpdated(new Date());
+      }
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { fetchNews(); }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function dismiss(id: string) {
     setDismissed(prev => new Set([...prev, id]));
@@ -160,33 +161,54 @@ function CompanyNewsPanel({ companyId }: { companyId: string }) {
 
   const visible = newsItems.filter(item => !dismissed.has(item.id));
 
-  if (loading) return <div className="space-y-2">{[0,1,2].map(i => <div key={i} className="h-14 bg-slate-50 rounded-lg animate-pulse" />)}</div>;
-
-  if (visible.length === 0) return <p className="text-xs text-slate-400 py-4 text-center">No recent news found</p>;
-
   return (
-    <div className="space-y-2 max-h-[240px] overflow-y-auto">
-      {visible.map(item => (
-        <div key={item.id} className="bg-blue-50 rounded-lg px-3 py-2.5 flex items-start gap-2.5 group">
-          <div className="flex-1 min-w-0">
-            <a href={item.url} target="_blank" rel="noopener noreferrer"
-              className="text-xs font-medium text-blue-900 hover:underline line-clamp-1 block">
-              {item.title}
-            </a>
-            {item.summary && (
-              <p className="text-[11px] text-blue-700 mt-0.5 line-clamp-2">{stripCiteTags(item.summary)}</p>
-            )}
-            <p className="text-[10px] text-blue-500 mt-0.5">{item.source} · {timeAgo(item.published_at)}</p>
-          </div>
-          <button
-            onClick={() => dismiss(item.id)}
-            title="Dismiss"
-            className="flex-shrink-0 mt-0.5 w-5 h-5 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors opacity-0 group-hover:opacity-100"
-          >
-            <X size={11} />
-          </button>
+    <div>
+      {/* Sub-header row with last-updated + refresh button */}
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] text-slate-400">
+          {lastUpdated
+            ? `(updated ${lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`
+            : loading ? "" : "(not yet loaded)"}
+        </p>
+        <button
+          onClick={fetchNews}
+          disabled={loading}
+          className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 disabled:opacity-40 transition-colors"
+        >
+          <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
+          {loading ? "Loading…" : "Refresh"}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">{[0,1,2].map(i => <div key={i} className="h-14 bg-slate-50 rounded-lg animate-pulse" />)}</div>
+      ) : visible.length === 0 ? (
+        <p className="text-xs text-slate-400 py-4 text-center">No recent news found</p>
+      ) : (
+        <div className="space-y-2 max-h-[240px] overflow-y-auto">
+          {visible.map(item => (
+            <div key={item.id} className="bg-blue-50 rounded-lg px-3 py-2.5 flex items-start gap-2.5 group">
+              <div className="flex-1 min-w-0">
+                <a href={item.url} target="_blank" rel="noopener noreferrer"
+                  className="text-xs font-medium text-blue-900 hover:underline line-clamp-1 block">
+                  {item.title}
+                </a>
+                {item.summary && (
+                  <p className="text-[11px] text-blue-700 mt-0.5 line-clamp-2">{stripCiteTags(item.summary)}</p>
+                )}
+                <p className="text-[10px] text-blue-500 mt-0.5">{item.source} · {timeAgo(item.published_at)}</p>
+              </div>
+              <button
+                onClick={() => dismiss(item.id)}
+                title="Dismiss"
+                className="flex-shrink-0 mt-0.5 w-5 h-5 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }

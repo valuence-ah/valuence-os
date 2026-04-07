@@ -401,7 +401,7 @@ export function PortfolioIntelligenceTab({
               className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-700 disabled:opacity-50"
             >
               {isRefreshing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
-              {isRefreshing ? `Researching ${TYPE_LABELS[type]} for ${companyName}…` : "Refresh with AI"}
+              {isRefreshing ? `Researching ${TYPE_LABELS[type]} for ${companyName}…` : "Refresh"}
             </button>
           </div>
         </div>
@@ -460,7 +460,7 @@ export function PortfolioIntelligenceTab({
             </span>
           </div>
         ) : items.length === 0 ? (
-          <p className="text-xs text-slate-400">No entries yet. Click &quot;Refresh with AI&quot; to generate candidates.</p>
+          <p className="text-xs text-slate-400">No entries yet. Click &quot;Refresh&quot; to generate candidates.</p>
         ) : (
           <div className={cardLayout === "grid" ? "space-y-2" : ""}>
             {items.map(item => (
