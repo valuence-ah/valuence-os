@@ -8,6 +8,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact, Interaction, Deal, CompanyType } from "@/lib/types";
+import type { CompanyDocument } from "@/app/(dashboard)/crm/companies/[id]/page";
 import {
   formatCurrency, formatDate, timeAgo,
   COMPANY_TYPE_COLORS, DEAL_STAGE_COLORS, DEAL_STAGE_LABELS,
@@ -97,6 +98,7 @@ interface Props {
   interactions: Interaction[];
   deals: Deal[];
   memos: MemoSummary[];
+  documents: CompanyDocument[];
 }
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -1047,6 +1049,7 @@ export function CompanyDetailClient({
   interactions: initInteractions,
   deals,
   memos,
+  documents,
 }: Props) {
   const supabase = createClient();
 
@@ -1236,12 +1239,12 @@ export function CompanyDetailClient({
 
   // ── 4-cell stat bar (always 4 cells, last = Last Contact) ─────────────────
   type StatCell = { label: string; value: React.ReactNode };
-  const lastContactCell: StatCell = { label: "Last Contact", value: formatDate(company.last_contact_date) };
+  const lastContactCell: StatCell = { label: "Last Contact", value: company.last_contact_date ? <span className="text-xs font-medium text-slate-600">{formatDate(company.last_contact_date)}</span> : "—" };
 
   const statBar: StatCell[] = (() => {
     if (typeGroup === "startup") return [
-      { label: "Sector",      value: company.sectors?.[0] ? <span className="capitalize">{company.sectors[0]}</span> : "—" },
-      { label: "Sub-sector",  value: company.sectors?.[1] ? <span className="capitalize">{company.sectors[1]}</span> : "—" },
+      { label: "Sector",      value: company.sectors?.[0] ? <span className="badge text-xs bg-slate-100 text-slate-700 capitalize">{company.sectors[0]}</span> : "—" },
+      { label: "Sub-sector",  value: company.sectors?.[1] ? <span className="badge text-xs bg-slate-100 text-slate-700 capitalize">{company.sectors[1]}</span> : "—" },
       { label: "Status",      value: company.deal_status
           ? <span className={cn("badge text-xs", DEAL_STAGE_COLORS[company.deal_status] ?? "bg-slate-100 text-slate-600")}>{DEAL_STAGE_LABELS[company.deal_status] ?? company.deal_status.replace(/_/g, " ")}</span>
           : "—" },
@@ -1450,7 +1453,8 @@ export function CompanyDetailClient({
 
       {/* ── OVERVIEW TAB ── */}
       {tab === "Overview" && (
-        <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4">
+        <>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
           {/* LEFT — shared: contacts · activity · notes */}
           <div className="card p-5 space-y-5">
@@ -1527,21 +1531,32 @@ export function CompanyDetailClient({
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Documents</h3>
                   </div>
-                  {/* Pitch deck */}
+                  {/* Pitch deck — from documents table (type="deck") */}
                   <div className="mb-3">
                     <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide mb-1.5">Pitch Deck</p>
-                    {company.pitch_deck_url ? (
-                      <a
-                        href={company.pitch_deck_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg font-medium"
-                      >
-                        <FileText size={12} /> Open Deck
-                      </a>
-                    ) : (
-                      <p className="text-xs text-slate-400 italic">No deck linked</p>
-                    )}
+                    {(() => {
+                      const decks = documents.filter(d => d.type === "deck");
+                      if (decks.length === 0) return <p className="text-xs text-slate-400 italic">No deck linked</p>;
+                      return (
+                        <div className="space-y-1">
+                          {decks.map(d => {
+                            const url = d.file_url ?? d.google_drive_url ?? d.storage_path;
+                            if (!url) return null;
+                            return (
+                              <a
+                                key={d.id}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg font-medium mr-1"
+                              >
+                                <FileText size={12} /> {d.name || "Open Deck"}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                   {/* Meeting transcripts */}
                   <div>
@@ -1746,6 +1761,54 @@ export function CompanyDetailClient({
 
           </div>
         </div>
+
+        {/* ── Full-width IC Memos section (startups only) ── */}
+        {typeGroup === "startup" && (
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Investment Memos</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={generateMemo}
+                  disabled={memoGenerating}
+                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors font-medium"
+                >
+                  {memoGenerating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                  {memoGenerating ? "Generating…" : "Generate Memo"}
+                </button>
+                {memos.length > 0 && (
+                  <button onClick={() => setTab("Memos")} className="text-xs text-blue-600 hover:text-blue-700">
+                    All {memos.length} →
+                  </button>
+                )}
+              </div>
+            </div>
+            {memos.length === 0 ? (
+              <p className="text-sm text-slate-400 italic">No investment memos yet. Generate one using the button above.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {memos.map(m => (
+                  <Link
+                    key={m.id}
+                    href={`/memos/${m.id}`}
+                    className="flex flex-col gap-2 p-3 rounded-xl border border-slate-200 hover:border-blue-200 hover:bg-blue-50/30 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium text-slate-800 leading-tight line-clamp-2">{m.title}</p>
+                      {m.recommendation && (
+                        <span className={cn("badge text-xs flex-shrink-0", REC_COLORS[m.recommendation] ?? "bg-slate-100 text-slate-500")}>
+                          {m.recommendation.replace(/_/g, " ")}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400">{formatDate(m.created_at)}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        </>
       )}
 
       {/* ── CONTACTS TAB ── */}

@@ -18,6 +18,16 @@ function toSlug(name: string): string {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export type CompanyDocument = {
+  id: string;
+  name: string;
+  type: string | null;
+  file_url: string | null;
+  storage_path: string | null;
+  google_drive_url: string | null;
+  created_at: string;
+};
+
 export default async function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: maybeSlug } = await params;
   const supabase = await createClient();
@@ -55,11 +65,12 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
 
   const companyId = company.id;
 
-  const [{ data: contacts }, { data: interactions }, { data: deals }, { data: memos }] = await Promise.all([
+  const [{ data: contacts }, { data: interactions }, { data: deals }, { data: memos }, { data: documents }] = await Promise.all([
     supabase.from("contacts").select("*").eq("company_id", companyId).order("is_primary_contact", { ascending: false }) as unknown as Promise<{ data: Contact[] | null }>,
     supabase.from("interactions").select("*").eq("company_id", companyId).order("date", { ascending: false }).limit(50) as unknown as Promise<{ data: import("@/lib/types").Interaction[] | null }>,
     supabase.from("deals").select("*").eq("company_id", companyId).order("created_at", { ascending: false }) as unknown as Promise<{ data: Deal[] | null }>,
     supabase.from("ic_memos").select("id, title, recommendation, status, created_at").eq("company_id", companyId).order("created_at", { ascending: false }) as unknown as Promise<{ data: Pick<IcMemo, "id" | "title" | "recommendation" | "status" | "created_at">[] | null }>,
+    supabase.from("documents").select("id, name, type, file_url, storage_path, google_drive_url, created_at").eq("company_id", companyId).order("created_at", { ascending: false }) as unknown as Promise<{ data: CompanyDocument[] | null }>,
   ]);
 
   return (
@@ -81,6 +92,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
         interactions={interactions ?? []}
         deals={deals ?? []}
         memos={memos ?? []}
+        documents={documents ?? []}
       />
     </div>
   );
