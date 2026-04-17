@@ -1192,7 +1192,6 @@ const ContactRow = memo(function ContactRow({
     if (!type || !resolvedCountry) return;
     setBusy(true);
     const resolvedCompanyId = companyId || null;
-    const targetType = CONTACT_TO_COMPANY_TYPE[type as ContactTypeStr];
     // Persist custom country for future dropdowns
     if (country === "__custom__" && customCountry.trim()) {
       onAddCustomCountry(customCountry.trim());
@@ -1209,14 +1208,24 @@ const ContactRow = memo(function ContactRow({
       location_country: resolvedCountry,
       status:           "active",
     }).eq("id", contact.id);
-    const companySave = (resolvedCompanyId && targetType)
-      ? (() => {
-          const co = mergedCompanies.find(c => c.id === resolvedCompanyId);
-          return co && (!co.type || co.type === "other")
-            ? supabase.from("companies").update({ type: targetType }).eq("id", resolvedCompanyId)
-            : null;
-        })()
-      : null;
+
+    // Sync company type: use the type shown in the badge (the company's current
+    // type from mergedCompanies, which was just re-fetched from DB on mount).
+    // Only update if the badge type and the contact-type mapping agree, OR if
+    // the company has no type / type is "other" (catch-all fallback).
+    const companySave = (() => {
+      if (!resolvedCompanyId) return null;
+      const co = mergedCompanies.find(c => c.id === resolvedCompanyId);
+      if (!co) return null;
+      const mappedType = CONTACT_TO_COMPANY_TYPE[type as ContactTypeStr];
+      // Always write the company type back — the badge reflects the live DB value
+      // (re-fetched client-side on mount), so this keeps the DB in sync with what
+      // the user sees. Only skip if no meaningful type can be determined.
+      const typeToWrite = co.type && co.type !== "other" ? co.type : (mappedType ?? null);
+      if (!typeToWrite || typeToWrite === co.type) return null; // already correct
+      return supabase.from("companies").update({ type: typeToWrite }).eq("id", resolvedCompanyId);
+    })();
+
     const [{ error: ce }, coResult] = await Promise.all([contactSave, companySave ?? Promise.resolve({ error: null })]);
     if (ce) {
       console.error("[confirm] contact save error:", ce);
@@ -1395,6 +1404,23 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
     try { return JSON.parse(localStorage.getItem(LS_EXCLUSIONS_KEY) ?? "[]") as string[]; } catch { return []; }
   });
   const [newExclusion, setNewExclusion]       = useState("");
+
+  // Re-fetch companies client-side on mount so badges always show the current
+  // DB type, not the SSR snapshot (which may be stale if Admin→Companies was
+  // updated after the page rendered).
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("companies")
+      .select("id, name, type, website")
+      .order("name")
+      .limit(10000)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setCompaniesState(data as CompanyStub[]);
+        }
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist exclusions to localStorage whenever they change
   useEffect(() => {
