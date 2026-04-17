@@ -55,24 +55,111 @@ function CompanyLogo({ company }: { company: Company }) {
   );
 }
 
+// ── Contact Avatars ────────────────────────────────────────────────────────────
+function getInitialsShort(first: string | null, last: string | null): string {
+  const f = (first ?? "").trim();
+  const l = (last ?? "").trim();
+  if (f && l) return (f[0] + l[0]).toUpperCase();
+  if (f) return f.slice(0, 2).toUpperCase();
+  if (l) return l.slice(0, 2).toUpperCase();
+  return "?";
+}
+
+function ContactAvatars({ contacts }: { contacts: { first_name: string | null; last_name: string | null }[] }) {
+  if (contacts.length === 0) return <span className="text-slate-300 text-xs">—</span>;
+  const shown = contacts.slice(0, 3);
+  const extra = contacts.length - shown.length;
+  const COLORS = [
+    "bg-blue-100 text-blue-700",
+    "bg-violet-100 text-violet-700",
+    "bg-emerald-100 text-emerald-700",
+    "bg-amber-100 text-amber-700",
+  ];
+  return (
+    <div className="flex items-center -space-x-1.5">
+      {shown.map((c, i) => (
+        <div
+          key={i}
+          title={[c.first_name, c.last_name].filter(Boolean).join(" ")}
+          className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold ring-2 ring-white flex-shrink-0 ${COLORS[i % COLORS.length]}`}
+        >
+          {getInitialsShort(c.first_name, c.last_name)}
+        </div>
+      ))}
+      {extra > 0 && (
+        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold ring-2 ring-white bg-slate-100 text-slate-500 flex-shrink-0">
+          +{extra}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Description Cell (expandable popover) ─────────────────────────────────────
+function DescriptionCell({ text }: { text: string | null }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  if (!text) return <span className="text-slate-300 text-xs">—</span>;
+  const isLong = text.length > 80;
+  const preview = isLong ? text.slice(0, 80).trimEnd() + "…" : text;
+
+  return (
+    <div className="relative" ref={ref}>
+      <p className="text-xs text-slate-500 leading-snug line-clamp-2">{preview}</p>
+      {isLong && (
+        <button
+          onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+          className="text-[10px] text-blue-500 hover:text-blue-700 font-medium mt-0.5 block"
+        >
+          {open ? "less ↑" : "more ↓"}
+        </button>
+      )}
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-3 w-64 max-h-40 overflow-y-auto">
+          <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{text}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Inline Type Picker ─────────────────────────────────────────────────────────
 const TYPE_EDIT_OPTIONS: CompanyType[] = [
-  "startup", "lp", "fund", "ecosystem_partner", "corporate", "government", "other",
+  "startup", "lp", "fund", "ecosystem_partner", "corporate", "government",
 ];
 const TYPE_BADGE: Record<string, string> = {
   startup:           "bg-blue-50 text-blue-700 border border-blue-100",
   lp:                "bg-purple-50 text-purple-700 border border-purple-100",
+  "limited partner": "bg-purple-50 text-purple-700 border border-purple-100",
   fund:              "bg-indigo-50 text-indigo-700 border border-indigo-100",
   investor:          "bg-indigo-50 text-indigo-700 border border-indigo-100",
+  "strategic partner": "bg-teal-50 text-teal-700 border border-teal-100",
   ecosystem_partner: "bg-teal-50 text-teal-700 border border-teal-100",
   corporate:         "bg-orange-50 text-orange-700 border border-orange-100",
   government:        "bg-slate-100 text-slate-600 border border-slate-200",
   other:             "bg-gray-50 text-gray-600 border border-gray-200",
 };
 const TYPE_LABEL: Record<string, string> = {
-  startup: "Startup", lp: "LP", fund: "Fund",
-  investor: "Investor", ecosystem_partner: "Eco Partner",
-  corporate: "Corporate", government: "Government", other: "Other",
+  startup:            "Startup",
+  lp:                 "LP",
+  "limited partner":  "LP",
+  fund:               "Fund",
+  investor:           "Fund",
+  "strategic partner":"Ecosystem Partner",
+  ecosystem_partner:  "Ecosystem Partner",
+  corporate:          "Corporate",
+  government:         "Government",
+  other:              "Other",
 };
 
 function InlineTypePicker({ company, onUpdate }: { company: Company; onUpdate: (t: CompanyType) => void }) {
@@ -314,10 +401,8 @@ const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
       : <span className="text-slate-300 text-xs">—</span>,
   },
   description: {
-    key: "description", label: "Description", group: "extra", defaultWidth: 200,
-    render: c => c.description
-      ? <span className="text-xs text-slate-500">{truncate(c.description, 60)}</span>
-      : <span className="text-slate-300 text-xs">—</span>,
+    key: "description", label: "Description", group: "core", defaultWidth: 220,
+    render: c => <DescriptionCell text={c.description} />,
   },
   tags: {
     key: "tags", label: "Tags", group: "extra", defaultWidth: 150,
@@ -355,7 +440,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   pipeline: {
     emptyText: "No startups in the pipeline yet.",
     defaultType: "startup", addLabel: "Add Startup",
-    defaultCols: ["deal_status", "contacts", "sectors", "stage", "location", "last_contact_date"],
+    defaultCols: ["deal_status", "contacts", "description", "sectors", "stage", "location_city", "location_country", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "updated_at", label: "Updated" },
       { key: "last_contact_date", label: "Last Contact" }, { key: "funding_raised", label: "Funding" },
@@ -365,7 +450,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   lps: {
     emptyText: "No limited partners yet.",
     defaultType: "lp", addLabel: "Add LP",
-    defaultCols: ["contacts", "aum", "lp_type", "location", "last_contact_date"],
+    defaultCols: ["contacts", "description", "aum", "lp_type", "location_city", "location_country", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "aum", label: "AUM" },
       { key: "last_contact_date", label: "Last Contact" },
@@ -375,7 +460,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   funds: {
     emptyText: "No funds yet.",
     defaultType: "fund", addLabel: "Add Fund",
-    defaultCols: ["contacts", "fund_focus", "location", "last_contact_date"],
+    defaultCols: ["contacts", "description", "fund_focus", "location_city", "location_country", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "last_contact_date", label: "Last Contact" },
     ],
@@ -384,7 +469,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   strategic: {
     emptyText: "No strategic partners yet.",
     defaultType: "ecosystem_partner", addLabel: "Add Company",
-    defaultCols: ["type", "contacts", "location", "last_contact_date", "website"],
+    defaultCols: ["type", "contacts", "description", "location_city", "location_country", "last_contact_date", "website"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "last_contact_date", label: "Last Contact" },
     ],
@@ -393,7 +478,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   other: {
     emptyText: "No other companies yet.",
     defaultType: "government", addLabel: "Add Company",
-    defaultCols: ["type", "contacts", "location", "last_contact_date"],
+    defaultCols: ["type", "contacts", "description", "location_city", "location_country", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "last_contact_date", label: "Last Contact" },
     ],
@@ -402,7 +487,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   all: {
     emptyText: "No companies yet.",
     defaultType: "startup", addLabel: "Add Company",
-    defaultCols: ["type", "contacts", "sectors", "location", "last_contact_date"],
+    defaultCols: ["type", "contacts", "description", "sectors", "location_city", "location_country", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "updated_at", label: "Updated" },
       { key: "last_contact_date", label: "Last Contact" },
@@ -459,11 +544,13 @@ const COL_GROUPS: { key: ColumnDef["group"]; label: string }[] = [
 interface Props {
   initialCompanies: Company[];
   view: CrmView;
-  /** Contact counts per company_id — passed from server for the Contacts column */
+  /** Contact details per company_id — passed from server for the Contacts column */
+  contactDetailsMap?: Record<string, { first_name: string | null; last_name: string | null }[]>;
+  /** @deprecated use contactDetailsMap */
   contactCountMap?: Record<string, number>;
 }
 
-export function CompaniesViewClient({ initialCompanies, view, contactCountMap = {} }: Props) {
+export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap = {}, contactCountMap = {} }: Props) {
   const router   = useRouter();
   const supabase = createClient();
   const cfg      = VIEW_CONFIG[view];
@@ -505,14 +592,17 @@ export function CompaniesViewClient({ initialCompanies, view, contactCountMap = 
   }, [widthsKey]);
 
   // ── Column resize via drag ─────────────────────────────────────────────────
-  // Stored in a ref so drag callbacks always have fresh values without causing
-  // the ThCell to remount (which would interrupt the drag).
+  // resizeRef holds the active drag state.
+  // latestWidthsRef mirrors colWidths so we can save on mouseup without
+  // using a functional setState (which would be a side-effect inside a setter).
   const resizeRef = useRef<{ key: string; startX: number; startW: number } | null>(null);
+  const latestWidthsRef = useRef<Record<string, number>>({});
 
   function startResize(e: React.MouseEvent<HTMLDivElement>, colKey: string, currentW: number) {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
+    latestWidthsRef.current = colWidths;
     resizeRef.current = { key: colKey, startX: e.clientX, startW: currentW };
 
     const prevCursor = document.body.style.cursor;
@@ -520,10 +610,13 @@ export function CompaniesViewClient({ initialCompanies, view, contactCountMap = 
     document.body.style.userSelect = "none";
 
     function onMove(ev: MouseEvent) {
-      if (!resizeRef.current) return;
-      const delta = ev.clientX - resizeRef.current.startX;
-      const newW = Math.max(60, resizeRef.current.startW + delta);
-      setColWidths(prev => ({ ...prev, [resizeRef.current!.key]: newW }));
+      const drag = resizeRef.current;
+      if (!drag) return;
+      const delta = ev.clientX - drag.startX;
+      const newW = Math.max(60, drag.startW + delta);
+      const updated = { ...latestWidthsRef.current, [drag.key]: newW };
+      latestWidthsRef.current = updated;
+      setColWidths(updated);
     }
     function onUp() {
       document.removeEventListener("mousemove", onMove);
@@ -531,10 +624,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactCountMap = 
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = "";
       setIsDragging(false);
-      setColWidths(prev => {
-        try { localStorage.setItem(widthsKey, JSON.stringify(prev)); } catch { /* ignore */ }
-        return prev;
-      });
+      try { localStorage.setItem(widthsKey, JSON.stringify(latestWidthsRef.current)); } catch { /* ignore */ }
       resizeRef.current = null;
     }
     document.addEventListener("mousemove", onMove);
@@ -846,9 +936,6 @@ export function CompaniesViewClient({ initialCompanies, view, contactCountMap = 
                       <CompanyLogo company={c} />
                       <div className="min-w-0">
                         <div className="font-medium text-slate-900 text-sm truncate">{c.name}</div>
-                        {c.description && (
-                          <div className="text-xs text-slate-400 mt-0.5 truncate">{truncate(c.description, 50)}</div>
-                        )}
                       </div>
                     </div>
                   </td>
@@ -859,14 +946,13 @@ export function CompaniesViewClient({ initialCompanies, view, contactCountMap = 
                     if (!def) return null;
                     const w = colWidths[key] ?? def.defaultWidth;
 
-                    // Contacts — rendered from the contactCountMap prop
+                    // Contacts — avatar icons from contactDetailsMap
                     if (key === "contacts") {
-                      const n = contactCountMap[c.id] ?? 0;
+                      const contacts = contactDetailsMap[c.id] ?? (contactCountMap[c.id] ? Array(contactCountMap[c.id]).fill({ first_name: "?", last_name: null }) : []);
                       return (
-                        <td key={key} className="px-4 py-3" style={{ width: w, minWidth: w, maxWidth: w }}>
-                          {n > 0
-                            ? <span className="inline-flex items-center justify-center w-6 h-6 bg-slate-100 text-slate-700 text-xs font-semibold rounded-full">{n}</span>
-                            : <span className="text-slate-300 text-xs">—</span>}
+                        <td key={key} className="px-4 py-3" style={{ width: w, minWidth: w, maxWidth: w }}
+                          onClick={e => e.stopPropagation()}>
+                          <ContactAvatars contacts={contacts} />
                         </td>
                       );
                     }
