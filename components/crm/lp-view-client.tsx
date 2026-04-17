@@ -748,9 +748,10 @@ export function LpViewClient({ initialCompanies }: Props) {
     return list;
   }, [companies, search, activeFilter, lastTouchMap, coinvestMap, filterCity, filterCountry, sortCol, sortDir, ownerMap]);
 
-  // Load detail
+  // Load detail — also auto-fires Fireflies summary when contacts are available
   const loadDetail = useCallback(async (id: string) => {
     setLoadingDetail(true);
+    const co = companies.find(c => c.id === id);
     const [{ data: ctcts }, { data: ints }] = await Promise.all([
       supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }),
       supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(30),
@@ -758,7 +759,25 @@ export function LpViewClient({ initialCompanies }: Props) {
     setContacts(ctcts ?? []);
     setInteractions(ints ?? []);
     setLoadingDetail(false);
-  }, [supabase]);
+
+    // Auto-load Fireflies summary when switching to a new company
+    if (co) {
+      const contactEmails = (ctcts ?? []).map((c: { email: string | null }) => c.email).filter(Boolean) as string[];
+      setFfLoading(true); setFfError(null); setFfSummary(null);
+      try {
+        const res = await fetch("/api/lp/fireflies-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contactEmails, companyName: co.name }),
+        });
+        const data = await res.json();
+        if (data.error && !data.summary) { setFfError(data.error); }
+        else { setFfSummary(data.summary); setFfCount(data.transcriptCount ?? 0); }
+      } catch { /* Fireflies unavailable */ }
+      setFfLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, companies]);
 
   function selectCompany(id: string) {
     const co = companies.find(c => c.id === id);
@@ -2134,11 +2153,13 @@ export function LpViewClient({ initialCompanies }: Props) {
                     <p className="text-[10px] text-violet-500 font-medium">Meetings</p>
                     <p className="text-[10px] text-slate-400">past 90 days</p>
                   </div>
-                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center cursor-pointer hover:bg-amber-100 transition-colors" onClick={ffSummary || ffLoading ? undefined : loadFirefliesSummary}>
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center cursor-pointer hover:bg-amber-100 transition-colors" onClick={ffLoading ? undefined : loadFirefliesSummary}>
                     <FileText size={14} className="text-amber-500 mx-auto mb-1" />
-                    {ffLoading ? <Loader2 size={14} className="animate-spin text-amber-500 mx-auto" /> : <p className="text-lg font-bold text-amber-700">{ffCount > 0 ? ffCount : "—"}</p>}
+                    {ffLoading
+                      ? <Loader2 size={14} className="animate-spin text-amber-500 mx-auto" />
+                      : <p className="text-lg font-bold text-amber-700">{ffCount > 0 ? ffCount : "—"}</p>}
                     <p className="text-[10px] text-amber-600 font-medium">Fireflies</p>
-                    <p className="text-[10px] text-slate-400">{ffSummary ? "click to refresh" : "click to load"}</p>
+                    <p className="text-[10px] text-slate-400">{ffLoading ? "loading…" : ffSummary ? "click to refresh" : "auto-loading"}</p>
                   </div>
                 </div>
 

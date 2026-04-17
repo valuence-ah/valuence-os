@@ -11,17 +11,133 @@ import type { Company, CompanyType } from "@/lib/types";
 import { cn, formatCurrency, formatDate, truncate } from "@/lib/utils";
 import {
   Plus, Search, ExternalLink, ChevronUp, ChevronDown,
-  ArrowUpDown, X, Settings2, RotateCcw,
+  ArrowUpDown, X, Settings2, RotateCcw, Check,
 } from "lucide-react";
 
 export type CrmView = "pipeline" | "lps" | "funds" | "strategic" | "other" | "all";
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function extractDomain(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const host = new URL(url.startsWith("http") ? url : `https://${url}`).hostname;
+    return host.replace(/^www\./, "");
+  } catch { return null; }
+}
+
+// ── Company Logo ───────────────────────────────────────────────────────────────
+function CompanyLogo({ company }: { company: Company }) {
+  const [imgError, setImgError] = useState(false);
+  const domain = extractDomain(company.website);
+  const logoToken = process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN;
+  const logoSrc = company.logo_url
+    || (domain && logoToken ? `https://img.logo.dev/${domain}?token=${logoToken}&size=40` : null);
+
+  if (!imgError && logoSrc) {
+    return (
+      <img
+        src={logoSrc}
+        alt=""
+        className="w-7 h-7 rounded object-contain bg-white flex-shrink-0 border border-slate-100"
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+  return (
+    <div className="w-7 h-7 rounded bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center flex-shrink-0 select-none">
+      <span className="text-[10px] font-bold text-slate-500 uppercase">{company.name.slice(0, 2)}</span>
+    </div>
+  );
+}
+
+// ── Inline Type Picker ─────────────────────────────────────────────────────────
+const TYPE_EDIT_OPTIONS: CompanyType[] = [
+  "startup", "lp", "fund", "ecosystem_partner", "corporate", "government", "other",
+];
+const TYPE_BADGE: Record<string, string> = {
+  startup:           "bg-blue-50 text-blue-700 border border-blue-100",
+  lp:                "bg-purple-50 text-purple-700 border border-purple-100",
+  fund:              "bg-indigo-50 text-indigo-700 border border-indigo-100",
+  investor:          "bg-indigo-50 text-indigo-700 border border-indigo-100",
+  ecosystem_partner: "bg-teal-50 text-teal-700 border border-teal-100",
+  corporate:         "bg-orange-50 text-orange-700 border border-orange-100",
+  government:        "bg-slate-100 text-slate-600 border border-slate-200",
+  other:             "bg-gray-50 text-gray-600 border border-gray-200",
+};
+const TYPE_LABEL: Record<string, string> = {
+  startup: "Startup", lp: "LP", fund: "Fund",
+  investor: "Investor", ecosystem_partner: "Eco Partner",
+  corporate: "Corporate", government: "Government", other: "Other",
+};
+
+function InlineTypePicker({ company, onUpdate }: { company: Company; onUpdate: (t: CompanyType) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const typeList = (company.types && company.types.length > 0) ? company.types : [company.type];
+
+  return (
+    <div className="relative" ref={ref}>
+      <div
+        className="flex flex-wrap gap-1 cursor-pointer group"
+        title="Click to change type"
+        onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+      >
+        {typeList.map(t => (
+          <span key={t} className={cn(
+            "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium transition-opacity group-hover:opacity-75",
+            TYPE_BADGE[t] ?? "bg-slate-50 text-slate-600"
+          )}>
+            {TYPE_LABEL[t] ?? t}
+          </span>
+        ))}
+      </div>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 min-w-[170px] overflow-hidden">
+          {TYPE_EDIT_OPTIONS.map(t => (
+            <button
+              key={t}
+              onClick={e => { e.stopPropagation(); onUpdate(t); setOpen(false); }}
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-slate-50 text-left"
+            >
+              <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium flex-1", TYPE_BADGE[t] ?? "bg-slate-50 text-slate-600")}>
+                {TYPE_LABEL[t] ?? t}
+              </span>
+              {typeList.includes(t) && <Check size={11} className="text-blue-600 flex-shrink-0" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Column definitions ─────────────────────────────────────────────────────────
 
 export type ColumnKey =
-  | "type" | "deal_status" | "sectors" | "sub_type" | "stage"
+  | "contacts" | "type" | "deal_status" | "sectors" | "sub_type" | "stage"
   | "aum" | "funding_raised" | "last_funding_date"
-  | "location" | "last_contact_date" | "first_contact_date" | "created_at"
+  | "location_city" | "location_country" | "location"
+  | "last_contact_date" | "first_contact_date" | "created_at"
   | "website" | "linkedin_url" | "source"
   | "description" | "tags" | "notes" | "lp_type" | "fund_focus";
 
@@ -48,27 +164,16 @@ const DEAL_STATUS_LABEL: Record<string, string> = {
   sourced: "Sourced", active_deal: "Active", portfolio: "Portfolio",
   passed: "Passed", monitoring: "Monitoring",
 };
-const TYPE_BADGE: Record<string, string> = {
-  startup:           "bg-blue-50 text-blue-700 border border-blue-100",
-  lp:                "bg-purple-50 text-purple-700 border border-purple-100",
-  fund:              "bg-indigo-50 text-indigo-700 border border-indigo-100",
-  investor:          "bg-indigo-50 text-indigo-700 border border-indigo-100",
-  ecosystem_partner: "bg-teal-50 text-teal-700 border border-teal-100",
-  corporate:         "bg-orange-50 text-orange-700 border border-orange-100",
-  government:        "bg-slate-100 text-slate-600 border border-slate-200",
-  other:             "bg-gray-50 text-gray-600 border border-gray-200",
-};
-const TYPE_LABEL: Record<string, string> = {
-  startup: "Startup", lp: "LP", fund: "Fund",
-  investor: "Investor",
-  ecosystem_partner: "Eco Partner", corporate: "Corporate",
-  government: "Government", other: "Other",
-};
 
-// All possible columns (every view can access all of these)
+// All possible columns (every view can access all of these).
+// Note: "contacts" and "type" are rendered specially in the component body.
 const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
+  contacts: {
+    key: "contacts", label: "Contacts", group: "core", defaultWidth: 90,
+    render: () => null, // rendered specially in component
+  },
   type: {
-    key: "type", label: "Type", group: "core", defaultWidth: 130,
+    key: "type", label: "Type", group: "core", defaultWidth: 140,
     render: c => {
       const typeList = (c.types && c.types.length > 0) ? c.types : [c.type];
       return (
@@ -132,12 +237,28 @@ const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
       ? <span className="text-xs text-slate-400 whitespace-nowrap">{formatDate(c.last_funding_date)}</span>
       : <span className="text-slate-300 text-xs">—</span>,
   },
+  // Location as combined column (kept for backward compat with saved prefs)
   location: {
     key: "location", label: "Location", group: "core", defaultWidth: 150,
-    render: c => {
-      const loc = [c.location_city, c.location_country].filter(Boolean).join(", ");
-      return loc ? <span className="text-sm text-slate-500">{loc}</span> : <span className="text-slate-300 text-xs">—</span>;
-    },
+    render: c => (c.location_city || c.location_country) ? (
+      <div>
+        {c.location_city && <div className="text-sm text-slate-700 leading-snug">{c.location_city}</div>}
+        {c.location_country && <div className="text-xs text-slate-400 leading-snug">{c.location_country}</div>}
+      </div>
+    ) : <span className="text-slate-300 text-xs">—</span>,
+  },
+  // Separate city/country columns
+  location_city: {
+    key: "location_city", label: "City", group: "core", defaultWidth: 120,
+    render: c => c.location_city
+      ? <span className="text-sm text-slate-700">{c.location_city}</span>
+      : <span className="text-slate-300 text-xs">—</span>,
+  },
+  location_country: {
+    key: "location_country", label: "Country", group: "core", defaultWidth: 110,
+    render: c => c.location_country
+      ? <span className="text-sm text-slate-700">{c.location_country}</span>
+      : <span className="text-slate-300 text-xs">—</span>,
   },
   last_contact_date: {
     key: "last_contact_date", label: "Last Contact", group: "dates", sortKey: "last_contact_date", defaultWidth: 120,
@@ -234,7 +355,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   pipeline: {
     emptyText: "No startups in the pipeline yet.",
     defaultType: "startup", addLabel: "Add Startup",
-    defaultCols: ["deal_status", "sectors", "stage", "location", "last_contact_date"],
+    defaultCols: ["deal_status", "contacts", "sectors", "stage", "location", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "updated_at", label: "Updated" },
       { key: "last_contact_date", label: "Last Contact" }, { key: "funding_raised", label: "Funding" },
@@ -244,7 +365,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   lps: {
     emptyText: "No limited partners yet.",
     defaultType: "lp", addLabel: "Add LP",
-    defaultCols: ["aum", "lp_type", "location", "last_contact_date"],
+    defaultCols: ["contacts", "aum", "lp_type", "location", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "aum", label: "AUM" },
       { key: "last_contact_date", label: "Last Contact" },
@@ -254,7 +375,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   funds: {
     emptyText: "No funds yet.",
     defaultType: "fund", addLabel: "Add Fund",
-    defaultCols: ["fund_focus", "location", "last_contact_date"],
+    defaultCols: ["contacts", "fund_focus", "location", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "last_contact_date", label: "Last Contact" },
     ],
@@ -263,7 +384,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   strategic: {
     emptyText: "No strategic partners yet.",
     defaultType: "ecosystem_partner", addLabel: "Add Company",
-    defaultCols: ["type", "location", "last_contact_date", "website"],
+    defaultCols: ["type", "contacts", "location", "last_contact_date", "website"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "last_contact_date", label: "Last Contact" },
     ],
@@ -272,7 +393,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   other: {
     emptyText: "No other companies yet.",
     defaultType: "government", addLabel: "Add Company",
-    defaultCols: ["type", "location", "last_contact_date"],
+    defaultCols: ["type", "contacts", "location", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "last_contact_date", label: "Last Contact" },
     ],
@@ -281,7 +402,7 @@ const VIEW_CONFIG: Record<CrmView, ViewConfig> = {
   all: {
     emptyText: "No companies yet.",
     defaultType: "startup", addLabel: "Add Company",
-    defaultCols: ["type", "deal_status", "sectors", "location", "last_contact_date"],
+    defaultCols: ["type", "contacts", "sectors", "location", "last_contact_date"],
     sortKeys: [
       { key: "name", label: "Name" }, { key: "updated_at", label: "Updated" },
       { key: "last_contact_date", label: "Last Contact" },
@@ -338,9 +459,11 @@ const COL_GROUPS: { key: ColumnDef["group"]; label: string }[] = [
 interface Props {
   initialCompanies: Company[];
   view: CrmView;
+  /** Contact counts per company_id — passed from server for the Contacts column */
+  contactCountMap?: Record<string, number>;
 }
 
-export function CompaniesViewClient({ initialCompanies, view }: Props) {
+export function CompaniesViewClient({ initialCompanies, view, contactCountMap = {} }: Props) {
   const router   = useRouter();
   const supabase = createClient();
   const cfg      = VIEW_CONFIG[view];
@@ -355,6 +478,7 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
 
   // ── Column widths (per view, persisted) ───────────────────────────────────
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     try {
@@ -381,21 +505,32 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
   }, [widthsKey]);
 
   // ── Column resize via drag ─────────────────────────────────────────────────
+  // Stored in a ref so drag callbacks always have fresh values without causing
+  // the ThCell to remount (which would interrupt the drag).
   const resizeRef = useRef<{ key: string; startX: number; startW: number } | null>(null);
 
   function startResize(e: React.MouseEvent<HTMLDivElement>, colKey: string, currentW: number) {
     e.preventDefault();
     e.stopPropagation();
+    setIsDragging(true);
     resizeRef.current = { key: colKey, startX: e.clientX, startW: currentW };
+
+    const prevCursor = document.body.style.cursor;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
 
     function onMove(ev: MouseEvent) {
       if (!resizeRef.current) return;
-      const newW = Math.max(60, resizeRef.current.startW + (ev.clientX - resizeRef.current.startX));
+      const delta = ev.clientX - resizeRef.current.startX;
+      const newW = Math.max(60, resizeRef.current.startW + delta);
       setColWidths(prev => ({ ...prev, [resizeRef.current!.key]: newW }));
     }
     function onUp() {
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = "";
+      setIsDragging(false);
       setColWidths(prev => {
         try { localStorage.setItem(widthsKey, JSON.stringify(prev)); } catch { /* ignore */ }
         return prev;
@@ -407,17 +542,17 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [companies, setCompanies]   = useState<Company[]>(initialCompanies);
+  const [companies, setCompanies]     = useState<Company[]>(initialCompanies);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch]           = useState("");
 
-  // Debounce search input by 300ms to avoid filtering on every keystroke
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), 300);
     return () => clearTimeout(timer);
   }, [searchInput]);
-  const [sortKey, setSortKey]       = useState<SortKey>(cfg.sortKeys[1]?.key ?? "name");
-  const [sortDir, setSortDir]       = useState<SortDir>("desc");
+
+  const [sortKey, setSortKey] = useState<SortKey>(cfg.sortKeys[1]?.key ?? "name");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const [fStatus, setFStatus]   = useState("");
   const [fSector, setFSector]   = useState("");
@@ -471,36 +606,8 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
     else { setSortKey(key); setSortDir("asc"); }
   }
 
-  // ── Column header with resize handle ──────────────────────────────────────
-  function ThCell({ colKey, label, sk }: { colKey: string; label: string; sk?: SortKey }) {
-    const w = colWidths[colKey] ?? ALL_COLUMN_DEFS[colKey as ColumnKey]?.defaultWidth ?? 120;
-    const active = sk && sortKey === sk;
-    return (
-      <th
-        className="relative group/th px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap select-none"
-        style={{ width: w, minWidth: w }}
-      >
-        {sk ? (
-          <button onClick={() => handleSort(sk)} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
-            {label}
-            {active
-              ? sortDir === "asc" ? <ChevronUp size={12} className="text-blue-500" /> : <ChevronDown size={12} className="text-blue-500" />
-              : <ArrowUpDown size={12} className="opacity-0 group-hover/th:opacity-40 transition-opacity" />}
-          </button>
-        ) : (
-          <span>{label}</span>
-        )}
-        {/* Resize handle */}
-        <div
-          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize opacity-0 group-hover/th:opacity-100 hover:bg-blue-300 transition-opacity z-10"
-          onMouseDown={e => startResize(e, colKey, w)}
-        />
-      </th>
-    );
-  }
-
   // Company name column width
-  const nameColW = colWidths["__name__"] ?? 200;
+  const nameColW = colWidths["__name__"] ?? 240;
 
   // ── Form helpers ───────────────────────────────────────────────────────────
   function setField(k: keyof Company, v: unknown) { setForm(p => ({ ...p, [k]: v })); }
@@ -526,6 +633,12 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
     } else {
       alert(error?.message ?? "Failed to save");
     }
+  }
+
+  // ── Inline type update ─────────────────────────────────────────────────────
+  async function handleTypeUpdate(companyId: string, newType: CompanyType) {
+    setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, type: newType } : c));
+    await supabase.from("companies").update({ type: newType }).eq("id", companyId);
   }
 
   // ── Customize: toggle a column ─────────────────────────────────────────────
@@ -655,11 +768,16 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
         <div className="overflow-x-auto">
           <table
             className="border-collapse"
-            style={{ tableLayout: "fixed", width: "max-content", minWidth: "100%" }}
+            style={{
+              tableLayout: "fixed",
+              width: "max-content",
+              minWidth: "100%",
+              userSelect: isDragging ? "none" : undefined,
+            }}
           >
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                {/* Company name column — also resizable */}
+                {/* ── Company name column — also resizable ── */}
                 <th
                   className="relative group/th px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap select-none"
                   style={{ width: nameColW, minWidth: nameColW }}
@@ -670,21 +788,41 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
                       ? sortDir === "asc" ? <ChevronUp size={12} className="text-blue-500" /> : <ChevronDown size={12} className="text-blue-500" />
                       : <ArrowUpDown size={12} className="opacity-0 group-hover/th:opacity-40 transition-opacity" />}
                   </button>
+                  {/* Resize handle — always present, visible on hover */}
                   <div
-                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize opacity-0 group-hover/th:opacity-100 hover:bg-blue-300 transition-opacity z-10"
+                    className="absolute right-0 top-0 h-full w-2 cursor-col-resize bg-transparent hover:bg-blue-400/30 active:bg-blue-400/50 z-10"
                     onMouseDown={e => startResize(e, "__name__", nameColW)}
                   />
                 </th>
 
+                {/* ── Dynamic columns ── */}
                 {visibleCols.map(key => {
                   const def = ALL_COLUMN_DEFS[key];
+                  if (!def) return null;
+                  const w = colWidths[key] ?? def.defaultWidth;
+                  const active = def.sortKey && sortKey === def.sortKey;
                   return (
-                    <ThCell
+                    <th
                       key={key}
-                      colKey={key}
-                      label={def.label}
-                      sk={def.sortKey}
-                    />
+                      className="relative group/th px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap select-none"
+                      style={{ width: w, minWidth: w }}
+                    >
+                      {def.sortKey ? (
+                        <button onClick={() => handleSort(def.sortKey!)} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
+                          {def.label}
+                          {active
+                            ? sortDir === "asc" ? <ChevronUp size={12} className="text-blue-500" /> : <ChevronDown size={12} className="text-blue-500" />
+                            : <ArrowUpDown size={12} className="opacity-0 group-hover/th:opacity-40 transition-opacity" />}
+                        </button>
+                      ) : (
+                        <span>{def.label}</span>
+                      )}
+                      {/* Resize handle */}
+                      <div
+                        className="absolute right-0 top-0 h-full w-2 cursor-col-resize bg-transparent hover:bg-blue-400/30 active:bg-blue-400/50 z-10"
+                        onMouseDown={e => startResize(e, key, w)}
+                      />
+                    </th>
                   );
                 })}
                 <th className="w-8 min-w-8" />
@@ -700,15 +838,53 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
               ) : filtered.map(c => (
                 <tr key={c.id}
                   className="hover:bg-slate-50 cursor-pointer transition-colors"
-                  onClick={() => router.push(`/crm/companies/${c.id}`)}>
+                  onClick={() => router.push(`/crm/companies/${toSlug(c.name)}`)}>
+
+                  {/* ── Company name cell with logo ── */}
                   <td className="px-4 py-3" style={{ width: nameColW, minWidth: nameColW }}>
-                    <div className="font-medium text-slate-900 text-sm truncate">{c.name}</div>
-                    {c.description && (
-                      <div className="text-xs text-slate-400 mt-0.5 truncate">{truncate(c.description, 55)}</div>
-                    )}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <CompanyLogo company={c} />
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-900 text-sm truncate">{c.name}</div>
+                        {c.description && (
+                          <div className="text-xs text-slate-400 mt-0.5 truncate">{truncate(c.description, 50)}</div>
+                        )}
+                      </div>
+                    </div>
                   </td>
+
+                  {/* ── Dynamic column cells ── */}
                   {visibleCols.map(key => {
-                    const w = colWidths[key] ?? ALL_COLUMN_DEFS[key].defaultWidth;
+                    const def = ALL_COLUMN_DEFS[key];
+                    if (!def) return null;
+                    const w = colWidths[key] ?? def.defaultWidth;
+
+                    // Contacts — rendered from the contactCountMap prop
+                    if (key === "contacts") {
+                      const n = contactCountMap[c.id] ?? 0;
+                      return (
+                        <td key={key} className="px-4 py-3" style={{ width: w, minWidth: w, maxWidth: w }}>
+                          {n > 0
+                            ? <span className="inline-flex items-center justify-center w-6 h-6 bg-slate-100 text-slate-700 text-xs font-semibold rounded-full">{n}</span>
+                            : <span className="text-slate-300 text-xs">—</span>}
+                        </td>
+                      );
+                    }
+
+                    // Type — inline editable picker
+                    if (key === "type") {
+                      return (
+                        <td key={key} className="px-4 py-3" style={{ width: w, minWidth: w, maxWidth: w }}
+                          onClick={e => e.stopPropagation()}>
+                          <InlineTypePicker
+                            company={c}
+                            onUpdate={newType => handleTypeUpdate(c.id, newType)}
+                          />
+                        </td>
+                      );
+                    }
+
+                    // All other columns — standard render
                     return (
                       <td
                         key={key}
@@ -716,10 +892,12 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
                         style={{ width: w, minWidth: w, maxWidth: w }}
                         onClick={key === "website" || key === "linkedin_url" ? e => e.stopPropagation() : undefined}
                       >
-                        {ALL_COLUMN_DEFS[key].render(c)}
+                        {def.render(c)}
                       </td>
                     );
                   })}
+
+                  {/* ── External link ── */}
                   <td className="px-3 py-3 w-8" onClick={e => e.stopPropagation()}>
                     {c.website && (
                       <a href={c.website} target="_blank" rel="noopener noreferrer"
@@ -743,7 +921,7 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
               <div>
                 <h3 className="text-sm font-semibold text-slate-900">Customize Columns</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Toggle fields · drag edges to resize</p>
+                <p className="text-xs text-slate-500 mt-0.5">Toggle fields · drag right edge of column header to resize</p>
               </div>
               <button onClick={() => setShowCustomize(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <X size={18} />
@@ -753,7 +931,7 @@ export function CompaniesViewClient({ initialCompanies, view }: Props) {
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
               <div className="bg-slate-50 rounded-lg px-3 py-2.5 text-xs text-slate-500">
                 <span className="font-medium text-slate-700">Company Name</span> is always shown.
-                Drag the right edge of any column header to resize.
+                Hover a column header edge to reveal the resize handle.
               </div>
 
               {COL_GROUPS.map(group => {
