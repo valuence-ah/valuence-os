@@ -19,7 +19,8 @@ import {
 import "react-data-grid/lib/styles.css";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
-import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen, Download, Bell } from "lucide-react";
+import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen, Download, Bell, ExternalLink, MapPin, Globe, Users, Building2, Calendar } from "lucide-react";
+import { formatDealStatus, normalizeSector } from "@/lib/constants";
 import { AiConfigPanel } from "@/components/admin/ai-config-panel";
 import { ApiConfigPanel } from "@/components/admin/api-config-panel";
 import { DrivePanel } from "@/components/admin/drive-panel";
@@ -44,6 +45,22 @@ function fmtDate(iso: string | null | undefined): string {
   } catch {
     return iso;
   }
+}
+
+// ─── Portal position helper — flips dropdown upward if near viewport bottom ───
+
+function getPortalPos(
+  rect: DOMRect,
+  estimatedHeight = 320,
+  minWidth = 200
+): { top: number; left: number; width: number } {
+  const spaceBelow = window.innerHeight - rect.bottom - 8;
+  const useAbove = spaceBelow < estimatedHeight && rect.top > spaceBelow;
+  return {
+    top: useAbove ? Math.max(8, rect.top - estimatedHeight - 4) : rect.bottom + 4,
+    left: Math.max(4, Math.min(rect.left, window.innerWidth - minWidth - 4)),
+    width: Math.max(rect.width, minWidth),
+  };
 }
 
 // ─── Toast state ─────────────────────────────────────────────────────────────
@@ -128,8 +145,7 @@ function TypeCell({
     e.stopPropagation();
     setSelected([...current]);
     if (cellRef.current) {
-      const rect = cellRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
+      setPos(getPortalPos(cellRef.current.getBoundingClientRect(), 300, 220));
     }
     setOpen(true);
   }
@@ -216,7 +232,7 @@ function TypeCell({
 
 // ─── ContactTypeCell: portal single-select for contact type ───────────────────
 
-const CONTACT_TYPE_OPTIONS = ["Advisor / KOL","Ecosystem","Employee","Founder / Mgmt","Government/Academic","Investor","Lawyer","Limited Partner","Other","Strategic"];
+const CONTACT_TYPE_OPTIONS = ["Advisor / KOL","Ecosystem","Employee","Founder / Mgmt","Government/Academic","Investor","Limited Partner","Other","Strategic"];
 const CONTACT_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   "Advisor / KOL":       { bg: "#fef3c7", color: "#92400e" },
   "Ecosystem":           { bg: "#ecfdf5", color: "#065f46" },
@@ -224,7 +240,6 @@ const CONTACT_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   "Founder / Mgmt":      { bg: "#faf5ff", color: "#7e22ce" },
   "Government/Academic": { bg: "#f0f9ff", color: "#0369a1" },
   "Investor":            { bg: "#fff7ed", color: "#c2410c" },
-  "Lawyer":              { bg: "#fdf4ff", color: "#86198f" },
   "Limited Partner":     { bg: "#f0fdf4", color: "#15803d" },
   "Other":               { bg: "#f8fafc", color: "#64748b" },
   "Strategic":           { bg: "#fff1f2", color: "#be123c" },
@@ -241,8 +256,7 @@ function ContactTypeCell({ row, onSaved }: { row: ContactRow; onSaved: (id: stri
   function openDropdown(e: React.MouseEvent) {
     e.stopPropagation();
     if (cellRef.current) {
-      const rect = cellRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
+      setPos(getPortalPos(cellRef.current.getBoundingClientRect(), 340, 220));
     }
     setOpen(true);
   }
@@ -325,8 +339,7 @@ function TitleCell({ row, onSaved }: { row: ContactRow; onSaved: (id: string, ti
   function openDropdown(e: React.MouseEvent) {
     e.stopPropagation();
     if (cellRef.current) {
-      const rect = cellRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 200) });
+      setPos(getPortalPos(cellRef.current.getBoundingClientRect(), 320, 200));
     }
     setOpen(true);
   }
@@ -389,7 +402,8 @@ function makePortalSingleSelectCell<TRow extends { id: string }>(
   tableName: string,
   fieldName: string,
   options: string[],
-  colors: Record<string, { bg: string; color: string }>
+  colors: Record<string, { bg: string; color: string }>,
+  formatDisplay?: (val: string) => string
 ) {
   return function PortalSelectCell({
     row, onSaved,
@@ -400,12 +414,12 @@ function makePortalSingleSelectCell<TRow extends { id: string }>(
     const cellRef = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
     const current = String((row as unknown as Record<string, unknown>)[fieldName] ?? "");
+    const displayLabel = formatDisplay ? formatDisplay(current) : current;
 
     function openDropdown(e: React.MouseEvent) {
       e.stopPropagation();
       if (cellRef.current) {
-        const rect = cellRef.current.getBoundingClientRect();
-        setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
+        setPos(getPortalPos(cellRef.current.getBoundingClientRect(), 320, 220));
       }
       setOpen(true);
     }
@@ -434,7 +448,7 @@ function makePortalSingleSelectCell<TRow extends { id: string }>(
         title="Click to edit">
         {current ? (
           <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500 }}>
-            {saving ? "Saving…" : current}
+            {saving ? "Saving…" : displayLabel}
           </span>
         ) : (
           <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#cbd5e1" }}>{saving ? "Saving…" : "Click to set"}</span>
@@ -455,7 +469,7 @@ function makePortalSingleSelectCell<TRow extends { id: string }>(
                   <div key={opt} onClick={e => pick(opt, e)}
                     style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", cursor: "pointer", userSelect: "none", background: opt === current ? "#f0f9ff" : "transparent" }}>
                     <div style={{ width: 14, height: 14, flexShrink: 0, borderRadius: "50%", border: `2px solid ${opt === current ? "#3b82f6" : "#d1d5db"}`, background: opt === current ? "#3b82f6" : "#fff" }} />
-                    <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: oc.bg, color: oc.color, fontWeight: 500 }}>{opt}</span>
+                    <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: oc.bg, color: oc.color, fontWeight: 500 }}>{formatDisplay ? formatDisplay(opt) : opt}</span>
                   </div>
                 );
               })}
@@ -493,8 +507,7 @@ function makePortalMultiSelectCell<TRow extends { id: string }>(
       e.stopPropagation();
       setSelected([...current]);
       if (cellRef.current) {
-        const rect = cellRef.current.getBoundingClientRect();
-        setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
+        setPos(getPortalPos(cellRef.current.getBoundingClientRect(), 220, 220));
       }
       setOpen(true);
     }
@@ -591,7 +604,8 @@ const DEAL_STATUS_COLORS: Record<string, { bg: string; color: string }> = {
 const DealStatusCell = makePortalSingleSelectCell<CompanyRow>(
   "companies", "deal_status",
   ["identified_introduced","first_meeting","discussion_in_process","due_diligence","passed","portfolio","tracking_hold","exited"],
-  DEAL_STATUS_COLORS
+  DEAL_STATUS_COLORS,
+  formatDealStatus
 );
 
 const INVESTMENT_ROUND_COLORS: Record<string, { bg: string; color: string }> = {
@@ -611,15 +625,86 @@ const InvestmentRoundCell = makePortalSingleSelectCell<CompanyRow>(
 );
 
 const SECTORS_COLORS: Record<string, { bg: string; color: string }> = {
-  "Biotech":   { bg: "#faf5ff", color: "#7e22ce" },
   "Cleantech": { bg: "#f0fdf4", color: "#15803d" },
+  "Techbio":   { bg: "#faf5ff", color: "#7e22ce" },
   "Other":     { bg: "#f8fafc", color: "#64748b" },
 };
-const SectorsCell = makePortalMultiSelectCell<CompanyRow>(
-  "companies", "sectors",
-  ["Biotech","Cleantech","Other"],
-  SECTORS_COLORS
-);
+
+// ─── SectorsCell: single-select (saves as single-element array) ───────────────
+function SectorsCell({ row, onSaved }: { row: CompanyRow; onSaved: (id: string, vals: string[]) => void }) {
+  const supabase = createClient();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const cellRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const sectors = Array.isArray(row.sectors) ? (row.sectors as string[]) : [];
+  const current = sectors[0] ?? "";
+
+  function openDropdown(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (cellRef.current) {
+      setPos(getPortalPos(cellRef.current.getBoundingClientRect(), 180, 220));
+    }
+    setOpen(true);
+  }
+
+  async function pick(opt: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setOpen(false);
+    if (!row.id) return;
+    setSaving(true);
+    const newVal = opt ? [opt] : [];
+    await supabase.from("companies").update({ sectors: newVal }).eq("id", row.id);
+    setSaving(false);
+    onSaved(row.id, newVal);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) { if (!cellRef.current?.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const c = SECTORS_COLORS[current] ?? { bg: "#f1f5f9", color: "#475569" };
+  return (
+    <div ref={cellRef} onClick={openDropdown}
+      style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer" }}
+      title="Click to edit">
+      {current ? (
+        <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500, whiteSpace: "nowrap" }}>
+          {saving ? "Saving…" : current}
+        </span>
+      ) : (
+        <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#cbd5e1" }}>{saving ? "Saving…" : "Click to set"}</span>
+      )}
+      {open && pos && createPortal(
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 99999, overflow: "hidden", fontFamily: "inherit" }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div style={{ padding: "6px 0" }}>
+            <div onClick={e => pick("", e)}
+              style={{ padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>
+              — Clear
+            </div>
+            {(["Cleantech","Techbio","Other"] as const).map(opt => {
+              const oc = SECTORS_COLORS[opt] ?? { bg: "#f8fafc", color: "#64748b" };
+              return (
+                <div key={opt} onClick={e => pick(opt, e)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", cursor: "pointer", userSelect: "none", background: opt === current ? "#f0f9ff" : "transparent" }}>
+                  <div style={{ width: 14, height: 14, flexShrink: 0, borderRadius: "50%", border: `2px solid ${opt === current ? "#3b82f6" : "#d1d5db"}`, background: opt === current ? "#3b82f6" : "#fff" }} />
+                  <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: oc.bg, color: oc.color, fontWeight: 500 }}>{opt}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
 
 const INVESTOR_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   "Accelerator":    { bg: "#fef3c7", color: "#92400e" },
@@ -698,8 +783,7 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved, onRequest
     setSearch("");
     setAiSuggestion(null);
     if (cellRef.current) {
-      const rect = cellRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 260) });
+      setPos(getPortalPos(cellRef.current.getBoundingClientRect(), 360, 260));
     }
     setOpen(true);
     setTimeout(() => inputRef.current?.focus(), 30);
@@ -817,7 +901,7 @@ function CompanyPickerCell({ row, companiesRef, setCompanies, onSaved, onRequest
                 const savedCb = onSaved;
                 setOpen(false);
                 onRequestCreate(name, async (newCo: CompanyRow) => {
-                  setCompanies(prev => [newCo, ...prev]);
+                  // Note: handleCreatePanelSubmit already adds newCo to companies state — don't duplicate here
                   const sb = createClient();
                   await sb.from("contacts").update({ company_id: newCo.id }).eq("id", rowId);
                   savedCb(rowId, newCo.id, newCo.name);
@@ -929,7 +1013,8 @@ function LinkedContactsCell({ row, contactsRef, setContacts }: {
     e.stopPropagation();
     if (cellRef.current) {
       const rect = cellRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left });
+      const p = getPortalPos(rect, 340, 340);
+      setPos({ top: p.top, left: p.left });
     }
     setPanelSearch("");
     setMode("list");
@@ -1272,6 +1357,235 @@ function LinkedContactsCell({ row, contactsRef, setContacts }: {
   );
 }
 
+// ─── Company detail panel ─────────────────────────────────────────────────────
+
+function CompanyDetailPanel({ company, onClose }: { company: CompanyRow; onClose: () => void }) {
+  const supabase = createClient();
+  const [contacts, setContacts] = useState<{ id: string; first_name: string; last_name: string | null; title: string | null; email: string | null }[]>([]);
+  const [interactionCount, setInteractionCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const [{ data: cts }, { count }] = await Promise.all([
+        supabase.from("contacts").select("id, first_name, last_name, title, email")
+          .eq("company_id", company.id).order("is_primary_contact", { ascending: false }).limit(8),
+        supabase.from("interactions").select("id", { count: "exact", head: true })
+          .eq("company_id", company.id),
+      ]);
+      if (!cancelled) {
+        setContacts(cts ?? []);
+        setInteractionCount(count ?? 0);
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, [company.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const type = company.type?.toLowerCase() ?? "";
+  const isStartup   = type === "startup";
+  const isFund      = type === "fund";
+  const isLP        = type === "lp";
+  const isCorporate = type === "corporate";
+
+  const fmtDate = (d: string | null | undefined) => d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="w-[480px] bg-white h-full shadow-2xl overflow-y-auto flex flex-col border-l border-slate-200"
+        onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="sticky top-0 bg-white z-10 border-b border-slate-100 px-6 py-4 flex items-start justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            {company.logo_url ? (
+              <img src={company.logo_url} alt={company.name}
+                className="w-9 h-9 rounded-lg object-contain border border-slate-200 flex-shrink-0" />
+            ) : (
+              <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-sm font-bold">
+                  {company.name?.charAt(0)?.toUpperCase() ?? "?"}
+                </span>
+              </div>
+            )}
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-slate-900 truncate">{company.name}</h2>
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {company.type && (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded capitalize">{company.type}</span>
+                )}
+                {(company.sectors as string[] | null)?.map(s => (
+                  <span key={s} className="text-[10px] px-1.5 py-0.5 bg-teal-50 text-teal-700 border border-teal-200 rounded">{s}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+            <a href={`/crm/companies/${company.id}`} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">
+              <ExternalLink size={11} /> Full profile
+            </a>
+            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 px-6 py-4 space-y-5">
+          {/* Description */}
+          {company.description && (
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">About</p>
+              <p className="text-sm text-slate-700 leading-relaxed">{company.description}</p>
+            </div>
+          )}
+
+          {/* Core fields */}
+          <div className="grid grid-cols-2 gap-3">
+            {company.website && (
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Website</p>
+                <a href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-blue-600 hover:underline flex items-center gap-1 truncate">
+                  <Globe size={11} />{company.website.replace(/^https?:\/\//, "")}
+                </a>
+              </div>
+            )}
+            {(company.location_city || company.location_country) && (
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Location</p>
+                <p className="text-sm text-slate-700 flex items-center gap-1">
+                  <MapPin size={11} className="text-slate-400" />
+                  {[company.location_city, company.location_country].filter(Boolean).join(", ")}
+                </p>
+              </div>
+            )}
+            {company.last_contact_date && (
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Last Contact</p>
+                <p className="text-sm text-slate-700 flex items-center gap-1">
+                  <Calendar size={11} className="text-slate-400" />{fmtDate(company.last_contact_date)}
+                </p>
+              </div>
+            )}
+            {interactionCount !== null && (
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Interactions</p>
+                <p className="text-sm text-slate-700">{interactionCount} total</p>
+              </div>
+            )}
+          </div>
+
+          {/* Type-specific fields */}
+          {isStartup && (
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+              {company.deal_status && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Deal Status</p>
+                  <p className="text-sm text-slate-700">{formatDealStatus(company.deal_status)}</p>
+                </div>
+              )}
+              {company.stage && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Round</p>
+                  <p className="text-sm text-slate-700">{company.stage}</p>
+                </div>
+              )}
+              {company.priority && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Priority</p>
+                  <p className="text-sm text-slate-700">{company.priority}</p>
+                </div>
+              )}
+            </div>
+          )}
+          {isFund && (
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+              {company.investor_type && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Investor Type</p>
+                  <p className="text-sm text-slate-700">{company.investor_type}</p>
+                </div>
+              )}
+              {company.aum && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">AUM</p>
+                  <p className="text-sm text-slate-700">{company.aum}</p>
+                </div>
+              )}
+            </div>
+          )}
+          {isLP && (
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+              {company.lp_type && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">LP Type</p>
+                  <p className="text-sm text-slate-700">{company.lp_type}</p>
+                </div>
+              )}
+              {company.commitment_goal && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Commitment Goal</p>
+                  <p className="text-sm text-slate-700">{company.commitment_goal}</p>
+                </div>
+              )}
+            </div>
+          )}
+          {isCorporate && company.strategic_type && (
+            <div className="pt-2 border-t border-slate-100">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Strategic Type</p>
+              <p className="text-sm text-slate-700">{company.strategic_type}</p>
+            </div>
+          )}
+
+          {/* Notes */}
+          {company.notes && (
+            <div className="pt-2 border-t border-slate-100">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Notes</p>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{company.notes}</p>
+            </div>
+          )}
+
+          {/* Contacts */}
+          <div className="pt-2 border-t border-slate-100">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+              <Users size={10} /> Contacts ({contacts.length})
+            </p>
+            {contacts.length === 0 ? (
+              <p className="text-xs text-slate-400">No contacts linked</p>
+            ) : (
+              <div className="space-y-1.5">
+                {contacts.map(c => (
+                  <div key={c.id} className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-violet-600 text-[9px] font-bold">
+                        {(c.first_name[0] ?? "?").toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-slate-800 truncate">
+                        {c.first_name} {c.last_name ?? ""}
+                      </p>
+                      {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
+                    </div>
+                    {c.email && (
+                      <a href={`mailto:${c.email}`} className="ml-auto text-[10px] text-blue-500 hover:underline flex-shrink-0 truncate max-w-[140px]">
+                        {c.email}
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface AdminClientProps {
@@ -1327,6 +1641,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   const [selectedCompanyRows, setSelectedCompanyRows] = useState<ReadonlySet<string>>(
     () => new Set()
   );
+  const [panelCompany, setPanelCompany] = useState<CompanyRow | null>(null);
 
   // ── Contacts state ───────────────────────────────────────────────────────
   const [contacts, setContacts] = useState<ContactRow[]>(
@@ -1473,8 +1788,14 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         sortable: true,
         resizable: true,
         renderCell: ({ row }: { row: CompanyRow }) => (
-          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px" }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#1e293b" }}>{row.name}</span>
+          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", gap: 4 }}>
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); setPanelCompany(row); }}
+              style={{ fontSize: 12, fontWeight: 600, color: "#2563eb", textDecoration: "underline", textUnderlineOffset: 2, background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}
+            >
+              {row.name}
+            </button>
           </div>
         ),
         renderEditCell: renderTextEditor,
@@ -2290,6 +2611,11 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { _dirty, company, ...fields } = row as CompanyRow & { company?: unknown };
 
+        // Normalize sectors before saving
+        if (Array.isArray(fields.sectors)) {
+          (fields as Partial<Company>).sectors = fields.sectors.map((s: string) => normalizeSector(s));
+        }
+
         const { error } = await supabase
           .from("companies")
           .update(fields as Partial<Company>)
@@ -2615,8 +2941,8 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   return (
     <>
     <div className="flex flex-col h-full">
-      {/* ── Header bar ── */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0 flex-wrap">
+      {/* ── Header: Row 1 — title + tabs ── */}
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-white border-b border-slate-100 flex-shrink-0 flex-wrap">
         <Shield size={18} className="text-blue-600" />
         <h1 className="text-sm font-semibold text-slate-800 mr-2">Admin Spreadsheet</h1>
 
@@ -2703,7 +3029,10 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
             <Sparkles size={11} /> Thesis
           </button>
         </div>
+      </div>
 
+      {/* ── Header: Row 2 — search + filter + columns + export + add ── */}
+      <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-slate-200 flex-shrink-0 flex-wrap">
         {/* Search — hidden on api/drive/sourcing/watchlist tab */}
         <div className={`relative flex-1 max-w-xs ${(activeTab === "api" || isDrive || isSourcing || activeTab === "watchlist" || activeTab === "thesis_keywords") ? "invisible" : ""}`}>
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -2774,7 +3103,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
                   <FilterField label="Type" filterKey="type" isCompanyTab={true} options={["startup","limited partner","investor","strategic partner","fund","ecosystem_partner","corporate","government","other"]} />
                   <FilterField label="Deal Status" filterKey="deal_status" isCompanyTab={true} options={["identified_introduced","first_meeting","discussion_in_process","due_diligence","passed","portfolio","tracking_hold","exited"]} />
                   <FilterField label="Stage / LP Stage" filterKey="stage" isCompanyTab={true} options={["Pre-Seed","Pre-A","Seed","Seed Extension","Series A","Series B","Series C","Growth","Lead","Initial Meeting","Discussion in Process","Due Diligence","Committed","Passed"]} />
-                  <FilterField label="Sector" filterKey="sectors" isCompanyTab={true} options={["Biotech","Cleantech","Other"]} />
+                  <FilterField label="Sector" filterKey="sectors" isCompanyTab={true} options={["Cleantech","Techbio","Other"]} />
                   <FilterField label="Location Country" filterKey="location_country" isCompanyTab={true} />
                   <FilterField label="Source" filterKey="source" isCompanyTab={true} />
                 </>
@@ -3179,6 +3508,11 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         </div>
       </div>,
       document.body
+    )}
+
+    {/* Company detail panel */}
+    {panelCompany && (
+      <CompanyDetailPanel company={panelCompany} onClose={() => setPanelCompany(null)} />
     )}
     </>
   );

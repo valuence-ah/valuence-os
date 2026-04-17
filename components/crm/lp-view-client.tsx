@@ -588,6 +588,7 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [lpIntelligence, setLpIntelligence] = useState<LpIntelItem[]>([]);
   const [lpIntelLoading, setLpIntelLoading] = useState(false);
   const [lpIntelError, setLpIntelError]     = useState<string | null>(null);
+  const [lpIntelCachedAt, setLpIntelCachedAt] = useState<string | null>(null);
 
   // LP Starred intel — persisted to localStorage
   const [lpStarredIntel, setLpStarredIntel] = useState<Record<string, string[]>>({});
@@ -776,7 +777,13 @@ export function LpViewClient({ initialCompanies }: Props) {
     setBriefContent(""); setBriefError("");
     setOutreachContent(""); setOutreachError("");
     setLpDetailTab("overview");
-    setLpIntelligence([]); setLpIntelError(null);
+    setLpIntelError(null);
+    // Load cached intelligence immediately so it's visible when tab opens
+    try {
+      const s = localStorage.getItem(`lp_intel_${id}`);
+      if (s) { const { items, cachedAt } = JSON.parse(s); setLpIntelligence(items ?? []); setLpIntelCachedAt(cachedAt ?? null); }
+      else { setLpIntelligence([]); setLpIntelCachedAt(null); }
+    } catch { setLpIntelligence([]); setLpIntelCachedAt(null); }
     loadDetail(id);
   }
 
@@ -810,7 +817,11 @@ export function LpViewClient({ initialCompanies }: Props) {
       const res = await fetch(`/api/companies/${selected.id}/intelligence`, { method: "POST" });
       if (res.ok) {
         const data = await res.json() as { items?: LpIntelItem[] };
-        setLpIntelligence(data.items ?? []);
+        const items = data.items ?? [];
+        setLpIntelligence(items);
+        const cachedAt = new Date().toISOString();
+        setLpIntelCachedAt(cachedAt);
+        try { localStorage.setItem(`lp_intel_${selected.id}`, JSON.stringify({ items, cachedAt })); } catch {}
       } else {
         setLpIntelError("Could not load intelligence");
       }
@@ -1727,7 +1738,12 @@ export function LpViewClient({ initialCompanies }: Props) {
                   {/* Top: Updates section — independently scrollable */}
                   <div className="flex-1 overflow-y-auto px-5 pt-4 pb-2 space-y-3 border-b border-slate-200" style={{ minHeight: 0 }}>
                     <div className="flex items-center justify-between flex-shrink-0">
-                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Updates · Past 6 Months</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Updates · Past 6 Months</p>
+                        {lpIntelCachedAt && !lpIntelLoading && (
+                          <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(lpIntelCachedAt).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
+                        )}
+                      </div>
                       <button onClick={fetchLpIntelligence} disabled={lpIntelLoading}
                         className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1">
                         {lpIntelLoading ? <><Loader2 size={10} className="animate-spin" />Loading…</> : <><Sparkles size={10} />Refresh</>}

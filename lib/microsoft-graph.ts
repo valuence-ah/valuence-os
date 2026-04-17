@@ -17,23 +17,26 @@ let _token: { value: string; expiresAt: number } | null = null;
 async function getAccessToken(): Promise<string> {
   if (_token && Date.now() < _token.expiresAt - 60_000) return _token.value;
 
-  const { MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET } = process.env;
+  // Support both MICROSOFT_GRAPH_* (Vercel) and MICROSOFT_* (legacy .env.local) naming
+  const tenantId     = process.env.MICROSOFT_GRAPH_TENANT_ID     ?? process.env.MICROSOFT_TENANT_ID;
+  const clientId     = process.env.MICROSOFT_GRAPH_CLIENT_ID     ?? process.env.MICROSOFT_CLIENT_ID;
+  const clientSecret = process.env.MICROSOFT_GRAPH_CLIENT_SECRET ?? process.env.MICROSOFT_CLIENT_SECRET;
 
-  if (!MICROSOFT_TENANT_ID || !MICROSOFT_CLIENT_ID || !MICROSOFT_CLIENT_SECRET) {
+  if (!tenantId || !clientId || !clientSecret) {
     throw new Error(
-      "Microsoft Graph not configured. Add MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, and MICROSOFT_CLIENT_SECRET to .env.local"
+      "Microsoft Graph not configured. Add MICROSOFT_GRAPH_TENANT_ID, MICROSOFT_GRAPH_CLIENT_ID, and MICROSOFT_GRAPH_CLIENT_SECRET to Vercel env vars"
     );
   }
 
   const res = await fetch(
-    `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
     {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "client_credentials",
-        client_id: MICROSOFT_CLIENT_ID,
-        client_secret: MICROSOFT_CLIENT_SECRET,
+        client_id: clientId,
+        client_secret: clientSecret,
         scope: "https://graph.microsoft.com/.default",
       }),
     }
@@ -41,10 +44,16 @@ async function getAccessToken(): Promise<string> {
 
   if (!res.ok) {
     const text = await res.text();
+    console.error(`[graph] token error ${res.status}:`, text);
     throw new Error(`Microsoft token error ${res.status}: ${text}`);
   }
 
   const json = await res.json();
+  if (!json.access_token) {
+    console.error("[graph] token response missing access_token:", JSON.stringify(json));
+    throw new Error(`Microsoft token response missing access_token: ${JSON.stringify(json)}`);
+  }
+  console.log("[graph] access token acquired, expires_in:", json.expires_in);
   _token = { value: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
   return _token.value;
 }
@@ -55,6 +64,7 @@ export interface GraphEmail {
   from: { emailAddress: { name: string; address: string } };
   toRecipients: { emailAddress: { name: string; address: string } }[];
   receivedDateTime: string;
+  sentDateTime?: string;
   bodyPreview: string;
   body: { content: string; contentType: string };
   hasAttachments: boolean;
@@ -70,21 +80,33 @@ export async function getRecentEmails(
 ): Promise<GraphEmail[]> {
   const token = await getAccessToken();
 
-  const filter = since
-    ? `&$filter=receivedDateTime ge ${since} and isDraft eq false`
-    : "$filter=isDraft eq false";
+  // Graph OData requires datetime without milliseconds: 2026-04-07T05:00:00Z
+  const sinceClean = since ? since.replace(/\.\d{3}Z$/, "Z") : undefined;
+
+  // Use sentDateTime for sent items (receivedDateTime unreliable there)
+  const dateField = folder === "sentItems" ? "sentDateTime" : "receivedDateTime";
+
+  // Build filter — no leading & so URL doesn't get double-&&
+  const filter = sinceClean
+    ? `$filter=${dateField} ge ${sinceClean} and isDraft eq false`
+    : `$filter=isDraft eq false`;
+
+  const orderby = folder === "sentItems" ? "sentDateTime desc" : "receivedDateTime desc";
 
   const url =
     `${GRAPH_BASE}/users/${mailbox}/mailFolders/${folder}/messages` +
-    `?$top=${limit}&${filter}&$orderby=receivedDateTime desc` +
-    `&$select=id,subject,from,toRecipients,receivedDateTime,bodyPreview,body,hasAttachments,webLink`;
+    `?$top=${limit}&${filter}&$orderby=${orderby}` +
+    `&$select=id,subject,from,toRecipients,receivedDateTime,sentDateTime,bodyPreview,body,hasAttachments,webLink`;
 
+  console.log(`[graph] GET ${url.replace(/Authorization=[^&]+/, "Authorization=***")}`);
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     const body = await res.text();
+    console.error(`[graph] ${res.status} for ${mailbox}/${folder}:`, body.slice(0, 500));
     throw new Error(`Graph API ${res.status} for ${mailbox}/${folder}: ${body.slice(0, 300)}`);
   }
   const json = await res.json();
+  console.log(`[graph] ${mailbox}/${folder} → ${(json.value ?? []).length} messages`);
   return json.value ?? [];
 }
 
@@ -116,16 +138,19 @@ let _calToken: { value: string; expiresAt: number } | null = null;
 
 async function getCalendarToken(): Promise<string> {
   if (_calToken && Date.now() < _calToken.expiresAt - 60_000) return _calToken.value;
-  const tenantId = process.env.GRAPH_TENANT_ID;
-  if (!tenantId) throw new Error("GRAPH_TENANT_ID not set");
+  // Support MICROSOFT_GRAPH_* (Vercel), GRAPH_* (legacy), or MICROSOFT_* naming
+  const tenantId     = process.env.MICROSOFT_GRAPH_TENANT_ID     ?? process.env.GRAPH_TENANT_ID     ?? process.env.MICROSOFT_TENANT_ID;
+  const clientId     = process.env.MICROSOFT_GRAPH_CLIENT_ID     ?? process.env.GRAPH_CLIENT_ID     ?? process.env.MICROSOFT_CLIENT_ID;
+  const clientSecret = process.env.MICROSOFT_GRAPH_CLIENT_SECRET ?? process.env.GRAPH_CLIENT_SECRET ?? process.env.MICROSOFT_CLIENT_SECRET;
+  if (!tenantId) throw new Error("GRAPH_TENANT_ID / MICROSOFT_GRAPH_TENANT_ID not set");
   const res = await fetch(
     `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
     {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id:     process.env.GRAPH_CLIENT_ID!,
-        client_secret: process.env.GRAPH_CLIENT_SECRET!,
+        client_id:     clientId!,
+        client_secret: clientSecret!,
         scope:         "https://graph.microsoft.com/.default",
         grant_type:    "client_credentials",
       }),
@@ -154,7 +179,7 @@ export async function findOutlookEvent(
   if (!process.env.GRAPH_CLIENT_ID || !process.env.GRAPH_TENANT_ID) return null;
   try {
     const token     = await getCalendarToken();
-    const userEmail = process.env.GRAPH_USER_EMAIL;
+    const userEmail = process.env.MICROSOFT_GRAPH_USER_EMAIL ?? process.env.GRAPH_USER_EMAIL;
     if (!userEmail) return null;
 
     const startDate = new Date(meetingDate);

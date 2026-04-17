@@ -112,19 +112,28 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 3. Log the email as an interaction ─────────────────────────────────────
+  const interactionDate = date ? new Date(date).toISOString() : new Date().toISOString();
   const { data: interaction } = await supabase
     .from("interactions")
     .insert({
       type:        "email",
       subject:     subject || "Inbound email",
       body:        email_body || null,
-      date:        date ? new Date(date).toISOString() : new Date().toISOString(),
+      date:        interactionDate,
       company_id:  companyId,
+      contact_id:  contactId ?? null,
       contact_ids: contactId ? [contactId] : [],
       sentiment:   "neutral",
     })
     .select("id")
     .single();
+  // Update last_contact_date on company and last_interaction_date on contact
+  if (contactId) {
+    await supabase.from("contacts").update({ last_interaction_date: interactionDate }).eq("id", contactId);
+  }
+  if (companyId) {
+    await supabase.from("companies").update({ last_contact_date: interactionDate }).eq("id", companyId);
+  }
 
   // ── 4. If deck attached, save to documents ─────────────────────────────────
   if (deck_url && companyId) {

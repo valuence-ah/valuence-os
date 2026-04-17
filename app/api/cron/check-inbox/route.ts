@@ -1,33 +1,26 @@
 // ─── Cron: Check Team Inboxes → New Contacts ─────────────────────────────────
-// Runs every 15 minutes via Vercel Cron (see vercel.json).
-// Reads inbox + sent items for EVERY mailbox in OUTLOOK_MAILBOXES (comma-sep).
-// Skips noise, extracts contact info with Claude, creates pending contacts.
-//
-// Multi-user: just add new @valuence.vc addresses to OUTLOOK_MAILBOXES.
-// All mailboxes share one client_credentials token (tenant-wide Mail.Read).
+// Runs every hour via Vercel Cron (see vercel.json). Requires Pro plan.
+// Parameters are read live from agent_configs (agent_name = 'outlook') in Supabase,
+// so any changes in Admin → API Config → Outlook take effect on the next run.
 //
 // Callable manually: POST /api/cron/check-inbox
 // Required env vars:
-//   MICROSOFT_TENANT_ID      — Azure AD Directory (tenant) ID
-//   MICROSOFT_CLIENT_ID      — App registration client ID
-//   MICROSOFT_CLIENT_SECRET  — App registration client secret
-//   OUTLOOK_MAILBOXES        — comma-separated, e.g. "andrew@valuence.vc,partner@valuence.vc"
-//                              defaults to "andrew@valuence.vc"
+//   MICROSOFT_GRAPH_TENANT_ID      — Azure AD Directory (tenant) ID
+//   MICROSOFT_GRAPH_CLIENT_ID      — App registration client ID
+//   MICROSOFT_GRAPH_CLIENT_SECRET  — App registration client secret
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getRecentEmails } from "@/lib/microsoft-graph";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-// ── Config ────────────────────────────────────────────────────────────────────
+// ── Config defaults (overridden by agent_configs DB row) ─────────────────────
 
-// All @valuence.vc mailboxes to monitor — add new team members here via env var
-const MAILBOXES: string[] = (
-  process.env.OUTLOOK_MAILBOXES ?? "andrew@valuence.vc"
-)
-  .split(",")
-  .map((m) => m.trim().toLowerCase())
-  .filter(Boolean);
+const DEFAULT_MAILBOXES  = (process.env.OUTLOOK_MAILBOXES ?? "andrew@valuence.vc")
+  .split(",").map(m => m.trim().toLowerCase()).filter(Boolean);
+const DEFAULT_LOOKBACK   = 2;    // hours (covers hourly run + overlap)
+const DEFAULT_MAX        = 50;   // emails per mailbox per folder
+const DEFAULT_AUTO_CO    = true; // auto-create company stubs
 
 // Internal domain — never create contacts for @valuence.vc addresses
 const INTERNAL_DOMAIN = "valuence.vc";
@@ -114,6 +107,15 @@ interface EmailCandidate {
   bodyPreview: string;
   seenInMailbox: string;
   direction: "inbound" | "outbound";
+  emailDate: string; // ISO — used to update last_contact_date on existing contacts
+}
+
+// Generic/placeholder names Claude sometimes hallucinates when sender name is empty
+const GENERIC_NAMES = new Set(["new contact", "unknown", "unknown contact", "no name", "n/a", "none", "", "null"]);
+
+function isValidName(first: string, last: string): boolean {
+  const full = `${first} ${last}`.trim().toLowerCase();
+  return full.length > 0 && !GENERIC_NAMES.has(full) && !GENERIC_NAMES.has(first.toLowerCase());
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
@@ -125,41 +127,67 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (
-    !process.env.MICROSOFT_TENANT_ID ||
-    !process.env.MICROSOFT_CLIENT_ID ||
-    !process.env.MICROSOFT_CLIENT_SECRET
-  ) {
+  const hasMsConfig =
+    (process.env.MICROSOFT_GRAPH_TENANT_ID ?? process.env.MICROSOFT_TENANT_ID) &&
+    (process.env.MICROSOFT_GRAPH_CLIENT_ID ?? process.env.MICROSOFT_CLIENT_ID) &&
+    (process.env.MICROSOFT_GRAPH_CLIENT_SECRET ?? process.env.MICROSOFT_CLIENT_SECRET);
+
+  if (!hasMsConfig) {
     return NextResponse.json(
       {
         error: "Microsoft Graph not configured",
         setup:
-          "Add MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET to Vercel env vars. " +
+          "Add MICROSOFT_GRAPH_TENANT_ID, MICROSOFT_GRAPH_CLIENT_ID, MICROSOFT_GRAPH_CLIENT_SECRET to Vercel env vars. " +
           "See: https://learn.microsoft.com/en-us/graph/auth-v2-service",
       },
       { status: 503 }
     );
   }
 
+  const supabase = createAdminClient();
+
+  // ── Load live config from DB (falls back to defaults if row doesn't exist) ──
+  const { data: configRow } = await supabase
+    .from("agent_configs")
+    .select("config")
+    .eq("agent_name", "outlook")
+    .maybeSingle();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dbCfg: Record<string, any> = configRow?.config ?? {};
+
+  const MAILBOXES: string[] = Array.isArray(dbCfg.mailboxes) && dbCfg.mailboxes.length
+    ? dbCfg.mailboxes.map((m: string) => m.trim().toLowerCase()).filter(Boolean)
+    : DEFAULT_MAILBOXES;
+
+  const lookbackHours: number   = typeof dbCfg.lookbackHours === "number" ? dbCfg.lookbackHours : DEFAULT_LOOKBACK;
+  const maxPerMailbox: number   = typeof dbCfg.maxPerMailbox  === "number" ? dbCfg.maxPerMailbox  : DEFAULT_MAX;
+  const autoCreateCo: boolean   = typeof dbCfg.autoCreateCompanies === "boolean" ? dbCfg.autoCreateCompanies : DEFAULT_AUTO_CO;
+  const extraSkip: string[]     = Array.isArray(dbCfg.additionalSkipPatterns) ? dbCfg.additionalSkipPatterns : [];
+  const extraSkipRx             = extraSkip.map((p: string) => new RegExp(p, "i"));
+
   const url = new URL(req.url);
   const since =
     url.searchParams.get("since") ??
-    new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    new Date(Date.now() - lookbackHours * 60 * 60 * 1000).toISOString();
 
-  const supabase = createAdminClient();
-  const perMailbox: Record<string, { inbox: number; sent: number; errors: string[] }> = {};
+  const perMailbox: Record<string, { inbox: number; errors: string[] }> = {};
   const contactResults: { email: string; mailbox: string; action: string }[] = [];
 
   // Global dedup across all mailboxes in this cron run
   const processedThisRun = new Set<string>();
 
+  console.log("[check-inbox] config:", JSON.stringify({ MAILBOXES, lookbackHours, maxPerMailbox, since }));
+
   for (const mailbox of MAILBOXES) {
-    perMailbox[mailbox] = { inbox: 0, sent: 0, errors: [] };
+    perMailbox[mailbox] = { inbox: 0, errors: [] };
     const candidates: EmailCandidate[] = [];
 
-    // Inbox — contact is the sender
+    // Inbox — contact is the sender (inbound only)
     try {
-      const inbox = await getRecentEmails(mailbox, since, 50, "inbox");
+      console.log(`[check-inbox] fetching inbox for ${mailbox} since ${since}`);
+      const inbox = await getRecentEmails(mailbox, since, maxPerMailbox, "inbox");
+      console.log(`[check-inbox] inbox fetched: ${inbox.length} emails`);
       perMailbox[mailbox].inbox = inbox.length;
       for (const msg of inbox) {
         candidates.push({
@@ -169,6 +197,7 @@ export async function POST(req: NextRequest) {
           bodyPreview: msg.bodyPreview,
           seenInMailbox: mailbox,
           direction: "inbound",
+          emailDate: msg.receivedDateTime ?? new Date().toISOString(),
         });
       }
     } catch (err) {
@@ -177,43 +206,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Sent items — contacts are the recipients
-    try {
-      const sent = await getRecentEmails(mailbox, since, 50, "sentItems");
-      perMailbox[mailbox].sent = sent.length;
-      for (const msg of sent) {
-        for (const r of msg.toRecipients ?? []) {
-          candidates.push({
-            email: r.emailAddress.address.toLowerCase(),
-            name: r.emailAddress.name ?? "",
-            subject: msg.subject,
-            bodyPreview: msg.bodyPreview,
-            seenInMailbox: mailbox,
-            direction: "outbound",
-          });
-        }
-      }
-    } catch (err) {
-      perMailbox[mailbox].errors.push(
-        `sent: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-
     // Process candidates
     for (const candidate of candidates) {
       if (shouldSkip(candidate.email)) continue;
+      if (extraSkipRx.some(rx => rx.test(candidate.email))) continue;
       if (processedThisRun.has(candidate.email)) continue;
       processedThisRun.add(candidate.email);
 
-      // Skip if already in DB
+      // Skip if already in DB — but update last_contact_date
       const { data: existing } = await supabase
         .from("contacts")
-        .select("id")
+        .select("id, last_contact_date, company_id")
         .eq("email", candidate.email)
         .maybeSingle();
 
       if (existing) {
-        contactResults.push({ email: candidate.email, mailbox, action: "already exists" });
+        // Only update if this email is more recent than the stored date
+        const currentDate = existing.last_contact_date ? new Date(existing.last_contact_date) : null;
+        const emailDate   = new Date(candidate.emailDate);
+        if (!currentDate || emailDate > currentDate) {
+          await supabase
+            .from("contacts")
+            .update({ last_contact_date: candidate.emailDate })
+            .eq("id", existing.id);
+          // Also update the company's last_contact_date
+          if (existing.company_id) {
+            await supabase
+              .from("companies")
+              .update({ last_contact_date: candidate.emailDate })
+              .eq("id", existing.company_id);
+          }
+        }
+        contactResults.push({ email: candidate.email, mailbox, action: "updated last_contact" });
         continue;
       }
 
@@ -234,6 +258,13 @@ export async function POST(req: NextRequest) {
           email: candidate.email,
           notes: `${candidate.direction === "outbound" ? "Emailed by" : "Emailed"} ${mailbox}: ${candidate.subject}`,
         };
+      }
+
+      // Skip if Claude returned a generic/invalid name and we have no real name to fall back to
+      if (!isValidName(contact.first_name ?? "", contact.last_name ?? "")) {
+        const emailPrefix = candidate.email.split("@")[0];
+        contact.first_name = emailPrefix;
+        contact.last_name  = "";
       }
 
       // Find or create company stub
@@ -262,7 +293,7 @@ export async function POST(req: NextRequest) {
         companyId = byDomain?.id ?? null;
       }
 
-      if (!companyId && contact.company_name) {
+      if (!companyId && contact.company_name && autoCreateCo) {
         // Create new company stub
         const { data: newCo } = await supabase
           .from("companies")
@@ -284,26 +315,47 @@ export async function POST(req: NextRequest) {
         .filter(Boolean)
         .join(" · ");
 
-      await supabase.from("contacts").insert({
-        first_name: contact.first_name,
-        last_name: contact.last_name,
-        email: candidate.email,
-        title: contact.title ?? null,
+      const { error: insertError } = await supabase.from("contacts").insert({
+        first_name: contact.first_name  ?? "",
+        last_name:  contact.last_name   ?? "",
+        email:      candidate.email,
+        title:      contact.title ?? null,
         company_id: companyId,
-        type: "other",
-        status: "pending",
-        notes: sourceNote,
+        type:       "Other",      // must match DB enum (capital O)
+        status:     "pending",
+        last_contact_date: candidate.emailDate,
+        notes:      sourceNote,
       });
 
-      contactResults.push({ email: candidate.email, mailbox, action: "created" });
+      if (insertError) {
+        console.error("[check-inbox] insert failed:", insertError.message, "for", candidate.email);
+        contactResults.push({ email: candidate.email, mailbox, action: `insert_error: ${insertError.message}` });
+      } else {
+        // Update the company's last_contact_date when we create a new contact
+        if (companyId) {
+          await supabase
+            .from("companies")
+            .update({ last_contact_date: candidate.emailDate })
+            .eq("id", companyId);
+        }
+        contactResults.push({ email: candidate.email, mailbox, action: "created" });
+      }
     }
   }
 
+  const totalFetched = Object.values(perMailbox).reduce((s, m) => s + m.inbox, 0);
+  const totalSkipped = totalFetched - contactResults.length - processedThisRun.size + processedThisRun.size;
+  const allErrors    = Object.entries(perMailbox)
+    .flatMap(([mb, v]) => v.errors.map(e => `${mb}: ${e}`));
+
   return NextResponse.json({
     success: true,
+    config_used: { mailboxes: MAILBOXES, lookbackHours, maxPerMailbox, autoCreateCompanies: autoCreateCo },
     mailboxes_checked: MAILBOXES.length,
-    mailboxes: perMailbox,
+    emails_fetched: totalFetched,
     contacts_processed: contactResults.length,
+    errors: allErrors,
+    mailboxes: perMailbox,
     results: contactResults,
   });
 }

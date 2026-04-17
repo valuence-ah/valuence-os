@@ -26,7 +26,7 @@ export default async function ContactsPage() {
       .select("*, company:companies(id, name, type, deal_status, website)")
       .eq("status", "active")
       .order("updated_at", { ascending: false })
-      .range(0, 199) as unknown as Promise<{
+      .range(0, 499) as unknown as Promise<{
         data: (import("@/lib/types").Contact & {
           company?: { id: string; name: string; type: string; deal_status?: string | null; website?: string | null } | null;
         })[] | null;

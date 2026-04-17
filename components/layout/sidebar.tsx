@@ -64,7 +64,7 @@ export function Sidebar() {
   const supabase  = createClient();
 
   // CRM section: default open; persist collapsed state in localStorage
-  const [crmOpen, setCrmOpen] = useState(true); // default open on server; overridden by localStorage on client
+  const [crmOpen, setCrmOpen] = useState(false); // default collapsed; overridden by localStorage on client
   useEffect(() => {
     const saved = localStorage.getItem("crm_nav_open");
     if (saved !== null) {
@@ -126,7 +126,12 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+      <div className="flex-1 relative min-h-0">
+        <div
+          className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 z-10"
+          style={{ background: "linear-gradient(to bottom, transparent, #0a0f1e)" }}
+        />
+        <nav className="h-full overflow-y-auto px-3 py-4 space-y-5 sidebar-nav">
 
         {/* Core */}
         <div>
@@ -177,6 +182,7 @@ export function Sidebar() {
 
 
       </nav>
+      </div>
 
       {/* Footer — admin + sign out */}
       <div className="px-3 py-4 border-t border-[#1e2d4a] space-y-0.5">

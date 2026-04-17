@@ -15,6 +15,36 @@ const nextConfig: NextConfig = {
   // correctly from node_modules at runtime (pdf-parse reads test files on init
   // that only exist on disk, not in a bundled context).
   serverExternalPackages: ["pdf-parse"],
+
+  async headers() {
+    return [
+      {
+        // Apply to all routes
+        source: "/:path*",
+        headers: [
+          // Prevent clickjacking
+          { key: "X-Frame-Options", value: "DENY" },
+          // Prevent MIME-type sniffing
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // Control referrer information
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Disable browser features not needed by this app
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+          },
+          // HSTS — tell browsers to always use HTTPS (1 year, include subdomains)
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains",
+          },
+          // Basic XSS protection for legacy browsers
+          { key: "X-XSS-Protection", value: "1; mode=block" },
+        ],
+      },
+    ];
+  },
+
   async redirects() {
     return [
       {

@@ -16,6 +16,20 @@ import type { Interaction }            from "@/lib/types";
 
 export const maxDuration = 120;
 
+// ── Meeting type categorization ───────────────────────────────────────────────
+function categorizeMeeting(title: string): string {
+  const t = title.toLowerCase();
+  if (t.includes("board") || t.includes("bod")) return "board_meeting";
+  if (t.includes("ic ") || t.includes("investment committee")) return "ic_meeting";
+  if (t.includes(" lp ") || t.includes("limited partner") || t.includes("fundrais")) return "lp_meeting";
+  if (t.includes("intro") || t.includes("introduction")) return "intro_call";
+  if (t.includes("due diligence") || t.includes(" dd ") || t.includes("diligence")) return "due_diligence";
+  if (t.includes("follow up") || t.includes("follow-up") || t.includes("catchup") || t.includes("catch-up")) return "follow_up";
+  if (t.includes("pitch") || t.includes("demo")) return "pitch";
+  if (t.includes("partner") || t.includes("strategic")) return "strategic_call";
+  return "general";
+}
+
 export async function POST() {
   const supabaseUser = await createClient();
   const { data: { user } } = await supabaseUser.auth.getUser();
@@ -74,10 +88,12 @@ export async function POST() {
     // CRM entity resolution
     const resolution = await resolveEntitiesForMeeting(title, attendees, supabase);
 
+    const meetingType = categorizeMeeting(title);
     const { data: inserted, error } = await supabase
       .from("interactions")
       .insert({
         type:                "meeting",
+        meeting_type:        meetingType,
         subject:             title,
         body:                m.ai_summary,
         summary:             m.ai_summary,
@@ -88,6 +104,7 @@ export async function POST() {
         duration_minutes:    duration,
         date:                new Date(date).toISOString(),
         company_id:          resolution.company_id,
+        contact_id:          resolution.contact_ids[0] ?? null,
         contact_ids:         resolution.contact_ids.length ? resolution.contact_ids : null,
         fireflies_id:        m.id,
         transcript_url:      m.transcript_url ?? null,
@@ -102,6 +119,15 @@ export async function POST() {
 
     if (!error && inserted) {
       imported++;
+
+      // Update last_interaction_date for all linked contacts
+      if (resolution.contact_ids.length) {
+        const meetingDate = new Date(date).toISOString();
+        await supabase
+          .from("contacts")
+          .update({ last_interaction_date: meetingDate })
+          .in("id", resolution.contact_ids);
+      }
 
       const companyId = resolution.company_id;
 

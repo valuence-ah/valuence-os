@@ -59,12 +59,16 @@ export function PortfolioClient({ companies: initial }: Props) {
       if (milestonesRes.error) console.error("[portfolio] milestones:", milestonesRes.error.message);
       if (intelligenceRes.error) console.error("[portfolio] intelligence:", intelligenceRes.error.message);
 
+      const interactions = (interactionsRes.data ?? []) as Interaction[];
+      // Cache interactions so they appear instantly on next visit
+      try { localStorage.setItem(`portfolio_timeline_${companyId}`, JSON.stringify({ interactions, cachedAt: new Date().toISOString() })); } catch {}
+
       setDetail({
         kpis:         (kpisRes.data ?? []) as PortfolioKpi[],
         milestones:   (milestonesRes.data ?? []) as PortfolioMilestone[],
         initiatives:  (initiativesRes.data ?? []) as PortfolioInitiative[],
         intelligence: (intelligenceRes.data ?? []) as PortfolioIntelligence[],
-        interactions: (interactionsRes.data ?? []) as Interaction[],
+        interactions,
         contacts:     (contactsRes.data ?? []) as Contact[],
         reports:      (reportsRes.data ?? []) as PortfolioReport[],
         signals:      (signalsRes.data ?? []) as FeedArticle[],
@@ -77,7 +81,19 @@ export function PortfolioClient({ companies: initial }: Props) {
 
   // Auto-fetch detail on initial mount and when selected company changes
   useEffect(() => {
-    if (selectedId) fetchDetail(selectedId);
+    if (!selectedId) return;
+    // Pre-populate interaction timeline from cache so it shows instantly
+    try {
+      const s = localStorage.getItem(`portfolio_timeline_${selectedId}`);
+      if (s) {
+        const { interactions } = JSON.parse(s) as { interactions: Interaction[] };
+        setDetail(prev => prev
+          ? { ...prev, interactions }
+          : { kpis: [], milestones: [], initiatives: [], intelligence: [], interactions, contacts: [], reports: [], signals: [], valueAdd: [] }
+        );
+      }
+    } catch {}
+    fetchDetail(selectedId);
   }, [selectedId, fetchDetail]);
 
   async function handleSelect(id: string) {

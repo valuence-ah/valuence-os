@@ -8,6 +8,13 @@ import { useState } from "react";
 import { X, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { DealStatus } from "@/lib/types";
+import {
+  COMPANY_TYPE_OPTIONS,
+  INVESTOR_TYPE_OPTIONS,
+  STRATEGIC_TYPE_OPTIONS,
+  LP_TYPE_OPTIONS,
+  SECTOR_OPTIONS,
+} from "@/lib/constants";
 
 export interface AddCompanyPrefill {
   name?: string;
@@ -26,7 +33,7 @@ interface Props {
   prefill?: AddCompanyPrefill;
 }
 
-const SECTORS = ["Cleantech", "Synthetic Bio / Biotech", "Advanced Materials", "Factory Automation", "Quantum", "AI / Compute", "Other"];
+const SECTORS = SECTOR_OPTIONS;
 
 const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: "sourced",     label: "Sourced" },
@@ -44,6 +51,10 @@ function toDealStatus(v: string | undefined): DealStatus | undefined {
 
 export function AddCompanyModal({ isOpen, onClose, onSuccess, prefill }: Props) {
   const [name,            setName]            = useState(prefill?.name ?? "");
+  const [companyType,     setCompanyType]     = useState("startup");
+  const [investorType,    setInvestorType]    = useState("");
+  const [strategicType,   setStrategicType]   = useState("");
+  const [lpType,          setLpType]          = useState("");
   const [website,         setWebsite]         = useState(prefill?.website ?? "");
   const [sector,          setSector]          = useState(prefill?.sector ?? "");
   const [dealStatus,      setDealStatus]      = useState<DealStatus | "">(toDealStatus(prefill?.deal_status) ?? "sourced");
@@ -65,14 +76,17 @@ export function AddCompanyModal({ isOpen, onClose, onSuccess, prefill }: Props) 
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    const sectorArr = sector ? [sector.toLowerCase().replace(/ \/ /g, "_").replace(/ /g, "_")] : [];
+    const sectorArr = sector ? [sector] : [];
 
     const { data, error: insertError } = await supabase
       .from("companies")
       .insert({
         name: name.trim(),
-        type: "startup",
-        types: ["startup"],
+        type: companyType,
+        types: [companyType],
+        investor_type: companyType === "fund" ? (investorType || null) : null,
+        strategic_type: companyType === "corporate" ? (strategicType || null) : null,
+        lp_type: companyType === "lp" ? (lpType || null) : null,
         website: website.trim() || null,
         sectors: sectorArr.length ? sectorArr : null,
         deal_status: (dealStatus as DealStatus) || null,
@@ -125,6 +139,59 @@ export function AddCompanyModal({ isOpen, onClose, onSuccess, prefill }: Props) 
               onChange={e => setName(e.target.value)}
             />
           </div>
+
+          {/* Type */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">Type</label>
+            <select
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              value={companyType}
+              onChange={e => { setCompanyType(e.target.value); setInvestorType(""); setStrategicType(""); setLpType(""); }}
+            >
+              {COMPANY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          {/* Conditional sub-type */}
+          {companyType === "fund" && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">Investor Type</label>
+              <select
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                value={investorType}
+                onChange={e => setInvestorType(e.target.value)}
+              >
+                <option value="">Select investor type…</option>
+                {INVESTOR_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          )}
+          {companyType === "corporate" && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">Strategic Type</label>
+              <select
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                value={strategicType}
+                onChange={e => setStrategicType(e.target.value)}
+              >
+                <option value="">Select strategic type…</option>
+                {STRATEGIC_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          )}
+          {companyType === "lp" && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">LP Type</label>
+              <select
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                value={lpType}
+                onChange={e => setLpType(e.target.value)}
+              >
+                <option value="">Select LP type…</option>
+                {LP_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          )}
 
           {/* Website */}
           <div>

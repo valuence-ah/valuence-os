@@ -31,6 +31,7 @@ interface StrategicExt {
   next_action: string;
   next_action_due: string;
   owner: string;
+  intelCachedAt?: string | null;
   scores: { strategic_focus: number; relationship: number; portco: number; responsiveness: number };
   portco_matches: { portco: string; portcoId: string; status: PortcoStatus; due: string }[];
   opportunities: { id: string; title?: string; company?: string; companyId?: string; type: string; urgency: OppUrgency; description: string; due: string }[];
@@ -655,7 +656,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
         const currentExt = getExt(selected.id);
         const existingIds = new Set(currentExt.intel.map((i: { id: string }) => i.id));
         const newItems = data.items.filter((item: { id: string }) => !existingIds.has(item.id));
-        saveExt(selected.id, { intel: [...newItems, ...currentExt.intel] });
+        saveExt(selected.id, { intel: [...newItems, ...currentExt.intel], intelCachedAt: new Date().toISOString() });
       }
     } catch {}
     setLoadingIntel(false);
@@ -1683,7 +1684,12 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                 <div className="space-y-4">
                   {/* Refresh button */}
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Intel Feed</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Intel Feed</h3>
+                      {selectedExt.intelCachedAt && !loadingIntel && (
+                        <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(selectedExt.intelCachedAt!).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
+                      )}
+                    </div>
                     <button
                       onClick={loadIntelligence}
                       disabled={loadingIntel}

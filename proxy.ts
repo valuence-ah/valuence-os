@@ -1,10 +1,18 @@
-// ─── Proxy (formerly Middleware) ──────────────────────────────────────────────
-// Runs on every request BEFORE it hits the page.
-// Refreshes the user's Supabase auth session automatically (keeps them logged in).
-// Redirects unauthenticated users to /auth/login.
+// ─── Proxy (Next.js 16+ replacement for middleware.ts) ────────────────────────
+// Runs on every request BEFORE it hits the page. Responsibilities:
+//   1. Refresh the Supabase session (required by @supabase/ssr — without this,
+//      sessions expire and users get logged out unexpectedly).
+//   2. Redirect unauthenticated users to /auth/login, preserving the original
+//      path in ?redirectTo so they land back there after sign-in.
+//   3. Redirect already-authenticated users away from /auth/* pages.
+//
+// Note: layout.tsx also has an auth guard as defense-in-depth.
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+
+// Paths that don't require authentication
+const PUBLIC_PATHS = new Set(["/auth/login", "/auth/callback"]);
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -30,29 +38,31 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // Refresh session — must be called before any auth checks
+  // IMPORTANT: always call getUser() — this is what refreshes the session.
   const { data: { user } } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
 
-  // Allow auth routes and public assets through
-  const isAuthRoute = pathname.startsWith("/auth");
-  const isApiRoute  = pathname.startsWith("/api");
-  const isPublic    = pathname === "/";
+  // Let auth pages, API routes, and static assets through without a session check
+  const isPublic =
+    PUBLIC_PATHS.has(pathname) ||
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/favicon");
 
-  if (!user && !isAuthRoute && !isApiRoute && !isPublic) {
-    // Not logged in → redirect to login
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/auth/login";
-    loginUrl.searchParams.set("redirectTo", pathname);
+  if (!user && !isPublic) {
+    // Not logged in → redirect to login, preserving destination
+    const loginUrl = new URL("/auth/login", request.url);
+    // Only preserve same-origin relative paths (prevents open redirect)
+    if (pathname !== "/" && /^\/[^/\\]/.test(pathname)) {
+      loginUrl.searchParams.set("redirectTo", pathname);
+    }
     return NextResponse.redirect(loginUrl);
   }
 
-  if (user && isAuthRoute) {
-    // Already logged in → redirect to dashboard
-    const dashboardUrl = request.nextUrl.clone();
-    dashboardUrl.pathname = "/dashboard";
-    return NextResponse.redirect(dashboardUrl);
+  if (user && PUBLIC_PATHS.has(pathname)) {
+    // Already logged in → skip auth pages, go to dashboard
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return supabaseResponse;
@@ -60,6 +70,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Match all paths except Next.js internals and static files
+    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

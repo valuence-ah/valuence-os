@@ -204,15 +204,22 @@ export async function POST(req: NextRequest) {
 
     // Log inbound email as an interaction, linked to company + contact
     if (contact?.id) {
+      const emailDate = body.Date ? new Date(body.Date).toISOString() : new Date().toISOString();
       await supabase.from("interactions").insert({
         type: "email",
         subject: body.Subject,
         body: body.TextBody?.slice(0, 2000) ?? null,
-        date: body.Date ? new Date(body.Date).toISOString() : new Date().toISOString(),
+        date: emailDate,
         company_id: companyId,
+        contact_id: contact.id,
         contact_ids: [contact.id],
         sentiment: "neutral",
       });
+      // Update contact's last_interaction_date and company's last_contact_date
+      await supabase.from("contacts").update({ last_interaction_date: emailDate }).eq("id", contact.id);
+      if (companyId) {
+        await supabase.from("companies").update({ last_contact_date: emailDate }).eq("id", companyId);
+      }
     }
 
     return NextResponse.json({ success: true, contact_id: contact?.id });
@@ -290,15 +297,23 @@ export async function POST(req: NextRequest) {
     }
 
     // Log interaction, linked to company + contact
+    const dealEmailDate = body.Date ? new Date(body.Date).toISOString() : new Date().toISOString();
     await supabase.from("interactions").insert({
       type: "email",
       subject: body.Subject,
       body: body.TextBody?.slice(0, 2000) ?? null,
-      date: body.Date ? new Date(body.Date).toISOString() : new Date().toISOString(),
+      date: dealEmailDate,
       company_id: companyId,
+      contact_id: contactId ?? null,
       contact_ids: contactId ? [contactId] : null,
       sentiment: "neutral",
     });
+    if (contactId) {
+      await supabase.from("contacts").update({ last_interaction_date: dealEmailDate }).eq("id", contactId);
+    }
+    if (companyId) {
+      await supabase.from("companies").update({ last_contact_date: dealEmailDate }).eq("id", companyId);
+    }
 
     // Save deck
     if (parsed.deck_url && companyId) {

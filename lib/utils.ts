@@ -51,6 +51,14 @@ export const DEAL_STAGE_LABELS: Record<string, string> = {
   due_diligence: "Due Diligence",
   closed: "Closed",
   passed: "Passed",
+  // Active pipeline statuses
+  identified_introduced: "Identified / Introduced",
+  discussion_in_process: "Discussion in Process",
+  tracking_hold: "Tracking / Hold",
+  portfolio: "Portfolio",
+  exited: "Exited",
+  identified: "Identified",
+  discussion: "Discussion",
 };
 
 // Human-readable LP stage labels
@@ -76,6 +84,14 @@ export const DEAL_STAGE_COLORS: Record<string, string> = {
   due_diligence: "bg-amber-100 text-amber-700",
   closed: "bg-green-100 text-green-700",
   passed: "bg-red-100 text-red-600",
+  // Active pipeline statuses
+  identified_introduced: "bg-slate-100 text-slate-500",
+  identified: "bg-slate-100 text-slate-500",
+  discussion_in_process: "bg-blue-100 text-blue-700",
+  discussion: "bg-blue-100 text-blue-700",
+  tracking_hold: "bg-amber-100 text-amber-700",
+  portfolio: "bg-emerald-100 text-emerald-700",
+  exited: "bg-gray-100 text-gray-500",
 };
 
 export const LP_STAGE_COLORS: Record<string, string> = {

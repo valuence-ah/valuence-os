@@ -8,8 +8,14 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
-  const code        = searchParams.get("code");
-  const redirectTo  = searchParams.get("redirectTo") ?? "/dashboard";
+  const code = searchParams.get("code");
+
+  // Sanitize redirectTo: only accept same-origin relative paths (e.g. /crm/pipeline).
+  // Reject absolute URLs, protocol-relative URLs (//evil.com), and empty strings
+  // to prevent open redirect attacks.
+  const rawRedirect = searchParams.get("redirectTo") ?? "";
+  const redirectTo =
+    rawRedirect && /^\/[^/\\]/.test(rawRedirect) ? rawRedirect : "/dashboard";
 
   if (code) {
     const cookieStore = await cookies();

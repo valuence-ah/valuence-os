@@ -13,7 +13,11 @@ import Link from "next/link";
 import { ResolutionModal } from "./resolution-modal";
 import { MeetingPanel } from "./meeting-panel";
 
-type MeetingRow = Interaction & { company: Pick<Company, "id" | "name"> | null };
+type MeetingRow = Interaction & {
+  company: Pick<Company, "id" | "name"> | null;
+  meeting_type?: string | null;
+};
+type CompanyStub = Pick<Company, "id" | "name" | "type">;
 
 // ── Resolution dot ────────────────────────────────────────────────────────────
 
@@ -45,6 +49,44 @@ function SourceBadge({ source }: { source: string | null }) {
   return (
     <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border font-medium", styles[source] ?? styles.fireflies)}>
       {source === "fireflies" ? "Fireflies" : "Upload"}
+    </span>
+  );
+}
+
+// ── Meeting type badge ────────────────────────────────────────────────────────
+
+const MEETING_TYPE_STYLES: Record<string, string> = {
+  intro_call:     "bg-sky-50 text-sky-700 border-sky-200",
+  pitch:          "bg-violet-50 text-violet-700 border-violet-200",
+  due_diligence:  "bg-amber-50 text-amber-700 border-amber-200",
+  follow_up:      "bg-teal-50 text-teal-700 border-teal-200",
+  board_meeting:  "bg-slate-100 text-slate-700 border-slate-300",
+  ic_meeting:     "bg-slate-100 text-slate-700 border-slate-300",
+  lp_meeting:     "bg-emerald-50 text-emerald-700 border-emerald-200",
+  strategic_call: "bg-orange-50 text-orange-700 border-orange-200",
+  startup_call:   "bg-blue-50 text-blue-700 border-blue-200",
+  general:        "bg-slate-50 text-slate-500 border-slate-200",
+};
+const MEETING_TYPE_LABELS: Record<string, string> = {
+  intro_call:     "Intro Call",
+  pitch:          "Pitch",
+  due_diligence:  "Due Diligence",
+  follow_up:      "Follow-up",
+  board_meeting:  "Board",
+  ic_meeting:     "IC",
+  lp_meeting:     "LP",
+  strategic_call: "Strategic",
+  startup_call:   "Startup",
+  general:        "General",
+};
+
+function MeetingTypeBadge({ type }: { type: string | null | undefined }) {
+  if (!type) return null;
+  const style = MEETING_TYPE_STYLES[type] ?? MEETING_TYPE_STYLES.general;
+  const label = MEETING_TYPE_LABELS[type] ?? type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  return (
+    <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border font-medium", style)}>
+      {label}
     </span>
   );
 }
@@ -83,9 +125,10 @@ interface MeetingCardProps {
   onResolve: (m: MeetingRow) => void;
   onOpenPanel: (m: MeetingRow) => void;
   onArchive: (id: string) => void;
+  onReassign: (id: string) => void;
 }
 
-function MeetingCard({ meeting, selected, onToggle, onResolve, onOpenPanel, onArchive }: MeetingCardProps) {
+function MeetingCard({ meeting, selected, onToggle, onResolve, onOpenPanel, onArchive, onReassign }: MeetingCardProps) {
   const [expanded, setExpanded] = useState(false);
   const hasTranscript = !!(meeting.transcript_text || meeting.transcript_url);
   const actionCount   = meeting.action_items?.length ?? 0;
@@ -124,16 +167,35 @@ function MeetingCard({ meeting, selected, onToggle, onResolve, onOpenPanel, onAr
         {/* Attendee chips */}
         <AttendeeChips attendees={meeting.attendees} />
 
-        {/* Company pill */}
-        {meeting.company && (
-          <Link
-            href={`/crm/companies/${meeting.company.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="hidden sm:flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 flex-shrink-0"
+        {/* Meeting type badge */}
+        <MeetingTypeBadge type={meeting.meeting_type} />
+
+        {/* Company pill + reassign */}
+        {meeting.company ? (
+          <div className="hidden sm:flex items-center gap-1 flex-shrink-0">
+            <Link
+              href={`/crm/companies/${meeting.company.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200"
+            >
+              <Building2 size={10} />
+              {meeting.company.name}
+            </Link>
+            <button
+              onClick={(e) => { e.stopPropagation(); onReassign(meeting.id); }}
+              title="Change company"
+              className="text-[10px] text-slate-400 hover:text-teal-600 transition-colors px-1"
+            >
+              ↗
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); onReassign(meeting.id); }}
+            className="hidden sm:flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 flex-shrink-0"
           >
-            <Building2 size={10} />
-            {meeting.company.name}
-          </Link>
+            <Building2 size={9} /> Link company
+          </button>
         )}
 
         {/* Date + duration */}
@@ -293,9 +355,10 @@ interface MeetingsClientProps {
   meetings: MeetingRow[];
   archivedMeetings?: MeetingRow[];
   lastSynced?: string | null;
+  companies?: CompanyStub[];
 }
 
-export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: initialArchived = [], lastSynced: initialLastSynced }: MeetingsClientProps) {
+export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: initialArchived = [], lastSynced: initialLastSynced, companies: allCompanies = [] }: MeetingsClientProps) {
   const [meetings, setMeetings]             = useState<MeetingRow[]>(initialMeetings);
   const [archivedMeetings, setArchivedMeetings] = useState<MeetingRow[]>(initialArchived);
   const [showArchived, setShowArchived]     = useState(false);
@@ -314,6 +377,8 @@ export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: in
   const [resolveMeeting, setResolveMeeting] = useState<MeetingRow | null>(null);
   const [panelMeeting, setPanelMeeting]     = useState<MeetingRow | null>(null);
   const [statusToast, setStatusToast]       = useState<string | null>(null);
+  const [reassignId, setReassignId]         = useState<string | null>(null);
+  const [reassignSearch, setReassignSearch] = useState("");
 
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -512,6 +577,21 @@ export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: in
     );
   }
 
+  const handleReassign = useCallback(async (meetingId: string, company: CompanyStub) => {
+    const res = await fetch(`/api/meetings/${meetingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: company.id }),
+    });
+    if (!res.ok) { setStatusToast("Failed to link company"); return; }
+    setMeetings(prev =>
+      prev.map(m => m.id === meetingId ? { ...m, company: { id: company.id, name: company.name } as MeetingRow["company"] } : m)
+    );
+    setReassignId(null);
+    setReassignSearch("");
+    setStatusToast(`Linked to ${company.name}`);
+  }, []);
+
   const tiles = [
     { label: "Total Meetings",    value: totalMeetings, color: "text-slate-900" },
     { label: "With Transcripts",  value: transcriptCount, color: "text-slate-900" },
@@ -694,6 +774,7 @@ export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: in
                 onResolve={setResolveMeeting}
                 onOpenPanel={setPanelMeeting}
                 onArchive={handleArchive}
+                onReassign={setReassignId}
               />
             ))}
           </>
@@ -763,6 +844,51 @@ export function MeetingsClient({ meetings: initialMeetings, archivedMeetings: in
           onUpdate={handlePanelUpdate}
         />
       )}
+
+      {/* Company reassign modal */}
+      {reassignId && (() => {
+        const filtered_cos = allCompanies.filter(c =>
+          !reassignSearch || c.name.toLowerCase().includes(reassignSearch.toLowerCase())
+        );
+        return (
+          <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4"
+            onClick={() => { setReassignId(null); setReassignSearch(""); }}>
+            <div className="bg-white rounded-xl w-[420px] shadow-xl overflow-hidden"
+              onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                <p className="text-sm font-semibold text-slate-800">Link meeting to company</p>
+                <button onClick={() => { setReassignId(null); setReassignSearch(""); }}
+                  className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+              </div>
+              <div className="px-4 py-3 border-b border-slate-100">
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Search companies…"
+                    value={reassignSearch}
+                    onChange={e => setReassignSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                </div>
+              </div>
+              <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
+                {filtered_cos.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-slate-400 text-center">No companies found</p>
+                ) : filtered_cos.slice(0, 50).map(c => (
+                  <button key={c.id}
+                    onClick={() => handleReassign(reassignId, c)}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 flex items-center justify-between gap-2 transition-colors">
+                    <span className="font-medium text-slate-800 truncate">{c.name}</span>
+                    <span className="text-[10px] text-slate-400 capitalize flex-shrink-0">{c.type}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Status toast */}
       {statusToast && (

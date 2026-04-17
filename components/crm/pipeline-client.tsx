@@ -544,6 +544,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [loadingIntelligence, setLoadingIntelligence] = useState(false);
   const [intelligenceStatus, setIntelligenceStatus] = useState<string>("Refresh");
   const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
+  const [intelCachedAt, setIntelCachedAt] = useState<string | null>(null);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [selectedTimelineMeeting, setSelectedTimelineMeeting] = useState<Interaction | null>(null);
   const [companyDocuments, setCompanyDocuments] = useState<Array<{ id: string; meeting_id: string | null; file_name: string; storage_path: string; uploaded_at: string; fireflies_url: string | null }>>([]);
@@ -662,6 +663,8 @@ export function PipelineClient({ initialCompanies }: Props) {
 
     setContacts(contacts);
     setInteractions(ints ?? []);
+    // Cache timeline so it loads instantly on next company select
+    try { localStorage.setItem(`pipeline_timeline_${id}`, JSON.stringify({ interactions: ints ?? [], cachedAt: new Date().toISOString() })); } catch {}
     setDocuments(docs ?? []);
     setMemo(memos?.[0] ?? null);
     setLoadingDetail(false);
@@ -706,8 +709,22 @@ export function PipelineClient({ initialCompanies }: Props) {
       setEditField(null);
       setNoteContactIds([]);
       setNoteContactsOpen(false);
-      setIntelligence([]);
       setIntelligenceError(null);
+
+      // Load cached intelligence immediately (avoids blank panel on re-open)
+      try {
+        const s = localStorage.getItem(`pipeline_intel_${selectedId}`);
+        if (s) { const { items, cachedAt } = JSON.parse(s); setIntelligence(items ?? []); setIntelCachedAt(cachedAt ?? null); }
+        else { setIntelligence([]); setIntelCachedAt(null); }
+      } catch { setIntelligence([]); setIntelCachedAt(null); }
+
+      // Load cached timeline interactions immediately
+      try {
+        const s = localStorage.getItem(`pipeline_timeline_${selectedId}`);
+        if (s) { const { interactions: cached } = JSON.parse(s); setInteractions(cached ?? []); }
+        else { setInteractions([]); }
+      } catch { setInteractions([]); }
+
       loadDetail(selectedId);
       loadEmails(selectedId);
     }
@@ -1113,7 +1130,11 @@ export function PipelineClient({ initialCompanies }: Props) {
       const res = await fetch(`/api/companies/${selected.id}/intelligence`, { method: "POST" });
       const data = await res.json() as { items?: IntelItem[]; error?: string };
       if (res.ok) {
-        setIntelligence(data.items ?? []);
+        const items = data.items ?? [];
+        setIntelligence(items);
+        const cachedAt = new Date().toISOString();
+        setIntelCachedAt(cachedAt);
+        try { localStorage.setItem(`pipeline_intel_${selected.id}`, JSON.stringify({ items, cachedAt })); } catch {}
       } else {
         setIntelligenceError(data.error ?? `HTTP ${res.status}`);
       }
@@ -2527,7 +2548,12 @@ export function PipelineClient({ initialCompanies }: Props) {
 
               {/* Header: Company Intelligence */}
               <div className="flex items-center justify-between pb-3">
-                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Company Intelligence</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Company Intelligence</h2>
+                  {intelCachedAt && !loadingIntelligence && (
+                    <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(intelCachedAt).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
+                  )}
+                </div>
                 <button
                   onClick={fetchIntelligence}
                   disabled={loadingIntelligence}

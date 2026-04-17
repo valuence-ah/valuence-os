@@ -6,6 +6,12 @@ import { createClient } from "@/lib/supabase/client";
 import type { Contact, CompanyType, Company } from "@/lib/types";
 import { getInitials, formatDate, cn } from "@/lib/utils";
 import {
+  COMPANY_TYPE_OPTIONS,
+  INVESTOR_TYPE_OPTIONS,
+  STRATEGIC_TYPE_OPTIONS,
+  LP_TYPE_OPTIONS,
+} from "@/lib/constants";
+import {
   Check, X, Mail, ExternalLink, UserPlus, Maximize2, Loader2,
   Search, ChevronDown, ChevronUp, Plus, MapPin, Globe, Users,
   Tag, ChevronRight, Linkedin, SlidersHorizontal, Trash2, Pencil, Clock, ArrowLeft,
@@ -233,6 +239,9 @@ function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onCha
   const [creating, setCreating]   = useState(false);
   const [newName, setNewName]     = useState("");
   const [newType, setNewType]     = useState("startup");
+  const [newInvestorType, setNewInvestorType]   = useState("");
+  const [newStrategicType, setNewStrategicType] = useState("");
+  const [newLpType, setNewLpType]               = useState("");
   const [saving, setSaving]       = useState(false);
   const [showPartnerDropdown, setShowPartnerDropdown] = useState(false);
   const [selectedPartnerId, setSelectedPartnerId]     = useState<string | null>(null);
@@ -339,16 +348,31 @@ function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onCha
                     ))}
                   </div>
                 )}
-                <select value={newType} onChange={e => setNewType(e.target.value)}
+                <select value={newType} onChange={e => { setNewType(e.target.value); setNewInvestorType(""); setNewStrategicType(""); setNewLpType(""); }}
                   className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
-                  <option value="startup">Startup</option>
-                  <option value="fund">Fund / VC</option>
-                  <option value="lp">LP</option>
-                  <option value="corporate">Corporate</option>
-                  <option value="ecosystem_partner">Ecosystem</option>
-                  <option value="government">Government / Academic</option>
-                  <option value="other">Other</option>
+                  {COMPANY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
+                {newType === "fund" && (
+                  <select value={newInvestorType} onChange={e => setNewInvestorType(e.target.value)}
+                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="">Investor type…</option>
+                    {INVESTOR_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                )}
+                {newType === "corporate" && (
+                  <select value={newStrategicType} onChange={e => setNewStrategicType(e.target.value)}
+                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="">Strategic type…</option>
+                    {STRATEGIC_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                )}
+                {newType === "lp" && (
+                  <select value={newLpType} onChange={e => setNewLpType(e.target.value)}
+                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="">LP type…</option>
+                    {LP_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                )}
                 <div className="flex gap-1.5">
                   <button onClick={() => setCreating(false)}
                     className="flex-1 py-1.5 border border-slate-200 rounded text-xs text-slate-600 hover:bg-slate-50">
@@ -392,6 +416,9 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
   const [editCity, setEditCity]             = useState("");
   const [editCountry, setEditCountry]       = useState("");
   const [editType, setEditType]             = useState("");
+  const [editInvestorType, setEditInvestorType]   = useState("");
+  const [editStrategicType, setEditStrategicType] = useState("");
+  const [editLpType, setEditLpType]               = useState("");
   const [saving, setSaving]                 = useState(false);
   const [createSaving, setCreateSaving]     = useState(false);
   const [confirmDelete, setConfirmDelete]   = useState(false);
@@ -454,6 +481,9 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
     setEditCity(company.location_city ?? "");
     setEditCountry(company.location_country ?? "");
     setEditType(company.type);
+    setEditInvestorType(company.investor_type ?? "");
+    setEditStrategicType(company.strategic_type ?? "");
+    setEditLpType(company.lp_type ?? "");
     setEditing(true);
   }
   async function saveEdits() {
@@ -464,11 +494,13 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
         .insert({
           name: editName.trim(),
           type: editType || "startup",
+          investor_type: editType === "fund" ? (editInvestorType || null) : null,
+          strategic_type: editType === "corporate" ? (editStrategicType || null) : null,
+          lp_type: editType === "lp" ? (editLpType || null) : null,
           website: editWebsite.trim() || null,
           description: editDescription.trim() || null,
           location_city: editCity.trim() || null,
           location_country: editCountry.trim() || null,
-          status: "active",
         })
         .select("id")
         .single();
@@ -487,6 +519,9 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
       location_city: editCity.trim() || null,
       location_country: editCountry.trim() || null,
       type: editType || company.type,
+      investor_type: (editType || company.type) === "fund" ? (editInvestorType || null) : null,
+      strategic_type: (editType || company.type) === "corporate" ? (editStrategicType || null) : null,
+      lp_type: (editType || company.type) === "lp" ? (editLpType || null) : null,
     };
     const { error } = await supabase.from("companies").update(updates).eq("id", company.id);
     setSaving(false);
@@ -698,7 +733,7 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
           </div>
         ) : loading ? (
           <div className="flex-1 flex items-center justify-center"><Loader2 size={24} className="text-slate-300 animate-spin" /></div>
-        ) : !company ? (
+        ) : (!company && !createMode) ? (
           <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Company not found.</div>
         ) : (
           <div className="flex-1 overflow-y-auto">
@@ -726,16 +761,37 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
                   </div>
                   <div>
                     <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Type</p>
-                    <select value={editType} onChange={e => setEditType(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
-                      <option value="startup">Startup</option>
-                      <option value="fund">Fund / VC</option>
-                      <option value="lp">LP</option>
-                      <option value="corporate">Corporate</option>
-                      <option value="ecosystem_partner">Ecosystem</option>
-                      <option value="government">Government / Academic</option>
-                      <option value="other">Other</option>
+                    <select value={editType} onChange={e => { setEditType(e.target.value); setEditInvestorType(""); setEditStrategicType(""); setEditLpType(""); }} className={cn(INPUT_CLS, "cursor-pointer")}>
+                      {COMPANY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
+                  {editType === "fund" && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Investor Type</p>
+                      <select value={editInvestorType} onChange={e => setEditInvestorType(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
+                        <option value="">— Select —</option>
+                        {INVESTOR_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {editType === "corporate" && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Strategic Type</p>
+                      <select value={editStrategicType} onChange={e => setEditStrategicType(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
+                        <option value="">— Select —</option>
+                        {STRATEGIC_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {editType === "lp" && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-0.5">LP Type</p>
+                      <select value={editLpType} onChange={e => setEditLpType(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
+                        <option value="">— Select —</option>
+                        {LP_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <div>
                     <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Website</p>
                     <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)} placeholder="https://..." className={INPUT_CLS} />
@@ -757,7 +813,7 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : company ? (
             <>
             <div className="px-5 py-4 border-b border-slate-100 space-y-3">
               <div className="flex items-center justify-between">
@@ -794,13 +850,7 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
                       onChange={e => void saveField("type", e.target.value)}
                       onBlur={() => setEditingField(null)}
                       className="text-xs border border-blue-400 rounded px-1 py-0.5 focus:outline-none bg-white cursor-pointer w-full">
-                      <option value="startup">Startup</option>
-                      <option value="fund">Fund / VC</option>
-                      <option value="lp">LP</option>
-                      <option value="corporate">Corporate</option>
-                      <option value="ecosystem_partner">Ecosystem</option>
-                      <option value="government">Government / Academic</option>
-                      <option value="other">Other</option>
+                      {COMPANY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   ) : (
                     <span
@@ -898,7 +948,7 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
               </div>
             )}
             </>
-            )}
+            ) : null}
             <div className="px-5 py-4">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1">
                 <Users size={10} /> Contacts ({contacts.length})
@@ -938,7 +988,7 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
                       </div>
                     </button>
                   ))}
-                  {contacts.length >= 5 && (
+                  {contacts.length >= 5 && company && (
                     <a href={`/crm/companies/${company.id}`} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1">
                       View all contacts <ChevronRight size={11} />

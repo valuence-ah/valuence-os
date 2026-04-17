@@ -2,8 +2,10 @@
 // ─── Login Page ───────────────────────────────────────────────────────────────
 // Supports both magic link (email only) and email+password login.
 // Uses Supabase Auth — no passwords are stored by us.
+// Reads ?redirectTo from the URL and passes it through the auth flow so users
+// land on the page they were trying to reach after signing in.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -13,14 +15,24 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"magic" | "password">("magic");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [redirectTo, setRedirectTo] = useState("/dashboard");
+
+  // Read redirectTo from query string on mount (can't read window on server)
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get("redirectTo") ?? "";
+    // Validate: same-origin relative path only
+    if (raw && /^\/[^/\\]/.test(raw)) setRedirectTo(raw);
+  }, []);
 
   async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
+    // Pass redirectTo into the callback URL so the auth callback knows where to send the user
+    const callbackUrl = `${window.location.origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`;
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: callbackUrl },
     });
     setLoading(false);
     if (error) {
@@ -39,7 +51,7 @@ export default function LoginPage() {
     if (error) {
       setMessage({ type: "error", text: error.message });
     } else {
-      window.location.href = "/dashboard";
+      window.location.href = redirectTo;
     }
   }
 

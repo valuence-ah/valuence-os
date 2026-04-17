@@ -137,8 +137,10 @@ function CompanyNewsPanel({ companyId }: { companyId: string }) {
   type NewsItem = { id: string; title: string; url: string; summary: string; source: string; published_at: string };
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // false — show cached instantly, no initial spinner
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const CACHE_KEY = `portfolio_news_${companyId}`;
 
   async function fetchNews() {
     setLoading(true);
@@ -146,14 +148,25 @@ function CompanyNewsPanel({ companyId }: { companyId: string }) {
       const res = await fetch(`/api/portfolio/company-news?company_id=${companyId}`);
       if (res.ok) {
         const data = await res.json();
-        setNewsItems(data.articles ?? []);
-        setLastUpdated(new Date());
+        const articles: NewsItem[] = data.articles ?? [];
+        setNewsItems(articles);
+        const now = new Date();
+        setLastUpdated(now);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ articles, cachedAt: now.toISOString() })); } catch {}
       }
     } catch { /* silent */ }
     finally { setLoading(false); }
   }
 
-  useEffect(() => { fetchNews(); }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // Show cached data immediately — no spinner
+    try {
+      const s = localStorage.getItem(CACHE_KEY);
+      if (s) { const { articles, cachedAt } = JSON.parse(s); setNewsItems(articles ?? []); setLastUpdated(new Date(cachedAt)); }
+    } catch {}
+    // Refresh in background
+    fetchNews();
+  }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function dismiss(id: string) {
     setDismissed(prev => new Set([...prev, id]));

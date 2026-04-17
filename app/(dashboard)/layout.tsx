@@ -12,6 +12,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
+    // Middleware handles this first, but this is defense-in-depth.
+    // Note: headers() gives us the request URL in server components.
     redirect("/auth/login");
   }
 

@@ -406,6 +406,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
   // Fund intelligence per company
   type FundIntelItem = { headline: string; source: string; date: string; summary?: string; url?: string };
   const [fundIntelMap, setFundIntelMap]       = useState<Record<string, FundIntelItem[]>>({});
+  const [fundIntelCachedAt, setFundIntelCachedAt] = useState<Record<string, string>>({});
   const [fundIntelLoading, setFundIntelLoading] = useState(false);
   const [fundIntelError, setFundIntelError]   = useState<string | null>(null);
 
@@ -432,7 +433,11 @@ export function FundsViewClient({ initialCompanies }: Props) {
       const res = await fetch(`/api/companies/${selectedId}/intelligence`, { method: "POST" });
       if (res.ok) {
         const data = await res.json() as { items?: FundIntelItem[] };
-        setFundIntelMap(prev => ({ ...prev, [selectedId]: data.items ?? [] }));
+        const items = data.items ?? [];
+        setFundIntelMap(prev => ({ ...prev, [selectedId]: items }));
+        const cachedAt = new Date().toISOString();
+        setFundIntelCachedAt(prev => ({ ...prev, [selectedId]: cachedAt }));
+        try { localStorage.setItem(`fund_intel_${selectedId}`, JSON.stringify({ items, cachedAt })); } catch {}
       } else {
         setFundIntelError("Could not load intelligence");
       }
@@ -744,6 +749,18 @@ export function FundsViewClient({ initialCompanies }: Props) {
       setEditingFundField(null);
       setSelectedContact(null);
       setShowAddOverlap(false);
+
+      // Pre-load cached intelligence so it shows immediately when tab opens
+      if (!fundIntelMap[selectedId]) {
+        try {
+          const s = localStorage.getItem(`fund_intel_${selectedId}`);
+          if (s) {
+            const { items, cachedAt } = JSON.parse(s) as { items: FundIntelItem[]; cachedAt: string };
+            setFundIntelMap(prev => ({ ...prev, [selectedId]: items ?? [] }));
+            setFundIntelCachedAt(prev => ({ ...prev, [selectedId]: cachedAt }));
+          }
+        } catch {}
+      }
       setShowAddRelationship(false);
       setShowFundOppForm(false);
 
@@ -2533,7 +2550,12 @@ export function FundsViewClient({ initialCompanies }: Props) {
                 {fundTab === "intelligence" && (
                   <div className="px-4 py-4 space-y-4 flex-1 overflow-y-auto">
                     <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Key Updates · Past 180 Days</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Key Updates · Past 180 Days</p>
+                        {selectedId && fundIntelCachedAt[selectedId] && !fundIntelLoading && (
+                          <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(fundIntelCachedAt[selectedId]).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
+                        )}
+                      </div>
                       <button
                         onClick={fetchFundIntelligence}
                         disabled={fundIntelLoading}

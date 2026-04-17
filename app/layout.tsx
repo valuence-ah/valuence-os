@@ -10,7 +10,11 @@ export const metadata: Metadata = {
     default: "Valuence OS",
     template: "%s | Valuence OS",
   },
-  description: "Valuence Ventures — Operating System",
+  description: "Valuence Ventures - Operating System",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

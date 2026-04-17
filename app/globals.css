@@ -115,3 +115,7 @@
 }
 .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
 .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ── Sidebar nav — hide scrollbar cross-browser ── */
+.sidebar-nav::-webkit-scrollbar { display: none; }
+.sidebar-nav { scrollbar-width: none; -ms-overflow-style: none; }

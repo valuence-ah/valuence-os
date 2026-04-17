@@ -193,8 +193,8 @@ export function CompaniesClient({ initialCompanies, initialFilter }: Props) {
                     </td>
                     <td>
                       {c.deal_status ? (
-                        <span className={cn("badge capitalize", DEAL_STAGE_COLORS[c.deal_status] ?? "bg-slate-100 text-slate-600")}>
-                          {c.deal_status.replace("_", " ")}
+                        <span className={cn("badge", DEAL_STAGE_COLORS[c.deal_status] ?? "bg-slate-100 text-slate-600")}>
+                          {DEAL_STAGE_LABELS[c.deal_status] ?? c.deal_status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
                         </span>
                       ) : c.stage ? (
                         <span className="badge bg-slate-100 text-slate-600">{c.stage}</span>

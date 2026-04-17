@@ -1,4 +1,5 @@
 // ─── Meetings Page /(dashboard)/meetings ─────────────────────────────────────
+export const metadata = { title: "Meetings" };
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Header } from "@/components/layout/header";
@@ -10,7 +11,7 @@ type MeetingRow = Interaction & { company: Pick<Company, "id" | "name" | "type">
 export default async function MeetingsPage() {
   const supabase = createAdminClient();
 
-  const [{ data: meetings }, { data: archivedMeetings }] = await Promise.all([
+  const [{ data: meetings }, { data: archivedMeetings }, { data: companies }] = await Promise.all([
     supabase
       .from("interactions")
       .select("*, company:companies(id, name, type)")
@@ -26,6 +27,11 @@ export default async function MeetingsPage() {
       .eq("archived", true)
       .order("date", { ascending: false })
       .limit(100) as unknown as Promise<{ data: MeetingRow[] | null }>,
+
+    supabase
+      .from("companies")
+      .select("id, name, type")
+      .order("name") as unknown as Promise<{ data: Pick<Company, "id" | "name" | "type">[] | null }>,
   ]);
 
   return (
@@ -37,6 +43,7 @@ export default async function MeetingsPage() {
       <MeetingsClient
         meetings={meetings ?? []}
         archivedMeetings={archivedMeetings ?? []}
+        companies={companies ?? []}
       />
     </div>
   );

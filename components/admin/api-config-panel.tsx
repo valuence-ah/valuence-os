@@ -57,7 +57,7 @@ const TABS = [
   },
   {
     id:          "outlook",
-    label:       "Outlook / Graph",
+    label:       "Outlook Email",
     icon:        Mail,
     color:       "text-blue-600",
     bg:          "bg-blue-50",
@@ -476,121 +476,299 @@ function AgentEditor({ agentName, tab }: AgentEditorProps) {
   );
 }
 
-// ── Outlook / Microsoft Graph status panel ────────────────────────────────────
+// ── Outlook / Microsoft Graph config + status panel ──────────────────────────
 function OutlookPanel() {
-  const [status, setStatus]   = useState<"idle" | "checking" | "ok" | "error" | "not_configured">("idle");
-  const [message, setMessage] = useState("");
+  const supabase = createClient();
+
+  // ── Config state ──────────────────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [config, setConfig]   = useState<Record<string, any> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
+
+  // ── Connection / run state ────────────────────────────────────────────────
+  const [connStatus, setConnStatus] = useState<"idle" | "checking" | "ok" | "error" | "not_configured">("idle");
+  const [connMsg,    setConnMsg]    = useState("");
+  const [running,    setRunning]    = useState(false);
+  const [runResult,  setRunResult]  = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from("agent_configs")
+      .select("config")
+      .eq("agent_name", "outlook")
+      .maybeSingle()
+      .then(({ data }) => {
+        setConfig(data?.config ?? {
+          mailboxes:                ["andrew@valuence.vc"],
+          lookbackHours:            25,
+          maxPerMailbox:            50,
+          autoCreateCompanies:      true,
+          additionalSkipPatterns:   [],
+          schedule:                 "0 7 * * *",
+        });
+        setLoading(false);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const set = useCallback((key: string, value: any) => {
+    setConfig(prev => ({ ...prev, [key]: value }));
+    setSaved(false);
+  }, []);
+
+  async function handleSave() {
+    if (!config) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("agent_configs")
+      .upsert({ agent_name: "outlook", label: "Outlook / Microsoft Graph", config, updated_at: new Date().toISOString() }, { onConflict: "agent_name" });
+    setSaving(false);
+    if (!error) { setSaved(true); setTimeout(() => setSaved(false), 2500); }
+  }
 
   async function checkConnection() {
-    setStatus("checking");
-    setMessage("");
+    setConnStatus("checking"); setConnMsg("");
     try {
-      // Call the emails endpoint with a dummy company_id — it will return a graphError field if Graph isn't configured
-      const res = await fetch("/api/companies/emails?company_id=00000000-0000-0000-0000-000000000000");
+      const res  = await fetch("/api/companies/emails?company_id=00000000-0000-0000-0000-000000000000");
       const data = await res.json();
       if (data.graphError === "not_configured") {
-        setStatus("not_configured");
-        setMessage(data.message ?? "Microsoft Graph env vars not set.");
+        setConnStatus("not_configured");
+        setConnMsg(data.message ?? "Microsoft Graph env vars not set.");
       } else if (data.graphError === "fetch_failed") {
-        setStatus("error");
-        setMessage(data.message ?? "Token or API request failed.");
+        setConnStatus("error");
+        setConnMsg(data.message ?? "Token or API request failed.");
       } else {
-        setStatus("ok");
-        setMessage("Connection successful — Graph API is reachable.");
+        setConnStatus("ok");
+        setConnMsg("Connection successful — Graph API is reachable.");
       }
     } catch (err) {
-      setStatus("error");
-      setMessage(err instanceof Error ? err.message : "Network error.");
+      setConnStatus("error");
+      setConnMsg(err instanceof Error ? err.message : "Network error.");
     }
   }
 
+  async function runNow() {
+    setRunning(true); setRunResult(null);
+    try {
+      const res  = await fetch("/api/cron/check-inbox", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        const created   = (data.results ?? []).filter((r: { action: string }) => r.action === "created").length;
+        const updated   = (data.results ?? []).filter((r: { action: string }) => r.action === "updated last_contact").length;
+        const failed    = (data.results ?? []).filter((r: { action: string }) => r.action.startsWith("insert_error")).length;
+        const fetched   = data.emails_fetched ?? 0;
+        const errors    = (data.errors ?? []) as string[];
+        let msg = `✓ ${data.mailboxes_checked} mailbox(es) · ${fetched} emails evaluated · ${created} new contact(s) added to Pending · ${updated} existing contact(s) updated`;
+        if (failed) msg += ` · ⚠ ${failed} failed`;
+        if (errors.length) msg += `\n⚠ ${errors.join(" | ")}`;
+        setRunResult(msg);
+      } else {
+        setRunResult(`Error: ${data.error ?? JSON.stringify(data)}`);
+      }
+    } catch (err) {
+      setRunResult(`Network error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    setRunning(false);
+  }
+
+  // Human-readable cron description
+  function describeCron(expr: string): string {
+    const MAP: Record<string, string> = {
+      "0 * * * *":  "Every hour (requires Vercel Pro)",
+      "*/30 * * * *": "Every 30 minutes (requires Vercel Pro)",
+      "0 7 * * *":  "Daily at 07:00 UTC",
+      "0 8 * * *":  "Daily at 08:00 UTC",
+      "0 6 * * *":  "Daily at 06:00 UTC",
+      "0 0 * * *":  "Daily at midnight UTC",
+      "0 12 * * *": "Daily at noon UTC",
+    };
+    return MAP[expr] ?? expr;
+  }
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-800 mb-1">Microsoft Graph API</h3>
-        <p className="text-xs text-slate-500">
-          Reads Outlook emails from the fund mailbox and surfaces them on company detail pages.
-          Uses app-only authentication (client credentials flow — no user login needed).
-        </p>
-      </div>
+    <div className="max-w-2xl space-y-6">
 
-      {/* Connection status */}
-      <div className="rounded-xl border border-slate-200 p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Connection Status</p>
-          <button
-            onClick={checkConnection}
-            disabled={status === "checking"}
-            className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
-          >
-            {status === "checking" ? <Loader2 size={12} className="animate-spin" /> : <Wifi size={12} />}
-            {status === "checking" ? "Checking…" : "Test Connection"}
-          </button>
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-blue-50">
+            <Mail size={16} className="text-blue-600" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Outlook / Microsoft Graph</h2>
+            <p className="text-xs text-slate-400 mt-0.5 max-w-md">
+              Reads inbox &amp; sent items from your @valuence.vc mailboxes and creates pending contacts automatically.
+            </p>
+          </div>
         </div>
-
-        {status === "idle" && (
-          <p className="text-xs text-slate-400">Click "Test Connection" to verify your Microsoft Graph credentials.</p>
-        )}
-        {status === "ok" && (
-          <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
-            <Wifi size={14} />
-            <span className="text-xs font-medium">{message}</span>
-          </div>
-        )}
-        {status === "not_configured" && (
-          <div className="flex items-start gap-2 text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-            <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-xs font-semibold">Not configured</p>
-              <p className="text-xs mt-0.5 font-mono opacity-80">{message}</p>
-            </div>
-          </div>
-        )}
-        {status === "error" && (
-          <div className="flex items-start gap-2 text-red-700 bg-red-50 rounded-lg px-3 py-2">
-            <WifiOff size={14} className="mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-xs font-semibold">Connection failed</p>
-              <p className="text-xs mt-0.5 opacity-80">{message}</p>
-            </div>
-          </div>
-        )}
+        <button
+          onClick={handleSave}
+          disabled={saving || loading || !config}
+          className={cn(
+            "flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg border transition-all",
+            saved
+              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+              : "bg-blue-600 border-blue-600 text-white hover:bg-blue-500 disabled:opacity-50"
+          )}
+        >
+          {saving ? <Loader2 size={12} className="animate-spin" /> : saved ? <Check size={12} /> : <Save size={12} />}
+          {saving ? "Saving…" : saved ? "Saved ✓" : "Save"}
+        </button>
       </div>
 
-      {/* Required env vars */}
-      <div className="space-y-3">
-        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Required Environment Variables</p>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-200">
-          {[
-            { name: "MICROSOFT_TENANT_ID",     desc: "Azure AD Directory (tenant) ID" },
-            { name: "MICROSOFT_CLIENT_ID",     desc: "App registration (client) ID" },
-            { name: "MICROSOFT_CLIENT_SECRET", desc: "App registration client secret" },
-            { name: "OUTLOOK_MAILBOX",         desc: "Mailbox to read, e.g. andrew@valuence.vc" },
-          ].map(({ name, desc }) => (
-            <div key={name} className="px-4 py-2.5 flex items-center justify-between gap-4">
-              <code className="text-xs font-mono text-blue-700">{name}</code>
-              <span className="text-xs text-slate-500 text-right">{desc}</span>
-            </div>
-          ))}
+      {loading ? (
+        <div className="flex items-center justify-center h-48 text-slate-400 gap-2 text-sm">
+          <Loader2 size={14} className="animate-spin" /> Loading…
         </div>
-        <p className="text-xs text-slate-400">
-          Set these in <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">.env.local</code> for local dev,
-          and in <strong>Vercel → Settings → Environment Variables</strong> for production.
-          The app registration needs <strong>Mail.Read</strong> (Application permission, not Delegated).
-        </p>
-      </div>
+      ) : (
+        <>
+          {/* ── Pull Parameters ── */}
+          <div className="rounded-xl border border-slate-200 p-4 space-y-5">
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Pull Parameters</p>
 
-      {/* Setup guide link */}
-      <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
-        <p className="text-xs font-semibold text-blue-800 mb-1">Setup Guide</p>
-        <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
-          <li>Go to <strong>portal.azure.com</strong> → App registrations → New registration</li>
-          <li>Add <strong>Mail.Read</strong> under API permissions (Application, not Delegated)</li>
-          <li>Create a client secret under Certificates &amp; secrets</li>
-          <li>Grant admin consent for the tenant</li>
-          <li>Copy Tenant ID, Client ID, and Client Secret into env vars above</li>
-        </ol>
-      </div>
+            {/* Mailboxes */}
+            <StringListField
+              label="Mailboxes"
+              values={config?.mailboxes ?? []}
+              onChange={v => set("mailboxes", v)}
+              placeholder="name@valuence.vc"
+              hint="Each mailbox is checked for both inbox (inbound) and sent items (outbound). All must share the same Azure tenant."
+            />
+
+            {/* Look-back window */}
+            <NumberField
+              label="Look-back window (hours)"
+              value={config?.lookbackHours ?? 25}
+              min={1} max={168} step={1}
+              onChange={v => set("lookbackHours", v)}
+              hint="How far back to look on each run. 25h covers a full day with overlap. Max 168h (7 days)."
+            />
+
+            {/* Max emails per mailbox */}
+            <NumberField
+              label="Max emails per mailbox per folder"
+              value={config?.maxPerMailbox ?? 50}
+              min={10} max={200} step={10}
+              onChange={v => set("maxPerMailbox", v)}
+              hint="Applies separately to inbox and sent items. Higher = more coverage but slower runs."
+            />
+
+            {/* Auto-create companies */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <SectionLabel>Auto-create company stubs</SectionLabel>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  When a contact&apos;s company can&apos;t be matched, automatically create a new company stub. Turn off to require manual matching.
+                </p>
+              </div>
+              <button
+                onClick={() => set("autoCreateCompanies", !(config?.autoCreateCompanies ?? true))}
+                className={cn(
+                  "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200",
+                  config?.autoCreateCompanies ? "bg-blue-600" : "bg-slate-200"
+                )}
+              >
+                <span className={cn(
+                  "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200",
+                  config?.autoCreateCompanies ? "translate-x-4" : "translate-x-0"
+                )} />
+              </button>
+            </div>
+
+            {/* Additional skip patterns */}
+            <StringListField
+              label="Additional skip patterns (regex)"
+              values={config?.additionalSkipPatterns ?? []}
+              onChange={v => set("additionalSkipPatterns", v)}
+              placeholder="e.g. @competitor\.com"
+              hint="Emails matching any of these patterns (regex) will be ignored. The built-in patterns (no-reply, newsletter, etc.) always apply. Use specific patterns — e.g. ^info@ or @competitor\.com — broad terms like 'info' or 'reply' will over-filter real contacts."
+            />
+          </div>
+
+          {/* ── Schedule (read-only info) ── */}
+          <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Schedule</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-800">{describeCron(config?.schedule ?? "0 7 * * *")}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Cron expression: <code className="bg-slate-100 px-1 rounded">{config?.schedule ?? "0 7 * * *"}</code>
+                </p>
+              </div>
+              <span className="text-[10px] text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">vercel.json</span>
+            </div>
+            <p className="text-[10px] text-slate-400">
+              To change the schedule, edit <code className="bg-slate-100 px-1 rounded">vercel.json</code> and redeploy.
+              Vercel Hobby plan supports daily crons only; upgrade to Pro for sub-hourly schedules.
+            </p>
+
+            {/* Run Now */}
+            <div className="pt-1 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-slate-500">Trigger a manual run right now</p>
+                <button
+                  onClick={runNow}
+                  disabled={running}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50 transition-colors"
+                >
+                  {running ? <Loader2 size={11} className="animate-spin" /> : <Wifi size={11} />}
+                  {running ? "Running…" : "Run Now"}
+                </button>
+              </div>
+              {runResult && (
+                <p className={cn(
+                  "text-[11px] mt-2 px-3 py-2 rounded-lg whitespace-pre-wrap",
+                  runResult.startsWith("✓") ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                )}>{runResult}</p>
+              )}
+            </div>
+          </div>
+
+          {/* ── Connection test ── */}
+          <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Connection Status</p>
+              <button
+                onClick={checkConnection}
+                disabled={connStatus === "checking"}
+                className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+              >
+                {connStatus === "checking" ? <Loader2 size={12} className="animate-spin" /> : <Wifi size={12} />}
+                {connStatus === "checking" ? "Checking…" : "Test Connection"}
+              </button>
+            </div>
+            {connStatus === "idle"           && <p className="text-xs text-slate-400">Click "Test Connection" to verify your Microsoft Graph credentials.</p>}
+            {connStatus === "ok"             && <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2"><Wifi size={14} /><span className="text-xs font-medium">{connMsg}</span></div>}
+            {connStatus === "not_configured" && <div className="flex items-start gap-2 text-amber-700 bg-amber-50 rounded-lg px-3 py-2"><AlertCircle size={14} className="mt-0.5 flex-shrink-0" /><div><p className="text-xs font-semibold">Not configured</p><p className="text-xs mt-0.5 font-mono opacity-80">{connMsg}</p></div></div>}
+            {connStatus === "error"          && <div className="flex items-start gap-2 text-red-700 bg-red-50 rounded-lg px-3 py-2"><WifiOff size={14} className="mt-0.5 flex-shrink-0" /><div><p className="text-xs font-semibold">Connection failed</p><p className="text-xs mt-0.5 opacity-80">{connMsg}</p></div></div>}
+          </div>
+
+          {/* ── Required env vars ── */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Required Environment Variables</p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-200">
+              {[
+                { name: "MICROSOFT_GRAPH_TENANT_ID",     desc: "Azure AD Directory (tenant) ID" },
+                { name: "MICROSOFT_GRAPH_CLIENT_ID",     desc: "App registration (client) ID" },
+                { name: "MICROSOFT_GRAPH_CLIENT_SECRET", desc: "App registration client secret" },
+              ].map(({ name, desc }) => (
+                <div key={name} className="px-4 py-2.5 flex items-center justify-between gap-4">
+                  <code className="text-xs font-mono text-blue-700">{name}</code>
+                  <span className="text-xs text-slate-500 text-right">{desc}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400">
+              Set these in <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">.env.local</code> for local dev,
+              and in <strong>Vercel → Settings → Environment Variables</strong> for production.
+              The app registration needs <strong>Mail.Read</strong> (Application permission, not Delegated).
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 }
