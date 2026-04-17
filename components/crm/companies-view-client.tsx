@@ -592,43 +592,43 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
   }, [widthsKey]);
 
   // ── Column resize via drag ─────────────────────────────────────────────────
-  // resizeRef holds the active drag state.
-  // latestWidthsRef mirrors colWidths so we can save on mouseup without
-  // using a functional setState (which would be a side-effect inside a setter).
-  const resizeRef = useRef<{ key: string; startX: number; startW: number } | null>(null);
+  // Uses Pointer Capture so events stay on the handle element even if the
+  // mouse moves off it — the most reliable drag approach on the web.
+  // latestWidthsRef mirrors colWidths so onPointerUp can save without a
+  // functional setState inside a native event handler.
   const latestWidthsRef = useRef<Record<string, number>>({});
 
-  function startResize(e: React.MouseEvent<HTMLDivElement>, colKey: string, currentW: number) {
+  function startResize(e: React.PointerEvent<HTMLDivElement>, colKey: string, currentW: number) {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(true);
-    latestWidthsRef.current = colWidths;
-    resizeRef.current = { key: colKey, startX: e.clientX, startW: currentW };
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId); // lock all pointer events to this element
 
-    const prevCursor = document.body.style.cursor;
+    setIsDragging(true);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
-    function onMove(ev: MouseEvent) {
-      const drag = resizeRef.current;
-      if (!drag) return;
-      const delta = ev.clientX - drag.startX;
-      const newW = Math.max(60, drag.startW + delta);
-      const updated = { ...latestWidthsRef.current, [drag.key]: newW };
+    latestWidthsRef.current = { ...colWidths };
+    const startX = e.clientX;
+    const startW = currentW;
+
+    function onMove(ev: PointerEvent) {
+      const delta = ev.clientX - startX;
+      const newW = Math.max(60, startW + delta);
+      const updated = { ...latestWidthsRef.current, [colKey]: newW };
       latestWidthsRef.current = updated;
-      setColWidths(updated);
+      setColWidths({ ...updated });
     }
     function onUp() {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      document.body.style.cursor = prevCursor;
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      document.body.style.cursor = "";
       document.body.style.userSelect = "";
       setIsDragging(false);
       try { localStorage.setItem(widthsKey, JSON.stringify(latestWidthsRef.current)); } catch { /* ignore */ }
-      resizeRef.current = null;
     }
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -698,6 +698,11 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
 
   // Company name column width
   const nameColW = colWidths["__name__"] ?? 240;
+
+  // Total table width (sum of all column widths + 32px action column)
+  const totalTableWidth = nameColW
+    + visibleCols.reduce((s, k) => s + (colWidths[k] ?? ALL_COLUMN_DEFS[k]?.defaultWidth ?? 120), 0)
+    + 32;
 
   // ── Form helpers ───────────────────────────────────────────────────────────
   function setField(k: keyof Company, v: unknown) { setForm(p => ({ ...p, [k]: v })); }
@@ -860,28 +865,36 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
             className="border-collapse"
             style={{
               tableLayout: "fixed",
-              width: "max-content",
+              width: Math.max(totalTableWidth, 0),
               minWidth: "100%",
               userSelect: isDragging ? "none" : undefined,
             }}
           >
+            {/* colgroup is the authoritative width source for tableLayout:fixed */}
+            <colgroup>
+              <col style={{ width: nameColW }} />
+              {visibleCols.map(key => (
+                <col key={key} style={{ width: colWidths[key] ?? ALL_COLUMN_DEFS[key]?.defaultWidth ?? 120 }} />
+              ))}
+              <col style={{ width: 32 }} />
+            </colgroup>
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 {/* ── Company name column — also resizable ── */}
                 <th
-                  className="relative group/th px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap select-none"
+                  className="relative group/th px-4 py-3 text-left whitespace-nowrap select-none"
                   style={{ width: nameColW, minWidth: 60 }}
                 >
-                  <button onClick={() => handleSort("name")} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
+                  <button onClick={() => handleSort("name")} className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wide hover:text-slate-800 transition-colors">
                     Company
                     {sortKey === "name"
-                      ? sortDir === "asc" ? <ChevronUp size={12} className="text-blue-500" /> : <ChevronDown size={12} className="text-blue-500" />
-                      : <ArrowUpDown size={12} className="opacity-0 group-hover/th:opacity-40 transition-opacity" />}
+                      ? sortDir === "asc" ? <ChevronUp size={11} className="text-blue-500" /> : <ChevronDown size={11} className="text-blue-500" />
+                      : <ArrowUpDown size={11} className="opacity-0 group-hover/th:opacity-40 transition-opacity" />}
                   </button>
                   {/* Resize handle — 6px wide, always shows a subtle border, turns blue on hover */}
                   <div
                     className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize border-r-2 border-slate-200 hover:border-blue-400 active:border-blue-600 z-10 transition-colors"
-                    onMouseDown={e => startResize(e, "__name__", nameColW)}
+                    onPointerDown={e => startResize(e, "__name__", nameColW)}
                   />
                 </th>
 
@@ -894,23 +907,23 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                   return (
                     <th
                       key={key}
-                      className="relative group/th px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap select-none"
+                      className="relative group/th px-4 py-3 text-left whitespace-nowrap select-none"
                       style={{ width: w, minWidth: 60 }}
                     >
                       {def.sortKey ? (
-                        <button onClick={() => handleSort(def.sortKey!)} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
+                        <button onClick={() => handleSort(def.sortKey!)} className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wide hover:text-slate-800 transition-colors">
                           {def.label}
                           {active
-                            ? sortDir === "asc" ? <ChevronUp size={12} className="text-blue-500" /> : <ChevronDown size={12} className="text-blue-500" />
-                            : <ArrowUpDown size={12} className="opacity-0 group-hover/th:opacity-40 transition-opacity" />}
+                            ? sortDir === "asc" ? <ChevronUp size={11} className="text-blue-500" /> : <ChevronDown size={11} className="text-blue-500" />
+                            : <ArrowUpDown size={11} className="opacity-0 group-hover/th:opacity-40 transition-opacity" />}
                         </button>
                       ) : (
-                        <span>{def.label}</span>
+                        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{def.label}</span>
                       )}
                       {/* Resize handle */}
                       <div
                         className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize border-r-2 border-slate-200 hover:border-blue-400 active:border-blue-600 z-10 transition-colors"
-                        onMouseDown={e => startResize(e, key, w)}
+                        onPointerDown={e => startResize(e, key, w)}
                       />
                     </th>
                   );
