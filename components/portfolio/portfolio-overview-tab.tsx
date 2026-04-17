@@ -469,7 +469,9 @@ export function PortfolioOverviewTab({
   return (
     <div className="p-5 space-y-5 overflow-y-auto h-full">
 
-      {/* ROW 1: KPI tiles with edit toggle */}
+      {/* ROW 1-2: Key metrics (left) + Fundraise tracker (right) */}
+      <div className="grid grid-cols-2 gap-4 items-start">
+      {/* Left: Key metrics */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Key metrics</h3>
@@ -565,7 +567,7 @@ export function PortfolioOverviewTab({
         )}
       </div>
 
-      {/* ROW 2: Fundraise tracker */}
+      {/* Right: Fundraise tracker */}
       <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-4 py-3">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-[10px] font-bold text-emerald-700 uppercase tracking-[0.1em]">Fundraise tracker</h3>
@@ -583,30 +585,22 @@ export function PortfolioOverviewTab({
           )}
         </div>
         {!editingFt ? (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <p className="text-[10px] text-emerald-600 mb-0.5">Round</p>
               <p className="text-xs font-semibold text-slate-800">{company.raise_round ?? company.stage ?? "—"}</p>
             </div>
             <div>
-              <p className="text-[10px] text-emerald-600 mb-0.5">Target amount</p>
+              <p className="text-[10px] text-emerald-600 mb-0.5">Status</p>
+              <p className="text-xs font-semibold text-slate-800 capitalize">{(company.current_raise_status ?? "not_raising").replace(/_/g, " ")}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-emerald-600 mb-0.5">Target</p>
               <p className="text-xs font-semibold text-slate-800">{company.current_raise_target ?? "—"}</p>
             </div>
             <div>
               <p className="text-[10px] text-emerald-600 mb-0.5">Target close</p>
               <p className="text-xs font-semibold text-slate-800">{company.raise_target_close ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-emerald-600 mb-0.5">Status</p>
-              <p className="text-xs font-semibold text-slate-800">{(company.current_raise_status ?? "not_raising").replace(/_/g, " ")}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-emerald-600 mb-0.5">Investors approached</p>
-              <p className="text-xs font-semibold text-slate-800">{company.investors_approached ?? 0}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-emerald-600 mb-0.5">Term sheets</p>
-              <p className="text-xs font-semibold text-slate-800">{company.term_sheets ?? 0}</p>
             </div>
           </div>
         ) : (
@@ -665,30 +659,9 @@ export function PortfolioOverviewTab({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p className="text-[10px] text-emerald-600 mb-0.5">Investors approached</p>
-                <input
-                  type="number"
-                  min={0}
-                  value={ftForm.investors_approached}
-                  onChange={e => setFtForm(p => ({ ...p, investors_approached: Number(e.target.value) }))}
-                  className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                />
-              </div>
-              <div>
-                <p className="text-[10px] text-emerald-600 mb-0.5">Term sheets</p>
-                <input
-                  type="number"
-                  min={0}
-                  value={ftForm.term_sheets}
-                  onChange={e => setFtForm(p => ({ ...p, term_sheets: Number(e.target.value) }))}
-                  className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                />
-              </div>
-            </div>
           </div>
         )}
+      </div>
       </div>
 
       {/* ROW 3: Company news (left) + Interaction timeline (right) */}
@@ -700,33 +673,29 @@ export function PortfolioOverviewTab({
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Interaction timeline</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Meeting history</h3>
             <button
               onClick={() => setShowFullTimeline(true)}
               className="text-[10px] text-blue-500 hover:text-blue-700"
             >
-              View full timeline →
+              View all →
             </button>
           </div>
-          {interactions.length === 0 ? (
-            <p className="text-xs text-slate-400">No interactions yet</p>
+          {interactions.filter(i => i.type === "meeting").length === 0 ? (
+            <p className="text-xs text-slate-400">No meetings logged yet</p>
           ) : (
-            <div className="space-y-2">
-              {interactions.slice(0, 5).map(i => (
+            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-0.5">
+              {interactions.filter(i => i.type === "meeting").slice(0, 6).map(i => (
                 <button
                   key={i.id}
                   onClick={() => setSelectedInteraction(i)}
-                  className="flex items-start gap-2 w-full text-left hover:bg-slate-50 rounded-lg p-1 -mx-1 transition-colors"
+                  className="flex items-start gap-2.5 w-full text-left hover:bg-violet-50 rounded-lg px-2 py-1.5 -mx-2 transition-colors group"
                 >
-                  <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                    i.type === "meeting" ? "bg-blue-400" :
-                    i.type === "email"   ? "bg-slate-400" :
-                    i.type === "call"    ? "bg-emerald-400" :
-                    i.type === "intro"   ? "bg-violet-400" : "bg-amber-400"
-                  }`} />
-                  <div className="min-w-0">
-                    <p className="text-[12px] font-medium text-slate-700 truncate">{i.subject ?? i.type}</p>
-                    <p className="text-[11px] text-slate-400">{timeAgo(i.date)}</p>
+                  <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-violet-400" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-semibold text-slate-800 truncate">{i.subject ?? "Meeting"}</p>
+                    {i.summary && <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{i.summary}</p>}
+                    <p className="text-[10px] text-slate-400 mt-0.5">{new Date(i.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
                   </div>
                 </button>
               ))}
@@ -824,7 +793,7 @@ export function PortfolioOverviewTab({
                           color: statusColors[ms.status]?.text ?? "#5F5E5A",
                         }}
                       >
-                        {ms.status.replace("_", " ")}
+                        {ms.status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
                       </span>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                         <button onClick={() => handleStartEditMs(ms)} className="text-slate-400 hover:text-slate-600">

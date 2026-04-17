@@ -1141,6 +1141,61 @@ export function CompanyDetailClient({
   const [exaActionLoading, setExaActionLoading] = useState(false);
   const [logoStatus, setLogoStatus] = useState<"idle" | "running" | "found" | "not_found">("idle");
 
+  const [showTypePicker, setShowTypePicker] = useState(false);
+  const typePickerRef = useRef<HTMLDivElement>(null);
+
+  const TYPE_OPTIONS: { value: CompanyType; label: string }[] = [
+    { value: "startup",          label: "Startup" },
+    { value: "fund",             label: "Fund / VC" },
+    { value: "lp",               label: "LP" },
+    { value: "corporate",        label: "Corporate" },
+    { value: "ecosystem_partner",label: "Ecosystem Partner" },
+    { value: "government",       label: "Government" },
+  ];
+
+  async function updateType(newType: CompanyType) {
+    setShowTypePicker(false);
+    const prev = company;
+    setCompany(c => ({ ...c, type: newType }));
+    await supabase.from("companies").update({ type: newType }).eq("id", company.id);
+    // Refresh to get updated typeGroup
+    setCompany(c => ({ ...c, type: newType }));
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    void prev;
+  }
+
+  // Close type picker on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (typePickerRef.current && !typePickerRef.current.contains(e.target as Node)) {
+        setShowTypePicker(false);
+      }
+    }
+    if (showTypePicker) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showTypePicker]);
+
+  // Auto-load logo via logo.dev if not set
+  useEffect(() => {
+    if (company.logo_url || !company.website) return;
+    const token = process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN;
+    if (!token) return;
+    try {
+      const url = new URL(company.website);
+      const domain = url.hostname.replace(/^www\./, "");
+      const logoUrl = `https://img.logo.dev/${domain}?token=${token}&size=80&format=png`;
+      // Probe if it loads — set an img to check
+      const img = new Image();
+      img.onload = async () => {
+        setCompany(c => ({ ...c, logo_url: logoUrl }));
+        await supabase.from("companies").update({ logo_url: logoUrl }).eq("id", company.id);
+      };
+      img.onerror = () => { /* silently ignore */ };
+      img.src = logoUrl;
+    } catch { /* invalid URL, skip */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company.id]);
+
   async function generateMemo() {
     setMemoGenerating(true);
     try {
@@ -1185,17 +1240,20 @@ export function CompanyDetailClient({
 
   const statBar: StatCell[] = (() => {
     if (typeGroup === "startup") return [
-      { label: "Total Raised", value: company.funding_raised ? formatCurrency(company.funding_raised, true) : "—" },
-      { label: "Runway",       value: company.runway_months ? `${company.runway_months}mo` : "—" },
-      { label: "Priority",     value: company.priority
+      { label: "Sector",      value: company.sectors?.[0] ? <span className="capitalize">{company.sectors[0]}</span> : "—" },
+      { label: "Sub-sector",  value: company.sectors?.[1] ? <span className="capitalize">{company.sectors[1]}</span> : "—" },
+      { label: "Status",      value: company.deal_status
+          ? <span className={cn("badge text-xs", DEAL_STAGE_COLORS[company.deal_status] ?? "bg-slate-100 text-slate-600")}>{DEAL_STAGE_LABELS[company.deal_status] ?? company.deal_status.replace(/_/g, " ")}</span>
+          : "—" },
+      { label: "Priority",    value: company.priority
           ? <span className={cn("badge text-xs", PRIORITY_COLORS[company.priority] ?? "bg-slate-100")}>{company.priority}</span>
           : "—" },
       lastContactCell,
     ];
     if (typeGroup === "investor") return [
-      { label: "AUM",       value: company.aum ? formatCurrency(company.aum, true) : "—" },
-      { label: "Founded",   value: company.founded_year ?? "—" },
-      { label: "Employees", value: company.employee_count ?? "—" },
+      { label: "AUM",          value: company.aum ? formatCurrency(company.aum, true) : "—" },
+      { label: "Investor Type",value: company.investor_type ?? "—" },
+      { label: "Stage Focus",  value: company.fund_focus ? company.fund_focus.slice(0, 30) + (company.fund_focus.length > 30 ? "…" : "") : "—" },
       lastContactCell,
     ];
     if (typeGroup === "strategic") return [
@@ -1208,8 +1266,10 @@ export function CompanyDetailClient({
       { label: "LP Stage", value: company.lp_stage
           ? <span className={cn("badge text-xs", LP_STAGE_COLORS[company.lp_stage] ?? "bg-slate-100 text-slate-500")}>{LP_STAGE_LABELS[company.lp_stage] ?? company.lp_stage}</span>
           : "—" },
-      { label: "LP Type", value: company.lp_type ?? "—" },
-      { label: "Source",   value: company.source ?? "—" },
+      { label: "LP Type", value: company.lp_type
+          ? <span className="capitalize">{company.lp_type.replace(/_/g, " ")}</span>
+          : "—" },
+      { label: "Commitment Goal", value: company.commitment_goal ? formatCurrency(company.commitment_goal, true) : "—" },
       lastContactCell,
     ];
     return [
@@ -1229,46 +1289,68 @@ export function CompanyDetailClient({
 
       {/* ── Header card ── */}
       <div className="card p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            {/* Avatar / logo */}
-            {company.logo_url ? (
-              <img
-                src={company.logo_url}
-                alt={company.name}
-                className="w-14 h-14 rounded-xl object-contain border border-slate-100 bg-white flex-shrink-0"
-              />
-            ) : (
-              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
-                {getInitials(company.name)}
-              </div>
-            )}
+        <div className="flex items-start gap-4">
+          {/* Avatar / logo */}
+          {company.logo_url ? (
+            <img
+              src={company.logo_url}
+              alt={company.name}
+              className="w-14 h-14 rounded-xl object-contain border border-slate-100 bg-white flex-shrink-0"
+            />
+          ) : (
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
+              {getInitials(company.name)}
+            </div>
+          )}
 
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-lg font-bold text-slate-900">{company.name}</h1>
-                <span className={cn("badge capitalize", COMPANY_TYPE_COLORS[company.type] ?? "bg-slate-100 text-slate-600")}>
+          {/* Name + meta */}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-bold text-slate-900 leading-tight">{company.name}</h1>
+            <div className="flex items-center gap-2 flex-wrap mt-1">
+              {/* Type picker button */}
+              <div className="relative" ref={typePickerRef}>
+                <button
+                  onClick={() => setShowTypePicker(v => !v)}
+                  className={cn("badge capitalize cursor-pointer hover:opacity-80 transition-opacity flex items-center gap-1", COMPANY_TYPE_COLORS[company.type] ?? "bg-slate-100 text-slate-600")}
+                >
                   {company.type.replace(/_/g, " ")}
+                  <ChevronDown size={10} />
+                </button>
+                {showTypePicker && (
+                  <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 py-1 min-w-[160px]">
+                    {TYPE_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateType(opt.value)}
+                        className={cn(
+                          "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors",
+                          company.type === opt.value ? "font-semibold text-blue-600" : "text-slate-700"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {company.current_raise_status && company.current_raise_status !== "not_raising" && (
+                <span className={cn("badge", RAISE_STATUS_COLORS[company.current_raise_status] ?? "bg-slate-100 text-slate-500")}>
+                  {RAISE_STATUS_LABELS[company.current_raise_status]}
                 </span>
-                {company.current_raise_status && company.current_raise_status !== "not_raising" && (
-                  <span className={cn("badge", RAISE_STATUS_COLORS[company.current_raise_status] ?? "bg-slate-100 text-slate-500")}>
-                    {RAISE_STATUS_LABELS[company.current_raise_status]}
-                  </span>
-                )}
-              </div>
-              {company.description && (
-                <p className="text-sm text-slate-500 mt-1 max-w-lg leading-relaxed">{company.description}</p>
               )}
-              <div className="flex items-center gap-4 mt-2 flex-wrap">
-                {company.location_city && (
-                  <span className="flex items-center gap-1 text-xs text-slate-500">
-                    <MapPin size={12} /> {[company.location_city, company.location_country].filter(Boolean).join(", ")}
-                  </span>
-                )}
-                {company.founded_year && (
-                  <span className="text-xs text-slate-500">Founded {company.founded_year}</span>
-                )}
-              </div>
+            </div>
+            {company.description && (
+              <p className="text-sm text-slate-500 mt-2 leading-relaxed">{company.description}</p>
+            )}
+            <div className="flex items-center gap-4 mt-2 flex-wrap">
+              {company.location_city && (
+                <span className="flex items-center gap-1 text-xs text-slate-500">
+                  <MapPin size={12} /> {[company.location_city, company.location_country].filter(Boolean).join(", ")}
+                </span>
+              )}
+              {company.founded_year && (
+                <span className="text-xs text-slate-500">Founded {company.founded_year}</span>
+              )}
             </div>
           </div>
 
@@ -1301,8 +1383,8 @@ export function CompanyDetailClient({
           </div>
         </div>
 
-        {/* 4-cell stat bar */}
-        <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-100">
+        {/* Stat bar */}
+        <div className={cn("grid gap-4 mt-4 pt-4 border-t border-slate-100", typeGroup === "startup" ? "grid-cols-5" : "grid-cols-4")}>
           {statBar.map(({ label, value }) => (
             <div key={label}>
               <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">{label}</p>
@@ -1311,48 +1393,17 @@ export function CompanyDetailClient({
           ))}
         </div>
 
-        {/* Inline action strip */}
+        {/* Action strip */}
         <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 flex-wrap">
-          {typeGroup === "startup" && (<>
+          {typeGroup === "startup" && (
             <button onClick={generateMemo} disabled={memoGenerating} className={primaryBtn}>
               {memoGenerating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
               {memoGenerating ? "Generating…" : "Generate IC Memo"}
             </button>
-            {company.pitch_deck_url && (
-              <a href={company.pitch_deck_url} target="_blank" rel="noopener noreferrer" className={primaryBtn}>
-                <FileText size={11} /> View Deck
-              </a>
-            )}
-            <button onClick={runExaAction} disabled={exaActionLoading} className={secondaryBtn}>
-              {exaActionLoading ? <Loader2 size={11} className="animate-spin" /> : <LinkIcon size={11} />}
-              {exaActionLoading ? "Searching…" : "Research with Exa"}
-            </button>
-            <button onClick={findLogo} disabled={logoStatus === "running"} className={secondaryBtn}>
-              {logoStatus === "running" ? <Loader2 size={11} className="animate-spin" /> : logoStatus === "found" ? <CheckCircle size={11} className="text-green-500" /> : logoStatus === "not_found" ? <XCircle size={11} className="text-red-400" /> : <ImageIcon size={11} />}
-              {logoStatus === "running" ? "Finding…" : logoStatus === "found" ? "Logo found" : logoStatus === "not_found" ? "Not found" : "Find Logo"}
-            </button>
-          </>)}
-          {typeGroup === "investor" && (<>
+          )}
+          {typeGroup === "investor" && (
             <Link href="/crm/funds" className={primaryBtn}>View in Funds ↗</Link>
-            <button onClick={runExaAction} disabled={exaActionLoading} className={secondaryBtn}>
-              {exaActionLoading ? <Loader2 size={11} className="animate-spin" /> : <LinkIcon size={11} />}
-              {exaActionLoading ? "Searching…" : "Research with Exa"}
-            </button>
-            <button onClick={findLogo} disabled={logoStatus === "running"} className={secondaryBtn}>
-              {logoStatus === "running" ? <Loader2 size={11} className="animate-spin" /> : <ImageIcon size={11} />}
-              {logoStatus === "running" ? "Finding…" : "Find Logo"}
-            </button>
-          </>)}
-          {typeGroup === "strategic" && (<>
-            <button onClick={runExaAction} disabled={exaActionLoading} className={primaryBtn}>
-              {exaActionLoading ? <Loader2 size={11} className="animate-spin" /> : <LinkIcon size={11} />}
-              {exaActionLoading ? "Searching…" : "Research with Exa"}
-            </button>
-            <button onClick={findLogo} disabled={logoStatus === "running"} className={secondaryBtn}>
-              {logoStatus === "running" ? <Loader2 size={11} className="animate-spin" /> : <ImageIcon size={11} />}
-              {logoStatus === "running" ? "Finding…" : "Find Logo"}
-            </button>
-          </>)}
+          )}
           {typeGroup === "lp" && (<>
             <Link href="/crm/lps" className={primaryBtn}>View in Fundraising ↗</Link>
             <a href={`mailto:${contacts[0]?.email ?? ""}?subject=Following up — Valuence Ventures`} className={primaryBtn}>
@@ -1360,16 +1411,6 @@ export function CompanyDetailClient({
             </a>
             <button onClick={() => { setShowInteractionForm(true); setTab("Interactions"); }} className={secondaryBtn}>
               Log Touchpoint
-            </button>
-          </>)}
-          {typeGroup === "other" && (<>
-            <button onClick={runExaAction} disabled={exaActionLoading} className={primaryBtn}>
-              {exaActionLoading ? <Loader2 size={11} className="animate-spin" /> : <LinkIcon size={11} />}
-              {exaActionLoading ? "Searching…" : "Research with Exa"}
-            </button>
-            <button onClick={findLogo} disabled={logoStatus === "running"} className={secondaryBtn}>
-              {logoStatus === "running" ? <Loader2 size={11} className="animate-spin" /> : <ImageIcon size={11} />}
-              {logoStatus === "running" ? "Finding…" : "Find Logo"}
             </button>
           </>)}
         </div>
@@ -1472,29 +1513,6 @@ export function CompanyDetailClient({
               )}
             </div>
 
-            <div className="border-t border-slate-100" />
-
-            {/* Notes */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Notes</h3>
-                <button onClick={() => setShowNoteForm(!showNoteForm)} className="text-xs text-blue-600 hover:text-blue-700">+ Add</button>
-              </div>
-              {showNoteForm && (
-                <div className="mb-3 space-y-2">
-                  <textarea className="textarea" rows={3} placeholder="Add a note…" value={noteText} onChange={e => setNoteText(e.target.value)} autoFocus />
-                  <div className="flex gap-2">
-                    <button onClick={() => setShowNoteForm(false)} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
-                    <button onClick={saveNote} disabled={savingNote || !noteText.trim()} className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg disabled:opacity-50">
-                      {savingNote ? "Saving…" : "Save note"}
-                    </button>
-                  </div>
-                </div>
-              )}
-              <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
-                {company.notes || <span className="text-slate-400 italic">No notes yet.</span>}
-              </p>
-            </div>
 
           </div>
 
@@ -1504,52 +1522,85 @@ export function CompanyDetailClient({
             {/* STARTUP */}
             {typeGroup === "startup" && (
               <div className="space-y-4">
-                <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Deal</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { label: "Investors approached", value: company.investors_approached ?? 0 },
-                      { label: "Term sheets",          value: company.term_sheets ?? 0 },
-                    ].map(({ label, value }) => (
-                      <div key={label} className="bg-slate-50 rounded-lg p-3">
-                        <p className="text-xs text-slate-400">{label}</p>
-                        <p className="text-lg font-semibold text-slate-800">{value}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="border-t border-slate-100" />
+                {/* Documents */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">IC Memos</h3>
-                    {memos.length > 0 && (
-                      <button onClick={() => setTab("Memos")} className="text-xs text-blue-600 hover:text-blue-700">All {memos.length} →</button>
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Documents</h3>
+                  </div>
+                  {/* Pitch deck */}
+                  <div className="mb-3">
+                    <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide mb-1.5">Pitch Deck</p>
+                    {company.pitch_deck_url ? (
+                      <a
+                        href={company.pitch_deck_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg font-medium"
+                      >
+                        <FileText size={12} /> Open Deck
+                      </a>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">No deck linked</p>
                     )}
                   </div>
-                  {memos.length === 0 ? (
-                    <p className="text-xs text-slate-400 mb-2">No memo yet.</p>
-                  ) : (
-                    <div className="space-y-1 mb-2">
-                      {memos.slice(0, 2).map(m => (
-                        <Link key={m.id} href={`/memos/${m.id}`} className="block text-xs text-blue-600 hover:text-blue-700 truncate">
-                          {m.title}
-                        </Link>
-                      ))}
-                    </div>
-                  )}
+                  {/* Meeting transcripts */}
+                  <div>
+                    <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide mb-1.5">Meeting Transcripts</p>
+                    {interactions.filter(i => i.type === "meeting").length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">No transcripts yet</p>
+                    ) : (
+                      <div className="space-y-1 max-h-[120px] overflow-y-auto">
+                        {interactions.filter(i => i.type === "meeting").slice(0, 5).map(i => (
+                          <div key={i.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5">
+                            <Mic size={11} className="text-violet-500 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs text-slate-700 truncate font-medium">{i.subject ?? "Meeting"}</p>
+                              <p className="text-[10px] text-slate-400">{formatDate(i.date)}</p>
+                            </div>
+                            {i.transcript_url && (
+                              <a href={i.transcript_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 flex-shrink-0">
+                                <ExternalLink size={10} />
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="border-t border-slate-100" />
+                {/* Company Intelligence */}
                 <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Tags</h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {company.sectors?.map(s => (
-                      <span key={s} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded capitalize">{s}</span>
-                    ))}
-                    {company.tags?.slice(0, 3).map(k => (
-                      <span key={k} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">{k}</span>
-                    ))}
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Company Intelligence</h3>
+                    <button onClick={() => setTab("Intelligence")} className="text-xs text-blue-600 hover:text-blue-700">Full view →</button>
                   </div>
-                  <p className="text-xs text-slate-400 mt-3">Source: {company.source ?? "—"} · Added {formatDate(company.created_at)}</p>
+                  <button
+                    onClick={() => setTab("Intelligence")}
+                    className="w-full flex items-center gap-2 text-left bg-blue-50 hover:bg-blue-100 transition-colors rounded-lg px-3 py-2.5"
+                  >
+                    <Sparkles size={13} className="text-blue-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-medium text-blue-800">AI Intelligence &amp; Signals</p>
+                      <p className="text-[11px] text-blue-600 mt-0.5">View news, research signals &amp; AI insights</p>
+                    </div>
+                  </button>
+                  {/* IC Memos link */}
+                  {memos.length > 0 && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide">IC Memos</p>
+                        <button onClick={() => setTab("Memos")} className="text-[10px] text-blue-600 hover:text-blue-700">All {memos.length} →</button>
+                      </div>
+                      <div className="space-y-0.5">
+                        {memos.slice(0, 2).map(m => (
+                          <Link key={m.id} href={`/memos/${m.id}`} className="block text-xs text-blue-600 hover:text-blue-700 truncate">
+                            {m.title}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1562,32 +1613,40 @@ export function CompanyDetailClient({
                   {company.fund_focus && (
                     <p className="text-sm text-slate-700 mb-3 leading-relaxed">{company.fund_focus}</p>
                   )}
-                  {company.investor_type && (
-                    <p className="text-xs text-slate-500 mb-1"><span className="font-medium text-slate-700">Type:</span> {company.investor_type}</p>
-                  )}
-                  {company.aum && (
-                    <p className="text-xs text-slate-500 mb-3"><span className="font-medium text-slate-700">AUM:</span> {formatCurrency(company.aum, true)}</p>
-                  )}
                   <Link href="/crm/funds" className="text-xs text-blue-600 hover:text-blue-700 inline-block">
                     Full profile in Funds →
                   </Link>
                 </div>
                 <div className="border-t border-slate-100" />
+                {/* Sectors */}
+                {(company.sectors ?? []).length > 0 && (
+                  <>
+                    <div>
+                      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Sectors</h3>
+                      <div className="flex flex-wrap gap-1.5">
+                        {company.sectors!.map(s => <span key={s} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded capitalize">{s}</span>)}
+                      </div>
+                    </div>
+                    <div className="border-t border-slate-100" />
+                  </>
+                )}
+                {/* Intelligence */}
                 <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Sectors</h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(company.sectors ?? []).length > 0
-                      ? company.sectors!.map(s => <span key={s} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded capitalize">{s}</span>)
-                      : <span className="text-xs text-slate-400">None tagged</span>
-                    }
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Intelligence</h3>
+                    <button onClick={() => setTab("Intelligence")} className="text-xs text-blue-600 hover:text-blue-700">Full view →</button>
                   </div>
+                  <button
+                    onClick={() => setTab("Intelligence")}
+                    className="w-full flex items-center gap-2 text-left bg-blue-50 hover:bg-blue-100 transition-colors rounded-lg px-3 py-2.5"
+                  >
+                    <Sparkles size={13} className="text-blue-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-medium text-blue-800">AI Intelligence &amp; Signals</p>
+                      <p className="text-[11px] text-blue-600 mt-0.5">View news, research signals &amp; AI insights</p>
+                    </div>
+                  </button>
                 </div>
-                <div className="border-t border-slate-100" />
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Source: {company.source ?? "—"}<br />
-                  First contact: {formatDate(company.first_contact_date)}<br />
-                  Added: {formatDate(company.created_at)}
-                </p>
               </div>
             )}
 
@@ -1623,8 +1682,9 @@ export function CompanyDetailClient({
               const currentIdx = LP_STAGES.indexOf(company.lp_stage ?? "");
               return (
                 <div className="space-y-4">
+                  {/* Pipeline progress */}
                   <div>
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Fundraise Pipeline</h3>
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Pipeline</h3>
                     <div className="flex items-center gap-1.5 mb-2">
                       {LP_STAGES.map((s, i) => (
                         <div key={s} className={cn("h-2 flex-1 rounded-full", i <= currentIdx ? "bg-blue-500" : "bg-slate-100")} />
@@ -1635,20 +1695,27 @@ export function CompanyDetailClient({
                       <p className="text-xs text-slate-500 mt-1">Goal: {formatCurrency(company.commitment_goal, true)}</p>
                     )}
                     <Link href="/crm/lps" className="text-xs text-blue-600 hover:text-blue-700 mt-2 inline-block">
-                      Full LP record in Fundraising →
+                      Full LP record →
                     </Link>
                   </div>
                   <div className="border-t border-slate-100" />
+                  {/* Intelligence */}
                   <div>
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Materials Sent</h3>
-                    <p className="text-xs text-slate-400 italic">Track materials in the Deals tab.</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Intelligence</h3>
+                      <button onClick={() => setTab("Intelligence")} className="text-xs text-blue-600 hover:text-blue-700">Full view →</button>
+                    </div>
+                    <button
+                      onClick={() => setTab("Intelligence")}
+                      className="w-full flex items-center gap-2 text-left bg-blue-50 hover:bg-blue-100 transition-colors rounded-lg px-3 py-2.5"
+                    >
+                      <Sparkles size={13} className="text-blue-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-medium text-blue-800">AI Intelligence &amp; Signals</p>
+                        <p className="text-[11px] text-blue-600 mt-0.5">View news, signals &amp; AI insights</p>
+                      </div>
+                    </button>
                   </div>
-                  <div className="border-t border-slate-100" />
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Source: {company.source ?? "—"}<br />
-                    First contact: {formatDate(company.first_contact_date)}<br />
-                    Added: {formatDate(company.created_at)}
-                  </p>
                 </div>
               );
             })()}
