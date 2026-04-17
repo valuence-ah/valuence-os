@@ -452,6 +452,7 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
   const [deckName, setDeckName]             = useState<string | null>(null);
   const [deckUploading, setDeckUploading]   = useState(false);
   const [deckError, setDeckError]           = useState<string | null>(null);
+  const [deckDragOver, setDeckDragOver]     = useState(false);
   const deckInputRef                        = useRef<HTMLInputElement>(null);
 
   // Inline field editing
@@ -1023,28 +1024,72 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
                 <input ref={deckInputRef} type="file" accept=".pdf,.pptx,.ppt,.key"
                   className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleDeckUpload(f); e.target.value = ""; }} />
+
                 {deckUrl ? (
-                  <div className="flex items-center gap-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg">
-                    <FileText size={14} className="text-blue-500 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <a href={deckUrl} target="_blank" rel="noopener noreferrer"
-                        className="text-xs text-blue-700 font-medium hover:underline truncate block">
-                        {deckName ?? "View Deck"}
-                      </a>
+                  /* ── Deck already uploaded ── */
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2.5 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <FileText size={15} className="text-blue-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <a href={deckUrl} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-blue-700 font-semibold hover:underline truncate block">
+                          {deckName ?? "View Deck"}
+                        </a>
+                        <p className="text-[10px] text-blue-400 mt-0.5">Click to open · PDF / PPTX</p>
+                      </div>
+                      <button onClick={() => deckInputRef.current?.click()}
+                        className="text-[10px] text-slate-500 hover:text-slate-700 border border-slate-200 bg-white rounded-lg px-2 py-1 flex-shrink-0 transition-colors">
+                        Replace
+                      </button>
                     </div>
-                    <button onClick={() => deckInputRef.current?.click()}
-                      className="text-[10px] text-blue-600 hover:text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 flex-shrink-0">
-                      Replace
-                    </button>
                   </div>
                 ) : (
-                  <button onClick={() => deckInputRef.current?.click()} disabled={deckUploading}
-                    className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-slate-200 rounded-lg text-xs text-slate-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50">
-                    {deckUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-                    {deckUploading ? "Uploading…" : "Upload Pitch Deck (.pdf, .pptx)"}
-                  </button>
+                  /* ── Drag & drop zone ── */
+                  <div
+                    onClick={() => !deckUploading && deckInputRef.current?.click()}
+                    onDragOver={e => { e.preventDefault(); setDeckDragOver(true); }}
+                    onDragLeave={() => setDeckDragOver(false)}
+                    onDrop={e => {
+                      e.preventDefault();
+                      setDeckDragOver(false);
+                      const f = e.dataTransfer.files?.[0];
+                      if (f) handleDeckUpload(f);
+                    }}
+                    className={cn(
+                      "relative flex flex-col items-center justify-center gap-2 py-6 rounded-xl border-2 border-dashed transition-all cursor-pointer select-none",
+                      deckUploading
+                        ? "border-blue-300 bg-blue-50 cursor-default"
+                        : deckDragOver
+                        ? "border-blue-400 bg-blue-50 scale-[1.01]"
+                        : "border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50"
+                    )}
+                  >
+                    {deckUploading ? (
+                      <>
+                        <Loader2 size={20} className="text-blue-500 animate-spin" />
+                        <p className="text-xs text-blue-600 font-medium">Uploading…</p>
+                      </>
+                    ) : deckDragOver ? (
+                      <>
+                        <Upload size={20} className="text-blue-500" />
+                        <p className="text-xs text-blue-600 font-semibold">Drop to upload</p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-9 h-9 bg-white border border-slate-200 rounded-xl flex items-center justify-center shadow-sm">
+                          <Upload size={16} className="text-slate-400" />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-slate-600 font-medium">Drop deck here or <span className="text-blue-600">browse</span></p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">PDF, PPTX, PPT, KEY</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
-                {deckError && <p className="text-[10px] text-red-500 mt-1">{deckError}</p>}
+                {deckError && <p className="text-[10px] text-red-500 mt-1.5 flex items-center gap-1"><X size={9}/>{deckError}</p>}
               </div>
             )}
 
