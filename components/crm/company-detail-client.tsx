@@ -5,6 +5,7 @@
 // Tabs: Overview | Contacts | Interactions | Deals | Memos | Intelligence
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact, Interaction, Deal, CompanyType } from "@/lib/types";
 import {
@@ -17,10 +18,22 @@ import {
   Globe, Linkedin, ExternalLink, MapPin,
   Phone, Mail, Plus, ChevronDown, FileText, Mic, CheckSquare,
   Sparkles, Loader2, AlertCircle, Calendar, Link as LinkIcon,
-  Edit2, Folder, X, Upload,
+  Edit2, Folder, X, Upload, ImageIcon, CheckCircle, XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import type { IcMemo } from "@/lib/types";
+
+// ── Type grouping ─────────────────────────────────────────────────────────────
+type TypeGroup = "startup" | "investor" | "strategic" | "lp" | "other";
+
+function getTypeGroup(type: string): TypeGroup {
+  const t = (type ?? "").toLowerCase();
+  if (t === "startup") return "startup";
+  if (t === "investor" || t === "fund" || t === "fund / vc" || t === "fund/vc") return "investor";
+  if (t === "strategic partner" || t === "corporate" || t === "government" || t === "ecosystem_partner") return "strategic";
+  if (t === "lp" || t === "limited partner") return "lp";
+  return "other";
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const TABS = ["Overview", "Contacts", "Interactions", "Deals", "Memos", "Intelligence"] as const;
@@ -1112,58 +1125,104 @@ export function CompanyDetailClient({
     }
   }
 
+  const router = useRouter();
   const deals_sorted = deals.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-  // ── Header quick-stats per type ────────────────────────────────────────────
-  type Stat = { label: string; value: React.ReactNode };
+  // ── Type group + overdue banner ───────────────────────────────────────────
+  const typeGroup = getTypeGroup(company.type);
+  const isLp = typeGroup === "lp";
+  const daysSinceContact = company.last_contact_date
+    ? Math.floor((Date.now() - new Date(company.last_contact_date).getTime()) / 86400000)
+    : null;
+  const showOverdueBanner = isLp && daysSinceContact !== null && daysSinceContact > 30;
 
-  const headerStats: Stat[] = (() => {
-    if (company.type === "startup") return [
-      { label: "Total Raised",  value: company.funding_raised ? formatCurrency(company.funding_raised, true) : "—" },
-      { label: "Stage",         value: company.stage ? <span className="capitalize">{company.stage.replace(/_/g, " ")}</span> : "—" },
-      { label: "Deal Status",   value: company.deal_status
-          ? <span className={cn("badge text-xs", DEAL_STAGE_COLORS[company.deal_status] ?? "bg-slate-100")}>{DEAL_STAGE_LABELS[company.deal_status] ?? company.deal_status}</span>
-          : "—" },
-      { label: "Priority",      value: company.priority
+  // ── Action strip state ────────────────────────────────────────────────────
+  const [memoGenerating, setMemoGenerating] = useState(false);
+  const [exaActionLoading, setExaActionLoading] = useState(false);
+  const [logoStatus, setLogoStatus] = useState<"idle" | "running" | "found" | "not_found">("idle");
+
+  async function generateMemo() {
+    setMemoGenerating(true);
+    try {
+      const res = await fetch("/api/memos/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: company.id }),
+      });
+      const json = await res.json();
+      if (json.data?.id) router.push(`/memos/${json.data.id}`);
+    } catch { /* ignore */ } finally { setMemoGenerating(false); }
+  }
+
+  async function runExaAction() {
+    setExaActionLoading(true);
+    try {
+      await fetch("/api/agents/exa-research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: company.id }),
+      });
+    } catch { /* ignore */ } finally { setExaActionLoading(false); }
+  }
+
+  async function findLogo() {
+    setLogoStatus("running");
+    try {
+      const res = await fetch("/api/logo-finder/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: company.id }),
+      });
+      const data = await res.json();
+      if (data.success && data.logo_url) { setLogoStatus("found"); router.refresh(); }
+      else setLogoStatus("not_found");
+    } catch { setLogoStatus("not_found"); }
+  }
+
+  // ── 4-cell stat bar (always 4 cells, last = Last Contact) ─────────────────
+  type StatCell = { label: string; value: React.ReactNode };
+  const lastContactCell: StatCell = { label: "Last Contact", value: formatDate(company.last_contact_date) };
+
+  const statBar: StatCell[] = (() => {
+    if (typeGroup === "startup") return [
+      { label: "Total Raised", value: company.funding_raised ? formatCurrency(company.funding_raised, true) : "—" },
+      { label: "Runway",       value: company.runway_months ? `${company.runway_months}mo` : "—" },
+      { label: "Priority",     value: company.priority
           ? <span className={cn("badge text-xs", PRIORITY_COLORS[company.priority] ?? "bg-slate-100")}>{company.priority}</span>
           : "—" },
-      { label: "Runway",        value: company.runway_months != null ? `${company.runway_months}mo` : "—" },
-      { label: "Last Contact",  value: formatDate(company.last_contact_date) },
+      lastContactCell,
     ];
-    if (company.type === "lp") return [
-      { label: "AUM",            value: company.aum ? formatCurrency(company.aum, true) : "—" },
-      { label: "LP Type",        value: company.lp_type ? company.lp_type.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()) : "—" },
-      { label: "LP Stage",       value: company.lp_stage
-          ? <span className={cn("badge text-xs", LP_STAGE_COLORS[company.lp_stage] ?? "bg-slate-100")}>{LP_STAGE_LABELS[company.lp_stage] ?? company.lp_stage}</span>
+    if (typeGroup === "investor") return [
+      { label: "AUM",       value: company.aum ? formatCurrency(company.aum, true) : "—" },
+      { label: "Founded",   value: company.founded_year ?? "—" },
+      { label: "Employees", value: company.employee_count ?? "—" },
+      lastContactCell,
+    ];
+    if (typeGroup === "strategic") return [
+      { label: "Employees", value: company.employee_count ?? "—" },
+      { label: "Founded",   value: company.founded_year ?? "—" },
+      { label: "Sectors",   value: company.sectors?.slice(0, 2).join(", ") || "—" },
+      lastContactCell,
+    ];
+    if (typeGroup === "lp") return [
+      { label: "LP Stage", value: company.lp_stage
+          ? <span className={cn("badge text-xs", LP_STAGE_COLORS[company.lp_stage] ?? "bg-slate-100 text-slate-500")}>{LP_STAGE_LABELS[company.lp_stage] ?? company.lp_stage}</span>
           : "—" },
-      { label: "Commitment Goal", value: company.commitment_goal ? formatCurrency(company.commitment_goal, true) : "—" },
-      { label: "Last Contact",   value: formatDate(company.last_contact_date) },
+      { label: "LP Type", value: company.lp_type ?? "—" },
+      { label: "Source",   value: company.source ?? "—" },
+      lastContactCell,
     ];
-    if (company.type === "fund") return [
-      { label: "AUM",          value: company.aum ? formatCurrency(company.aum, true) : "—" },
-      { label: "Investor Type", value: company.investor_type ?? "—" },
-      { label: "Fund Focus",   value: company.fund_focus ? <span className="truncate max-w-[120px] block">{company.fund_focus}</span> : "—" },
-      { label: "Deal Status",  value: company.deal_status
-          ? <span className={cn("badge text-xs", DEAL_STAGE_COLORS[company.deal_status] ?? "bg-slate-100")}>{DEAL_STAGE_LABELS[company.deal_status] ?? company.deal_status}</span>
-          : "—" },
-      { label: "Last Contact", value: formatDate(company.last_contact_date) },
-    ];
-    if (company.type === "corporate") return [
-      { label: "Strategic Type", value: company.strategic_type ?? "—" },
-      { label: "Employees",      value: company.employee_count ?? "—" },
-      { label: "Founded",        value: company.founded_year ?? "—" },
-      { label: "Deal Status",    value: company.deal_status
-          ? <span className={cn("badge text-xs", DEAL_STAGE_COLORS[company.deal_status] ?? "bg-slate-100")}>{DEAL_STAGE_LABELS[company.deal_status] ?? company.deal_status}</span>
-          : "—" },
-      { label: "Last Contact",   value: formatDate(company.last_contact_date) },
-    ];
-    // ecosystem_partner / government / other
     return [
-      { label: "Employees",    value: company.employee_count ?? "—" },
-      { label: "Founded",      value: company.founded_year ?? "—" },
-      { label: "Last Contact", value: formatDate(company.last_contact_date) },
+      { label: "Type",    value: company.type },
+      { label: "Founded", value: company.founded_year ?? "—" },
+      { label: "Sectors", value: company.sectors?.slice(0, 2).join(", ") || "—" },
+      lastContactCell,
     ];
   })();
+
+  // Button style helpers
+  const primaryBtn = "inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors font-medium";
+  const secondaryBtn = "inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors";
 
   return (
     <div className="flex-1 overflow-auto p-6 space-y-4">
@@ -1242,21 +1301,90 @@ export function CompanyDetailClient({
           </div>
         </div>
 
-        {/* Quick stats row */}
-        <div className={cn(
-          "grid gap-4 mt-4 pt-4 border-t border-slate-100",
-          headerStats.length <= 3 ? "grid-cols-3" :
-          headerStats.length <= 4 ? "grid-cols-4" :
-          headerStats.length <= 5 ? "grid-cols-5" : "grid-cols-6"
-        )}>
-          {headerStats.map(({ label, value }) => (
+        {/* 4-cell stat bar */}
+        <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-100">
+          {statBar.map(({ label, value }) => (
             <div key={label}>
               <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">{label}</p>
               <div className="text-sm font-semibold text-slate-800 mt-0.5">{value}</div>
             </div>
           ))}
         </div>
+
+        {/* Inline action strip */}
+        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 flex-wrap">
+          {typeGroup === "startup" && (<>
+            <button onClick={generateMemo} disabled={memoGenerating} className={primaryBtn}>
+              {memoGenerating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+              {memoGenerating ? "Generating…" : "Generate IC Memo"}
+            </button>
+            {company.pitch_deck_url && (
+              <a href={company.pitch_deck_url} target="_blank" rel="noopener noreferrer" className={primaryBtn}>
+                <FileText size={11} /> View Deck
+              </a>
+            )}
+            <button onClick={runExaAction} disabled={exaActionLoading} className={secondaryBtn}>
+              {exaActionLoading ? <Loader2 size={11} className="animate-spin" /> : <LinkIcon size={11} />}
+              {exaActionLoading ? "Searching…" : "Research with Exa"}
+            </button>
+            <button onClick={findLogo} disabled={logoStatus === "running"} className={secondaryBtn}>
+              {logoStatus === "running" ? <Loader2 size={11} className="animate-spin" /> : logoStatus === "found" ? <CheckCircle size={11} className="text-green-500" /> : logoStatus === "not_found" ? <XCircle size={11} className="text-red-400" /> : <ImageIcon size={11} />}
+              {logoStatus === "running" ? "Finding…" : logoStatus === "found" ? "Logo found" : logoStatus === "not_found" ? "Not found" : "Find Logo"}
+            </button>
+          </>)}
+          {typeGroup === "investor" && (<>
+            <Link href="/crm/funds" className={primaryBtn}>View in Funds ↗</Link>
+            <button onClick={runExaAction} disabled={exaActionLoading} className={secondaryBtn}>
+              {exaActionLoading ? <Loader2 size={11} className="animate-spin" /> : <LinkIcon size={11} />}
+              {exaActionLoading ? "Searching…" : "Research with Exa"}
+            </button>
+            <button onClick={findLogo} disabled={logoStatus === "running"} className={secondaryBtn}>
+              {logoStatus === "running" ? <Loader2 size={11} className="animate-spin" /> : <ImageIcon size={11} />}
+              {logoStatus === "running" ? "Finding…" : "Find Logo"}
+            </button>
+          </>)}
+          {typeGroup === "strategic" && (<>
+            <button onClick={runExaAction} disabled={exaActionLoading} className={primaryBtn}>
+              {exaActionLoading ? <Loader2 size={11} className="animate-spin" /> : <LinkIcon size={11} />}
+              {exaActionLoading ? "Searching…" : "Research with Exa"}
+            </button>
+            <button onClick={findLogo} disabled={logoStatus === "running"} className={secondaryBtn}>
+              {logoStatus === "running" ? <Loader2 size={11} className="animate-spin" /> : <ImageIcon size={11} />}
+              {logoStatus === "running" ? "Finding…" : "Find Logo"}
+            </button>
+          </>)}
+          {typeGroup === "lp" && (<>
+            <Link href="/crm/lps" className={primaryBtn}>View in Fundraising ↗</Link>
+            <a href={`mailto:${contacts[0]?.email ?? ""}?subject=Following up — Valuence Ventures`} className={primaryBtn}>
+              ✉ Draft Outreach
+            </a>
+            <button onClick={() => { setShowInteractionForm(true); setTab("Interactions"); }} className={secondaryBtn}>
+              Log Touchpoint
+            </button>
+          </>)}
+          {typeGroup === "other" && (<>
+            <button onClick={runExaAction} disabled={exaActionLoading} className={primaryBtn}>
+              {exaActionLoading ? <Loader2 size={11} className="animate-spin" /> : <LinkIcon size={11} />}
+              {exaActionLoading ? "Searching…" : "Research with Exa"}
+            </button>
+            <button onClick={findLogo} disabled={logoStatus === "running"} className={secondaryBtn}>
+              {logoStatus === "running" ? <Loader2 size={11} className="animate-spin" /> : <ImageIcon size={11} />}
+              {logoStatus === "running" ? "Finding…" : "Find Logo"}
+            </button>
+          </>)}
+        </div>
       </div>
+
+      {/* ── LP overdue banner ── */}
+      {showOverdueBanner && (
+        <div className="flex items-center justify-between px-5 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+          <div className="flex items-center gap-2 text-sm text-amber-800">
+            <AlertCircle size={14} className="text-amber-500" />
+            Touchpoint overdue — last contact {daysSinceContact}d ago
+          </div>
+          <span className="badge bg-amber-100 text-amber-700">Follow up needed</span>
+        </div>
+      )}
 
       {/* ── Tabs ── */}
       <div className="flex gap-1 border-b border-slate-200">
@@ -1281,29 +1409,80 @@ export function CompanyDetailClient({
 
       {/* ── OVERVIEW TAB ── */}
       {tab === "Overview" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4">
 
-          {/* Left: Notes + (Startup) Fundraise status card */}
-          <div className="lg:col-span-2 space-y-4">
+          {/* LEFT — shared: contacts · activity · notes */}
+          <div className="card p-5 space-y-5">
 
-            {/* Notes */}
-            <div className="card p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-slate-800">Notes</h3>
-                <button onClick={() => setShowNoteForm(!showNoteForm)} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
-                  <Plus size={12} /> Add note
+            {/* Key contacts */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Contacts</h3>
+                <button onClick={() => setTab("Contacts")} className="text-xs text-blue-600 hover:text-blue-700">
+                  {contacts.length > 0 ? `All ${contacts.length} →` : "+ Add"}
                 </button>
               </div>
+              {contacts.length === 0 ? (
+                <p className="text-sm text-slate-400 italic">No contacts yet.</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {contacts.slice(0, 3).map(c => (
+                    <div key={c.id} className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-semibold text-slate-600 flex-shrink-0">
+                        {getInitials(`${c.first_name ?? ""} ${c.last_name ?? ""}`)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                        <p className="text-xs text-slate-400 truncate">{c.title ?? c.type}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {c.email && <a href={`mailto:${c.email}`} className="text-slate-400 hover:text-blue-600"><Mail size={13} /></a>}
+                        {c.last_contact_date && <span className="text-xs text-slate-400">{timeAgo(c.last_contact_date)}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-slate-100" />
+
+            {/* Recent activity */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Recent Activity</h3>
+                <button onClick={() => setTab("Interactions")} className="text-xs text-blue-600 hover:text-blue-700">
+                  {interactions.length > 0 ? `All ${interactions.length} →` : "+ Log"}
+                </button>
+              </div>
+              {interactions.length === 0 ? (
+                <p className="text-sm text-slate-400 italic">No interactions logged yet.</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {interactions.slice(0, 3).map(i => (
+                    <div key={i.id} className="flex items-start gap-2.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm text-slate-700 truncate">{i.subject ?? i.type}</p>
+                        <p className="text-xs text-slate-400">{timeAgo(i.date)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-slate-100" />
+
+            {/* Notes */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Notes</h3>
+                <button onClick={() => setShowNoteForm(!showNoteForm)} className="text-xs text-blue-600 hover:text-blue-700">+ Add</button>
+              </div>
               {showNoteForm && (
-                <div className="mb-4 space-y-2">
-                  <textarea
-                    className="textarea"
-                    rows={3}
-                    placeholder="Add a note…"
-                    value={noteText}
-                    onChange={e => setNoteText(e.target.value)}
-                    autoFocus
-                  />
+                <div className="mb-3 space-y-2">
+                  <textarea className="textarea" rows={3} placeholder="Add a note…" value={noteText} onChange={e => setNoteText(e.target.value)} autoFocus />
                   <div className="flex gap-2">
                     <button onClick={() => setShowNoteForm(false)} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
                     <button onClick={saveNote} disabled={savingNote || !noteText.trim()} className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg disabled:opacity-50">
@@ -1313,70 +1492,191 @@ export function CompanyDetailClient({
                 </div>
               )}
               <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
-                {company.notes || <span className="text-slate-400 italic">No notes yet. Click + Add note to get started.</span>}
+                {company.notes || <span className="text-slate-400 italic">No notes yet.</span>}
               </p>
             </div>
 
-            {/* Startup: Fundraise status card */}
-            {company.type === "startup" && (company.current_raise_status || company.raise_round || company.current_raise_target || company.raise_target_close || company.investors_approached != null || company.term_sheets != null) && (
-              <div className="card p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-slate-800">Fundraise Status</h3>
-                  {company.current_raise_status && (
-                    <span className={cn("badge", RAISE_STATUS_COLORS[company.current_raise_status] ?? "bg-slate-100 text-slate-500")}>
-                      {RAISE_STATUS_LABELS[company.current_raise_status] ?? company.current_raise_status}
-                    </span>
+          </div>
+
+          {/* RIGHT — type-specific */}
+          <div className="card p-5">
+
+            {/* STARTUP */}
+            {typeGroup === "startup" && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Deal</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: "Investors approached", value: company.investors_approached ?? 0 },
+                      { label: "Term sheets",          value: company.term_sheets ?? 0 },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="bg-slate-50 rounded-lg p-3">
+                        <p className="text-xs text-slate-400">{label}</p>
+                        <p className="text-lg font-semibold text-slate-800">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="border-t border-slate-100" />
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">IC Memos</h3>
+                    {memos.length > 0 && (
+                      <button onClick={() => setTab("Memos")} className="text-xs text-blue-600 hover:text-blue-700">All {memos.length} →</button>
+                    )}
+                  </div>
+                  {memos.length === 0 ? (
+                    <p className="text-xs text-slate-400 mb-2">No memo yet.</p>
+                  ) : (
+                    <div className="space-y-1 mb-2">
+                      {memos.slice(0, 2).map(m => (
+                        <Link key={m.id} href={`/memos/${m.id}`} className="block text-xs text-blue-600 hover:text-blue-700 truncate">
+                          {m.title}
+                        </Link>
+                      ))}
+                    </div>
                   )}
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  {company.raise_round && (
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Round</p>
-                      <p className="text-sm font-semibold text-slate-800 mt-0.5">{company.raise_round}</p>
-                    </div>
-                  )}
-                  {company.current_raise_target && (
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Target</p>
-                      <p className="text-sm font-semibold text-slate-800 mt-0.5">{company.current_raise_target}</p>
-                    </div>
-                  )}
-                  {company.raise_target_close && (
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Target Close</p>
-                      <p className="text-sm font-semibold text-slate-800 mt-0.5">{formatDate(company.raise_target_close)}</p>
-                    </div>
-                  )}
-                  {company.investors_approached != null && (
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Investors Approached</p>
-                      <p className="text-sm font-semibold text-slate-800 mt-0.5">{company.investors_approached}</p>
-                    </div>
-                  )}
-                  {company.term_sheets != null && (
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Term Sheets</p>
-                      <p className="text-sm font-semibold text-slate-800 mt-0.5">{company.term_sheets}</p>
-                    </div>
-                  )}
-                  {company.runway_months != null && (
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Runway</p>
-                      <p className="text-sm font-semibold text-slate-800 mt-0.5">{company.runway_months} months</p>
-                    </div>
-                  )}
+                <div className="border-t border-slate-100" />
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Tags</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {company.sectors?.map(s => (
+                      <span key={s} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded capitalize">{s}</span>
+                    ))}
+                    {company.tags?.slice(0, 3).map(k => (
+                      <span key={k} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">{k}</span>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-3">Source: {company.source ?? "—"} · Added {formatDate(company.created_at)}</p>
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Right: Company Profile card */}
-          <div>
-            <CompanyProfileCard
-              company={company}
-              onEdit={() => setShowEditModal(true)}
-              onDeckChange={url => setCompany(prev => ({ ...prev, pitch_deck_url: url }))}
-            />
+            {/* INVESTOR / FUND */}
+            {typeGroup === "investor" && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Fund Details</h3>
+                  {company.fund_focus && (
+                    <p className="text-sm text-slate-700 mb-3 leading-relaxed">{company.fund_focus}</p>
+                  )}
+                  {company.investor_type && (
+                    <p className="text-xs text-slate-500 mb-1"><span className="font-medium text-slate-700">Type:</span> {company.investor_type}</p>
+                  )}
+                  {company.aum && (
+                    <p className="text-xs text-slate-500 mb-3"><span className="font-medium text-slate-700">AUM:</span> {formatCurrency(company.aum, true)}</p>
+                  )}
+                  <Link href="/crm/funds" className="text-xs text-blue-600 hover:text-blue-700 inline-block">
+                    Full profile in Funds →
+                  </Link>
+                </div>
+                <div className="border-t border-slate-100" />
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Sectors</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(company.sectors ?? []).length > 0
+                      ? company.sectors!.map(s => <span key={s} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded capitalize">{s}</span>)
+                      : <span className="text-xs text-slate-400">None tagged</span>
+                    }
+                  </div>
+                </div>
+                <div className="border-t border-slate-100" />
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Source: {company.source ?? "—"}<br />
+                  First contact: {formatDate(company.first_contact_date)}<br />
+                  Added: {formatDate(company.created_at)}
+                </p>
+              </div>
+            )}
+
+            {/* STRATEGIC / CORPORATE / ECOSYSTEM / GOV */}
+            {typeGroup === "strategic" && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Portfolio connections</h3>
+                  <p className="text-xs text-slate-400 italic">Link portfolio companies to this strategic partner via the Deals tab.</p>
+                </div>
+                <div className="border-t border-slate-100" />
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Sectors</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(company.sectors ?? []).length > 0
+                      ? company.sectors!.map(s => <span key={s} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded capitalize">{s}</span>)
+                      : <span className="text-xs text-slate-400">None tagged</span>
+                    }
+                  </div>
+                </div>
+                <div className="border-t border-slate-100" />
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Source: {company.source ?? "—"}<br />
+                  First contact: {formatDate(company.first_contact_date)}<br />
+                  Added: {formatDate(company.created_at)}
+                </p>
+              </div>
+            )}
+
+            {/* LP */}
+            {typeGroup === "lp" && (() => {
+              const LP_STAGES = ["target", "intro_made", "meeting_done", "materials_sent", "soft_commit", "committed"];
+              const currentIdx = LP_STAGES.indexOf(company.lp_stage ?? "");
+              return (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Fundraise Pipeline</h3>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      {LP_STAGES.map((s, i) => (
+                        <div key={s} className={cn("h-2 flex-1 rounded-full", i <= currentIdx ? "bg-blue-500" : "bg-slate-100")} />
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-500">{LP_STAGE_LABELS[company.lp_stage ?? ""] ?? company.lp_stage ?? "No stage set"}</p>
+                    {company.commitment_goal && (
+                      <p className="text-xs text-slate-500 mt-1">Goal: {formatCurrency(company.commitment_goal, true)}</p>
+                    )}
+                    <Link href="/crm/lps" className="text-xs text-blue-600 hover:text-blue-700 mt-2 inline-block">
+                      Full LP record in Fundraising →
+                    </Link>
+                  </div>
+                  <div className="border-t border-slate-100" />
+                  <div>
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Materials Sent</h3>
+                    <p className="text-xs text-slate-400 italic">Track materials in the Deals tab.</p>
+                  </div>
+                  <div className="border-t border-slate-100" />
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Source: {company.source ?? "—"}<br />
+                    First contact: {formatDate(company.first_contact_date)}<br />
+                    Added: {formatDate(company.created_at)}
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* OTHER / DEFAULT */}
+            {typeGroup === "other" && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Details</h3>
+                  <div className="space-y-2">
+                    {[
+                      { label: "Source",        value: company.source },
+                      { label: "Sectors",       value: company.sectors?.join(", ") },
+                      { label: "Founded",       value: company.founded_year },
+                      { label: "Employees",     value: company.employee_count },
+                      { label: "First contact", value: formatDate(company.first_contact_date) },
+                      { label: "Added",         value: formatDate(company.created_at) },
+                    ].filter(f => f.value).map(({ label, value }) => (
+                      <div key={label}>
+                        <p className="text-xs text-slate-400">{label}</p>
+                        <p className="text-sm text-slate-700">{String(value)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       )}
