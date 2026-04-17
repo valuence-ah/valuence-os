@@ -870,7 +870,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                 {/* ── Company name column — also resizable ── */}
                 <th
                   className="relative group/th px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap select-none"
-                  style={{ width: nameColW, minWidth: nameColW }}
+                  style={{ width: nameColW, minWidth: 60 }}
                 >
                   <button onClick={() => handleSort("name")} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
                     Company
@@ -878,9 +878,9 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                       ? sortDir === "asc" ? <ChevronUp size={12} className="text-blue-500" /> : <ChevronDown size={12} className="text-blue-500" />
                       : <ArrowUpDown size={12} className="opacity-0 group-hover/th:opacity-40 transition-opacity" />}
                   </button>
-                  {/* Resize handle — always present, visible on hover */}
+                  {/* Resize handle — 6px wide, always shows a subtle border, turns blue on hover */}
                   <div
-                    className="absolute right-0 top-0 h-full w-2 cursor-col-resize bg-transparent hover:bg-blue-400/30 active:bg-blue-400/50 z-10"
+                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize border-r-2 border-slate-200 hover:border-blue-400 active:border-blue-600 z-10 transition-colors"
                     onMouseDown={e => startResize(e, "__name__", nameColW)}
                   />
                 </th>
@@ -895,7 +895,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                     <th
                       key={key}
                       className="relative group/th px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap select-none"
-                      style={{ width: w, minWidth: w }}
+                      style={{ width: w, minWidth: 60 }}
                     >
                       {def.sortKey ? (
                         <button onClick={() => handleSort(def.sortKey!)} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
@@ -909,7 +909,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                       )}
                       {/* Resize handle */}
                       <div
-                        className="absolute right-0 top-0 h-full w-2 cursor-col-resize bg-transparent hover:bg-blue-400/30 active:bg-blue-400/50 z-10"
+                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize border-r-2 border-slate-200 hover:border-blue-400 active:border-blue-600 z-10 transition-colors"
                         onMouseDown={e => startResize(e, key, w)}
                       />
                     </th>
@@ -931,7 +931,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                   onClick={() => router.push(`/crm/companies/${toSlug(c.name)}`)}>
 
                   {/* ── Company name cell with logo ── */}
-                  <td className="px-4 py-3" style={{ width: nameColW, minWidth: nameColW }}>
+                  <td className="px-4 py-3 overflow-hidden" style={{ width: nameColW }}>
                     <div className="flex items-center gap-2.5 min-w-0">
                       <CompanyLogo company={c} />
                       <div className="min-w-0">
@@ -950,7 +950,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                     if (key === "contacts") {
                       const contacts = contactDetailsMap[c.id] ?? (contactCountMap[c.id] ? Array(contactCountMap[c.id]).fill({ first_name: "?", last_name: null }) : []);
                       return (
-                        <td key={key} className="px-4 py-3" style={{ width: w, minWidth: w, maxWidth: w }}
+                        <td key={key} className="px-4 py-3 overflow-hidden" style={{ width: w }}
                           onClick={e => e.stopPropagation()}>
                           <ContactAvatars contacts={contacts} />
                         </td>
@@ -960,7 +960,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                     // Type — inline editable picker
                     if (key === "type") {
                       return (
-                        <td key={key} className="px-4 py-3" style={{ width: w, minWidth: w, maxWidth: w }}
+                        <td key={key} className="px-4 py-3 overflow-hidden" style={{ width: w }}
                           onClick={e => e.stopPropagation()}>
                           <InlineTypePicker
                             company={c}
@@ -975,7 +975,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                       <td
                         key={key}
                         className="px-4 py-3 overflow-hidden"
-                        style={{ width: w, minWidth: w, maxWidth: w }}
+                        style={{ width: w }}
                         onClick={key === "website" || key === "linkedin_url" ? e => e.stopPropagation() : undefined}
                       >
                         {def.render(c)}
