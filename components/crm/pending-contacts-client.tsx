@@ -15,6 +15,7 @@ import {
   Check, X, Mail, ExternalLink, UserPlus, Maximize2, Loader2,
   Search, ChevronDown, ChevronUp, Plus, MapPin, Globe, Users,
   Tag, ChevronRight, Linkedin, SlidersHorizontal, Trash2, Pencil, Clock, ArrowLeft,
+  FileText, Upload,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -231,14 +232,17 @@ interface CompanyDropdownProps {
   onChange: (id: string) => void;
   onExpand: (id: string) => void;
   onCreateNew: (name: string, type: string) => Promise<string | null>;
+  defaultCompanyType?: string;
+  onTypeChange?: (companyId: string, newType: string) => void;
 }
 
-function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onChange, onExpand, onCreateNew }: CompanyDropdownProps) {
+function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onChange, onExpand, onCreateNew, defaultCompanyType = "startup", onTypeChange }: CompanyDropdownProps) {
   const [open, setOpen]           = useState(false);
   const [search, setSearch]       = useState("");
   const [creating, setCreating]   = useState(false);
   const [newName, setNewName]     = useState("");
-  const [newType, setNewType]     = useState("startup");
+  const [newType, setNewType]     = useState(defaultCompanyType);
+  const [editingType, setEditingType] = useState(false);
   const [newInvestorType, setNewInvestorType]   = useState("");
   const [newStrategicType, setNewStrategicType] = useState("");
   const [newLpType, setNewLpType]               = useState("");
@@ -270,7 +274,7 @@ function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onCha
   async function handleCreate() {
     if (!newName.trim()) return;
     setSaving(true);
-    const id = await onCreateNew(newName.trim(), newType);
+    const id = await onCreateNew(newName.trim(), newType || defaultCompanyType);
     if (id) { pick(id); }
     setSaving(false);
     setCreating(false);
@@ -279,19 +283,37 @@ function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onCha
 
   return (
     <div ref={wrapRef} className="relative w-full">
-      <button type="button" onClick={() => setOpen(v => !v)}
-        className={cn(INPUT_CLS, "flex items-center justify-between gap-1 cursor-pointer pr-2")}>
-        <span className={cn("truncate flex-1 text-left", !selectedCompany && "text-slate-300")}>
-          {selectedCompany?.name ?? placeholder}
-        </span>
-        {selectedCompany && (
-          <span className={cn("text-[9px] px-1 py-0.5 rounded border font-medium flex-shrink-0",
-            TYPE_BADGE[selectedCompany.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
-            {TYPE_LABEL[selectedCompany.type] ?? selectedCompany.type}
+      <div className={cn(INPUT_CLS, "flex items-center justify-between gap-1 pr-1")}>
+        <button type="button" onClick={() => setOpen(v => !v)}
+          className="flex items-center gap-1 flex-1 min-w-0 text-left cursor-pointer">
+          <span className={cn("truncate flex-1 text-left text-xs", !selectedCompany && "text-slate-300")}>
+            {selectedCompany?.name ?? placeholder}
           </span>
+          <ChevronDown size={11} className="text-slate-400 flex-shrink-0" />
+        </button>
+        {selectedCompany && (
+          editingType ? (
+            <select autoFocus value={selectedCompany.type}
+              onChange={async e => {
+                const t = e.target.value;
+                onTypeChange?.(selectedCompany.id, t);
+                setEditingType(false);
+              }}
+              onBlur={() => setEditingType(false)}
+              className="text-[9px] border border-blue-400 rounded px-0.5 py-0.5 bg-white cursor-pointer focus:outline-none ml-1 flex-shrink-0">
+              {COMPANY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          ) : (
+            <button type="button"
+              onClick={e => { e.stopPropagation(); setEditingType(true); }}
+              title="Click to change company type"
+              className={cn("text-[9px] px-1 py-0.5 rounded border font-medium flex-shrink-0 ml-1 hover:ring-1 hover:ring-blue-400 cursor-pointer",
+                TYPE_BADGE[selectedCompany.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
+              {TYPE_LABEL[selectedCompany.type] ?? selectedCompany.type}
+            </button>
+          )
         )}
-        <ChevronDown size={11} className="text-slate-400 flex-shrink-0 ml-0.5" />
-      </button>
+      </div>
 
       {open && (
         <div className="absolute z-30 top-full left-0 mt-0.5 w-64 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
@@ -323,7 +345,7 @@ function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onCha
           </div>
           <div className="border-t border-slate-100">
             {!creating ? (
-              <button onClick={() => { setCreating(true); setNewName(search); setShowPartnerDropdown(false); setSelectedPartnerId(null); }}
+              <button onClick={() => { setCreating(true); setNewName(search); setNewType(defaultCompanyType); setShowPartnerDropdown(false); setSelectedPartnerId(null); }}
                 className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-blue-600 hover:bg-blue-50 transition-colors font-medium">
                 <Plus size={11} /> Create new company
               </button>
@@ -395,7 +417,7 @@ function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onCha
 
 // ── Company Expand Panel ───────────────────────────────────────────────────────
 
-function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initialName, onDeleted, onUpdated }: {
+function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initialName, initialType, onDeleted, onUpdated }: {
   companyId: string;
   onClose: () => void;
   createMode?: boolean;
@@ -403,6 +425,7 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
   onDeleted?: (id: string) => void;
   onUpdated?: (id: string, updates: Partial<CompanyStub>) => void;
   initialName?: string;
+  initialType?: string;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [company, setCompany]   = useState<Company | null>(null);
@@ -423,6 +446,13 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
   const [createSaving, setCreateSaving]     = useState(false);
   const [confirmDelete, setConfirmDelete]   = useState(false);
   const [deleting, setDeleting]             = useState(false);
+
+  // Deck upload
+  const [deckUrl, setDeckUrl]               = useState<string | null>(null);
+  const [deckName, setDeckName]             = useState<string | null>(null);
+  const [deckUploading, setDeckUploading]   = useState(false);
+  const [deckError, setDeckError]           = useState<string | null>(null);
+  const deckInputRef                        = useRef<HTMLInputElement>(null);
 
   // Inline field editing
   const [editingField, setEditingField]     = useState<string | null>(null);
@@ -455,7 +485,7 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
     if (createMode) {
       setEditing(true);
       setEditName(initialName ?? "");
-      setEditType("startup");
+      setEditType(initialType ?? "startup");
       setLoading(false);
       return;
     }
@@ -467,7 +497,12 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
         supabase.from("contacts").select("*").eq("company_id", companyId)
           .order("is_primary_contact", { ascending: false }).limit(5),
       ]);
-      if (!cancelled) { setCompany(co as Company | null); setContacts((ctcts as Contact[]) ?? []); setLoading(false); }
+      if (!cancelled) {
+        setCompany(co as Company | null);
+        setContacts((ctcts as Contact[]) ?? []);
+        setDeckUrl((co as Company | null)?.pitch_deck_url ?? null);
+        setLoading(false);
+      }
     }
     load();
     return () => { cancelled = true; };
@@ -608,6 +643,36 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
       console.error("[saveContact]", error);
     }
     setContactSaving(false);
+  }
+
+  async function handleDeckUpload(file: File) {
+    if (!company) return;
+    setDeckUploading(true);
+    setDeckError(null);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `${company.id}/${Date.now()}-${safeName}`;
+      const { error: storageErr } = await supabase.storage
+        .from("decks")
+        .upload(filePath, file, { contentType: file.type || "application/octet-stream", upsert: true });
+      if (storageErr) throw new Error(storageErr.message);
+      const { data: { publicUrl } } = supabase.storage.from("decks").getPublicUrl(filePath);
+      const { data: { user } } = await supabase.auth.getUser();
+      await Promise.all([
+        supabase.from("documents").insert({
+          company_id: company.id, name: file.name, type: "deck",
+          storage_path: filePath, mime_type: file.type || "application/octet-stream",
+          file_size: file.size, uploaded_by: user?.id ?? null,
+        }),
+        supabase.from("companies").update({ pitch_deck_url: publicUrl }).eq("id", company.id),
+      ]);
+      setDeckUrl(publicUrl);
+      setDeckName(file.name);
+    } catch (e) {
+      setDeckError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setDeckUploading(false);
+    }
   }
 
   const domain = company?.website ? company.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "") : null;
@@ -949,6 +1014,40 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
             )}
             </>
             ) : null}
+            {/* Pitch Deck */}
+            {!createMode && company && (
+              <div className="px-5 py-4 border-b border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                  <FileText size={10} /> Pitch Deck
+                </p>
+                <input ref={deckInputRef} type="file" accept=".pdf,.pptx,.ppt,.key"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleDeckUpload(f); e.target.value = ""; }} />
+                {deckUrl ? (
+                  <div className="flex items-center gap-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+                    <FileText size={14} className="text-blue-500 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <a href={deckUrl} target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-blue-700 font-medium hover:underline truncate block">
+                        {deckName ?? "View Deck"}
+                      </a>
+                    </div>
+                    <button onClick={() => deckInputRef.current?.click()}
+                      className="text-[10px] text-blue-600 hover:text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 flex-shrink-0">
+                      Replace
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => deckInputRef.current?.click()} disabled={deckUploading}
+                    className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-slate-200 rounded-lg text-xs text-slate-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50">
+                    {deckUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                    {deckUploading ? "Uploading…" : "Upload Pitch Deck (.pdf, .pptx)"}
+                  </button>
+                )}
+                {deckError && <p className="text-[10px] text-red-500 mt-1">{deckError}</p>}
+              </div>
+            )}
+
             <div className="px-5 py-4">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1">
                 <Users size={10} /> Contacts ({contacts.length})
@@ -1068,8 +1167,10 @@ const ContactRow = memo(function ContactRow({
     [extraCompanies, allCompanies]
   );
 
-  const handleCreateCompany = useCallback(async (name: string, _coType: string): Promise<string | null> => {
+  const [createPanelDefaultType, setCreatePanelDefaultType] = useState("startup");
+  const handleCreateCompany = useCallback(async (name: string, coType: string): Promise<string | null> => {
     setCreatePanelName(name);
+    setCreatePanelDefaultType(coType);
     setShowCreatePanel(true);
     return null; // panel will handle creation
   }, []);
@@ -1193,6 +1294,16 @@ const ContactRow = memo(function ContactRow({
           onChange={setCompanyId}
           onExpand={onExpand}
           onCreateNew={handleCreateCompany}
+          defaultCompanyType={CONTACT_TO_COMPANY_TYPE[type as ContactTypeStr] ?? "startup"}
+          onTypeChange={async (coId, newType) => {
+            // Update the company type directly in the DB and refresh local state
+            const supabase = createClient();
+            const { error } = await supabase.from("companies").update({ type: newType }).eq("id", coId);
+            if (!error) {
+              setExtraCompanies(prev => prev.map(c => c.id === coId ? { ...c, type: newType } : c));
+              onCompanyUpdated(coId, { type: newType });
+            }
+          }}
         />
       </div>
 
@@ -1238,6 +1349,7 @@ const ContactRow = memo(function ContactRow({
           companyId=""
           createMode
           initialName={createPanelName}
+          initialType={createPanelDefaultType}
           onCreated={handleCompanyCreated}
           onClose={() => setShowCreatePanel(false)}
           onUpdated={onCompanyUpdated}
