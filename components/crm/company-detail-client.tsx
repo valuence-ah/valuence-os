@@ -77,6 +77,15 @@ const SECTORS = [
 
 const STAGE_OPTIONS = ["pre-seed", "seed", "series_a", "series_b", "series_c", "growth"];
 
+const STAGE_LABELS: Record<string, string> = {
+  "pre-seed": "Pre-Seed",
+  "seed":     "Seed",
+  "series_a": "Series A",
+  "series_b": "Series B",
+  "series_c": "Series C",
+  "growth":   "Growth",
+};
+
 const DEAL_STATUS_OPTIONS = [
   { value: "",             label: "Not set" },
   { value: "sourced",      label: "Sourced" },
@@ -216,14 +225,6 @@ function EditCompanyModal({
                 <input className="input" type="url" placeholder="https://…" value={form.website ?? ""} onChange={e => setF("website", e.target.value || null)} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">LinkedIn</label>
-                <input className="input" placeholder="https://linkedin.com/company/…" value={form.linkedin_url ?? ""} onChange={e => setF("linkedin_url", e.target.value || null)} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Crunchbase URL</label>
-                <input className="input" placeholder="https://crunchbase.com/organization/…" value={form.crunchbase_url ?? ""} onChange={e => setF("crunchbase_url", e.target.value || null)} />
-              </div>
-              <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Google Drive Folder</label>
                 <input className="input" placeholder="https://drive.google.com/…" value={form.drive_folder_url ?? ""} onChange={e => setF("drive_folder_url", e.target.value || null)} />
               </div>
@@ -242,10 +243,6 @@ function EditCompanyModal({
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Employees</label>
                 <input className="input" placeholder="e.g. 10–50" value={form.employee_count ?? ""} onChange={e => setF("employee_count", e.target.value || null)} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Source</label>
-                <input className="input" placeholder="e.g. referral, AngelList, conference" value={form.source ?? ""} onChange={e => setF("source", e.target.value || null)} />
               </div>
             </div>
           </section>
@@ -281,46 +278,8 @@ function EditCompanyModal({
                   <input className="input" placeholder="e.g. Seed, Series A" value={form.last_funding_stage ?? ""} onChange={e => setF("last_funding_stage", e.target.value || null)} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Pitch Deck URL</label>
-                  <input className="input" type="url" placeholder="https://…" value={form.pitch_deck_url ?? ""} onChange={e => setF("pitch_deck_url", e.target.value || null)} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Raise Status</label>
-                  <select className="select" value={form.current_raise_status ?? ""} onChange={e => setF("current_raise_status", e.target.value || null)}>
-                    <option value="">Not set</option>
-                    <option value="not_raising">Not Raising</option>
-                    <option value="preparing">Preparing Raise</option>
-                    <option value="actively_raising">Actively Raising</option>
-                    <option value="closing">Closing Round</option>
-                  </select>
-                </div>
-                <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Runway (months)</label>
                   <input className="input" type="number" placeholder="18" value={form.runway_months ?? ""} onChange={e => setF("runway_months", parseInt(e.target.value) || null)} />
-                </div>
-              </div>
-
-              <SectionHeading>Current Raise</SectionHeading>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Round</label>
-                  <input className="input" placeholder="e.g. Seed, Series A" value={form.raise_round ?? ""} onChange={e => setF("raise_round", e.target.value || null)} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Target Amount</label>
-                  <input className="input" placeholder="e.g. $3M" value={form.current_raise_target ?? ""} onChange={e => setF("current_raise_target", e.target.value || null)} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Target Close Date</label>
-                  <input className="input" type="date" value={form.raise_target_close?.slice(0, 10) ?? ""} onChange={e => setF("raise_target_close", e.target.value || null)} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Investors Approached</label>
-                  <input className="input" type="number" placeholder="0" value={form.investors_approached ?? ""} onChange={e => setF("investors_approached", parseInt(e.target.value) || null)} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Term Sheets Received</label>
-                  <input className="input" type="number" placeholder="0" value={form.term_sheets ?? ""} onChange={e => setF("term_sheets", parseInt(e.target.value) || null)} />
                 </div>
               </div>
             </section>
@@ -1178,6 +1137,48 @@ export function CompanyDetailClient({
     return () => document.removeEventListener("mousedown", handler);
   }, [showTypePicker]);
 
+  // ── Sector / Sub-sector / Stage inline pickers ───────────────────────────
+  const [showSectorPicker, setShowSectorPicker]       = useState(false);
+  const [showSubSectorPicker, setShowSubSectorPicker] = useState(false);
+  const [showStagePicker, setShowStagePicker]         = useState(false);
+  const sectorPickerRef    = useRef<HTMLDivElement>(null);
+  const subSectorPickerRef = useRef<HTMLDivElement>(null);
+  const stagePickerRef     = useRef<HTMLDivElement>(null);
+
+  async function updateSector(newSector: string) {
+    setShowSectorPicker(false);
+    const updated = [newSector, (company.sectors ?? [])[1] ?? null].filter(Boolean) as string[];
+    setCompany(c => ({ ...c, sectors: updated }));
+    await supabase.from("companies").update({ sectors: updated }).eq("id", company.id);
+  }
+  async function updateSubSector(newSector: string) {
+    setShowSubSectorPicker(false);
+    const updated = [(company.sectors ?? [])[0] ?? null, newSector].filter(Boolean) as string[];
+    setCompany(c => ({ ...c, sectors: updated }));
+    await supabase.from("companies").update({ sectors: updated }).eq("id", company.id);
+  }
+  async function updateStage(newStage: string) {
+    setShowStagePicker(false);
+    setCompany(c => ({ ...c, stage: newStage || null }));
+    await supabase.from("companies").update({ stage: newStage || null }).eq("id", company.id);
+  }
+
+  useEffect(() => {
+    function h(e: MouseEvent) { if (sectorPickerRef.current && !sectorPickerRef.current.contains(e.target as Node)) setShowSectorPicker(false); }
+    if (showSectorPicker) document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [showSectorPicker]);
+  useEffect(() => {
+    function h(e: MouseEvent) { if (subSectorPickerRef.current && !subSectorPickerRef.current.contains(e.target as Node)) setShowSubSectorPicker(false); }
+    if (showSubSectorPicker) document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [showSubSectorPicker]);
+  useEffect(() => {
+    function h(e: MouseEvent) { if (stagePickerRef.current && !stagePickerRef.current.contains(e.target as Node)) setShowStagePicker(false); }
+    if (showStagePicker) document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [showStagePicker]);
+
   // Auto-load logo via logo.dev if not set
   useEffect(() => {
     if (company.logo_url || !company.website) return;
@@ -1242,15 +1243,59 @@ export function CompanyDetailClient({
   const lastContactCell: StatCell = { label: "Last Contact", value: company.last_contact_date ? <span className="text-xs font-medium text-slate-600">{formatDate(company.last_contact_date)}</span> : "—" };
 
   const statBar: StatCell[] = (() => {
+    const pickerDropdownCls = "absolute left-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 py-1 min-w-[170px] max-h-[220px] overflow-y-auto";
+    const pickerItemCls = (active: boolean) => cn("w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors capitalize", active ? "font-semibold text-blue-600" : "text-slate-700");
+    const pickerBtnCls = "inline-flex items-center gap-1 badge text-xs bg-slate-100 text-slate-700 capitalize cursor-pointer hover:bg-slate-200 transition-colors select-none";
+
     if (typeGroup === "startup") return [
-      { label: "Sector",      value: company.sectors?.[0] ? <span className="badge text-xs bg-slate-100 text-slate-700 capitalize">{company.sectors[0]}</span> : "—" },
-      { label: "Sub-sector",  value: company.sectors?.[1] ? <span className="badge text-xs bg-slate-100 text-slate-700 capitalize">{company.sectors[1]}</span> : "—" },
-      { label: "Status",      value: company.deal_status
+      { label: "Sector", value: (
+        <div className="relative" ref={sectorPickerRef}>
+          <button onClick={() => setShowSectorPicker(v => !v)} className={pickerBtnCls}>
+            {company.sectors?.[0] ?? <span className="italic text-slate-400">Set sector</span>}
+            <ChevronDown size={9} />
+          </button>
+          {showSectorPicker && (
+            <div className={pickerDropdownCls}>
+              {SECTORS.map(s => (
+                <button key={s} onClick={() => updateSector(s.toLowerCase())} className={pickerItemCls((company.sectors?.[0] ?? "") === s.toLowerCase())}>{s}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      )},
+      { label: "Sub-sector", value: (
+        <div className="relative" ref={subSectorPickerRef}>
+          <button onClick={() => setShowSubSectorPicker(v => !v)} className={pickerBtnCls}>
+            {company.sectors?.[1] ?? <span className="italic text-slate-400">Set sub-sector</span>}
+            <ChevronDown size={9} />
+          </button>
+          {showSubSectorPicker && (
+            <div className={pickerDropdownCls}>
+              {SECTORS.map(s => (
+                <button key={s} onClick={() => updateSubSector(s.toLowerCase())} className={pickerItemCls((company.sectors?.[1] ?? "") === s.toLowerCase())}>{s}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      )},
+      { label: "Status", value: company.deal_status
           ? <span className={cn("badge text-xs", DEAL_STAGE_COLORS[company.deal_status] ?? "bg-slate-100 text-slate-600")}>{DEAL_STAGE_LABELS[company.deal_status] ?? company.deal_status.replace(/_/g, " ")}</span>
           : "—" },
-      { label: "Priority",    value: company.priority
-          ? <span className={cn("badge text-xs", PRIORITY_COLORS[company.priority] ?? "bg-slate-100")}>{company.priority}</span>
-          : "—" },
+      { label: "Stage", value: (
+        <div className="relative" ref={stagePickerRef}>
+          <button onClick={() => setShowStagePicker(v => !v)} className={pickerBtnCls}>
+            {company.stage ? STAGE_LABELS[company.stage] ?? company.stage : <span className="italic text-slate-400">Set stage</span>}
+            <ChevronDown size={9} />
+          </button>
+          {showStagePicker && (
+            <div className={pickerDropdownCls}>
+              {STAGE_OPTIONS.map(s => (
+                <button key={s} onClick={() => updateStage(s)} className={pickerItemCls(company.stage === s)}>{STAGE_LABELS[s] ?? s}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      )},
       lastContactCell,
     ];
     if (typeGroup === "investor") return [
@@ -1336,11 +1381,6 @@ export function CompanyDetailClient({
                   </div>
                 )}
               </div>
-              {company.current_raise_status && company.current_raise_status !== "not_raising" && (
-                <span className={cn("badge", RAISE_STATUS_COLORS[company.current_raise_status] ?? "bg-slate-100 text-slate-500")}>
-                  {RAISE_STATUS_LABELS[company.current_raise_status]}
-                </span>
-              )}
             </div>
             {company.description && (
               <p className="text-sm text-slate-500 mt-2 leading-relaxed">{company.description}</p>
