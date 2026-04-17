@@ -19,19 +19,44 @@ const PERSONAL_DOMAINS = new Set([
   "protonmail.com",
 ]);
 
+// Domains where the first segment is NOT the company name
+// (e.g. mpa.gov.sg → root "mpa" is valid, but "gov" in gov.uk is not)
+const INSTITUTIONAL_SECOND_LEVELS = new Set(["gov", "edu", "ac", "mil", "sch", "nhs", "org"]);
+
+function isInstitutionalDomain(domain: string): boolean {
+  const parts = domain.split(".");
+  // e.g. mpa.gov.sg → parts[1] = "gov"
+  return parts.length >= 3 && INSTITUTIONAL_SECOND_LEVELS.has(parts[1]);
+}
+
 async function searchCompanyInDB(
   supabase: Awaited<ReturnType<typeof createClient>>,
   domain: string,
   root: string
 ): Promise<{ id: string; name: string } | null> {
-  const { data } = await supabase
+  // 1. Exact website domain match first — most reliable signal
+  const { data: websiteMatch } = await supabase
     .from("companies")
     .select("id, name")
-    .or(`website.ilike.%${domain}%,name.ilike.%${root}%`)
+    .or(`website.ilike.%${domain}%,website_domain.ilike.%${domain}%`)
     .limit(1)
     .maybeSingle();
 
-  if (data) return { id: data.id, name: data.name };
+  if (websiteMatch) return { id: websiteMatch.id, name: websiteMatch.name };
+
+  // 2. Name match — only for non-institutional domains AND roots ≥ 5 chars
+  // (guards against short roots like "mpa" matching "impact", "company", etc.)
+  const skipNameMatch = isInstitutionalDomain(domain) || root.length < 5;
+  if (skipNameMatch) return null;
+
+  const { data: nameMatch } = await supabase
+    .from("companies")
+    .select("id, name")
+    .ilike("name", `${root}%`)   // starts-with, not contains — more precise
+    .limit(1)
+    .maybeSingle();
+
+  if (nameMatch) return { id: nameMatch.id, name: nameMatch.name };
   return null;
 }
 
@@ -95,9 +120,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ match: null, suggestion: null, source: "no_match" });
   }
 
-  // 5. Try DB search again with Claude's suggestion
+  // 5. Try DB search again with Claude's suggestion (use full first word, min 3 chars)
   const suggestionRoot = suggestion.split(/\s+/)[0] ?? suggestion;
-  const aiMatch = await searchCompanyInDB(supabase, domain, suggestionRoot);
+  const aiMatch = suggestionRoot.length >= 3
+    ? await searchCompanyInDB(supabase, domain, suggestionRoot)
+    : null;
   if (aiMatch) {
     return NextResponse.json({
       match: aiMatch,
