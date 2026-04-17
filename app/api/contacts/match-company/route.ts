@@ -1,6 +1,21 @@
 // ─── Contact Company Matcher /api/contacts/match-company ─────────────────────
-// Receives { email } and returns the best matching company from Supabase,
-// falling back to a Claude claude-haiku-4-5 suggestion if no DB match is found.
+//
+// Matching pipeline (3 steps, in order):
+//
+//   STEP 1 — Domain lookup
+//     Check whether the email domain (e.g. "mpa.gov.sg") is already stored
+//     against any company in the database via website / website_domain fields.
+//     No guessing, no substring tricks — exact domain substring match only.
+//
+//   STEP 2 — Claude identifies the company (only if step 1 found nothing)
+//     Ask Claude Haiku what organisation owns that domain. Claude has broad
+//     knowledge of corporate and government domains worldwide.
+//
+//   STEP 3 — DB name match on Claude's answer (only if step 2 returned a name)
+//     Search the database for a company whose name starts with the first word
+//     of Claude's answer. If found → return that company as the match.
+//     If not found → return the Claude suggestion so the UI can offer
+//     "Create company: Maritime Port Authority of Singapore".
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -17,49 +32,54 @@ const PERSONAL_DOMAINS = new Set([
   "icloud.com",
   "me.com",
   "protonmail.com",
+  "live.com",
+  "msn.com",
 ]);
 
-// Domains where the first segment is NOT the company name
-// (e.g. mpa.gov.sg → root "mpa" is valid, but "gov" in gov.uk is not)
-const INSTITUTIONAL_SECOND_LEVELS = new Set(["gov", "edu", "ac", "mil", "sch", "nhs", "org"]);
-
-function isInstitutionalDomain(domain: string): boolean {
-  const parts = domain.split(".");
-  // e.g. mpa.gov.sg → parts[1] = "gov"
-  return parts.length >= 3 && INSTITUTIONAL_SECOND_LEVELS.has(parts[1]);
-}
-
-async function searchCompanyInDB(
+// ── STEP 1: Domain lookup ─────────────────────────────────────────────────────
+// Checks whether any company in the DB has this domain in their website or
+// website_domain field. No name guessing — only domain-based matching.
+async function findCompanyByDomain(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  domain: string,
-  root: string
+  domain: string
 ): Promise<{ id: string; name: string } | null> {
-  // 1. Exact website domain match first — most reliable signal
-  const { data: websiteMatch } = await supabase
+  const { data } = await supabase
     .from("companies")
     .select("id, name")
     .or(`website.ilike.%${domain}%,website_domain.ilike.%${domain}%`)
     .limit(1)
     .maybeSingle();
 
-  if (websiteMatch) return { id: websiteMatch.id, name: websiteMatch.name };
+  return data ? { id: data.id, name: data.name } : null;
+}
 
-  // 2. Name match — only for non-institutional domains AND roots ≥ 5 chars
-  // (guards against short roots like "mpa" matching "impact", "company", etc.)
-  const skipNameMatch = isInstitutionalDomain(domain) || root.length < 5;
-  if (skipNameMatch) return null;
+// ── STEP 3: DB name lookup using Claude's answer ───────────────────────────────
+// Called only after Claude has identified the company name. Searches by name
+// using a starts-with match (more precise than contains).
+async function findCompanyByName(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyName: string
+): Promise<{ id: string; name: string } | null> {
+  // Try the full name first, then fall back to just the first word
+  const attempts = [
+    companyName,
+    companyName.split(/\s+/)[0] ?? companyName,
+  ].filter((v, i, a) => a.indexOf(v) === i); // deduplicate
 
-  const { data: nameMatch } = await supabase
-    .from("companies")
-    .select("id, name")
-    .ilike("name", `${root}%`)   // starts-with, not contains — more precise
-    .limit(1)
-    .maybeSingle();
-
-  if (nameMatch) return { id: nameMatch.id, name: nameMatch.name };
+  for (const term of attempts) {
+    if (term.length < 3) continue;
+    const { data } = await supabase
+      .from("companies")
+      .select("id, name")
+      .ilike("name", `${term}%`)
+      .limit(1)
+      .maybeSingle();
+    if (data) return { id: data.id, name: data.name };
+  }
   return null;
 }
 
+// ── Main handler ──────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -72,39 +92,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
 
-  // 1. Extract domain and root
   const domain = email.split("@")[1]?.toLowerCase() ?? "";
-  const root = domain.split(".")[0] ?? "";
 
-  // 2. Skip personal domains
+  // Skip personal / freemail domains — no company affiliation possible
   if (PERSONAL_DOMAINS.has(domain)) {
-    return NextResponse.json({
-      match: null,
-      suggestion: null,
-      source: "personal_domain",
-    });
+    return NextResponse.json({ match: null, suggestion: null, source: "personal_domain" });
   }
 
-  // 3. Search DB by domain / root
-  const dbMatch = await searchCompanyInDB(supabase, domain, root);
-  if (dbMatch) {
-    return NextResponse.json({
-      match: dbMatch,
-      suggestion: null,
-      source: "database",
-    });
+  // ── STEP 1: Domain lookup ──────────────────────────────────────────────────
+  const domainMatch = await findCompanyByDomain(supabase, domain);
+  if (domainMatch) {
+    return NextResponse.json({ match: domainMatch, suggestion: null, source: "domain_match" });
   }
 
-  // 4. Call Claude haiku to identify company from domain
+  // ── STEP 2: Claude identifies the organisation that owns this domain ────────
   let suggestion: string | null = null;
   try {
     const { text } = await generateText({
       model: anthropic("claude-haiku-4-5"),
-      maxTokens: 50,
+      maxTokens: 60,
       messages: [
         {
           role: "user",
-          content: `What company owns the email domain "${domain}"? Reply with just the company name (no punctuation, no explanation). If unknown, reply "unknown".`,
+          content: `What organisation or company owns the email domain "${domain}"? Reply with just the organisation name — no punctuation, no explanation. If you don't know, reply "unknown".`,
         },
       ],
     });
@@ -113,30 +123,19 @@ export async function POST(req: NextRequest) {
       suggestion = cleaned;
     }
   } catch {
-    // Claude call failed — continue without suggestion
+    // Claude unavailable — continue without suggestion
   }
 
   if (!suggestion) {
     return NextResponse.json({ match: null, suggestion: null, source: "no_match" });
   }
 
-  // 5. Try DB search again with Claude's suggestion (use full first word, min 3 chars)
-  const suggestionRoot = suggestion.split(/\s+/)[0] ?? suggestion;
-  const aiMatch = suggestionRoot.length >= 3
-    ? await searchCompanyInDB(supabase, domain, suggestionRoot)
-    : null;
-  if (aiMatch) {
-    return NextResponse.json({
-      match: aiMatch,
-      suggestion,
-      source: "ai_then_database",
-    });
+  // ── STEP 3: Search DB for the company Claude named ─────────────────────────
+  const nameMatch = await findCompanyByName(supabase, suggestion);
+  if (nameMatch) {
+    return NextResponse.json({ match: nameMatch, suggestion, source: "claude_then_db" });
   }
 
-  // 6. Return suggestion without a DB match
-  return NextResponse.json({
-    match: null,
-    suggestion,
-    source: "ai_suggestion",
-  });
+  // No DB match — return Claude's suggestion so the UI can offer "Create company"
+  return NextResponse.json({ match: null, suggestion, source: "claude_suggestion" });
 }
