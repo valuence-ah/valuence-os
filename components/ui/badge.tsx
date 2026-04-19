@@ -19,7 +19,13 @@ export type BadgeVariant =
   | "slate"
   | "pink"
   | "cyan"
-  | "default";
+  | "default"
+  // ── Semantic variants (brand system) ──────────────────────────────────────
+  | "neutral"
+  | "success"
+  | "danger"
+  | "warning"
+  | "info";
 
 const VARIANT_CLASSES: Record<BadgeVariant, string> = {
   teal:    "bg-teal-100   text-teal-700",
@@ -36,6 +42,12 @@ const VARIANT_CLASSES: Record<BadgeVariant, string> = {
   pink:    "bg-pink-100   text-pink-600",
   cyan:    "bg-cyan-100   text-cyan-700",
   default: "bg-slate-100  text-slate-600",
+  // Semantic aliases
+  neutral: "bg-slate-100  text-slate-600",
+  success: "bg-emerald-100 text-emerald-700",
+  danger:  "bg-red-100    text-red-700",
+  warning: "bg-amber-100  text-amber-700",
+  info:    "bg-blue-100   text-blue-700",
 };
 
 interface BadgeProps {
