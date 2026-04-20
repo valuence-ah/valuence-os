@@ -1,15 +1,7 @@
 "use client";
-// ─── New Contacts — two-column review queue ───────────────────────────────────
-// Left:  virtualized list (one 48 px row per contact, no form state).
-// Right: single detail panel (one controlled form at a time).
-// Performance target: <50 DOM rows rendered, <16 ms per keystroke.
+// ─── New Contacts — compact single-row review queue ───────────────────────────
 
-import {
-  useState, useRef, useEffect, useCallback, useMemo, memo,
-  useTransition,
-} from "react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Contact, CompanyType, Company } from "@/lib/types";
 import { getInitials, formatDate, cn } from "@/lib/utils";
@@ -19,14 +11,11 @@ import {
   STRATEGIC_TYPE_OPTIONS,
   LP_TYPE_OPTIONS,
 } from "@/lib/constants";
-import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/icon-button";
-import { EmptyState } from "@/components/ui/empty-state";
 import {
   Check, X, Mail, ExternalLink, UserPlus, Maximize2, Loader2,
   Search, ChevronDown, ChevronUp, Plus, MapPin, Globe, Users,
-  Tag, ChevronRight, Linkedin, SlidersHorizontal, Trash2, Pencil,
-  Clock, ArrowLeft, FileText, Upload, Download, CheckSquare, Square,
+  Tag, ChevronRight, Linkedin, SlidersHorizontal, Trash2, Pencil, Clock, ArrowLeft,
+  FileText, Upload,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -39,14 +28,11 @@ type SortDir = "asc" | "desc";
 interface Props {
   initialContacts: PendingContact[];
   companies: CompanyStub[];
-  total: number;
-  cursor: number;
-  pageSize: number;
-  initialQuery: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// Type options — "Lawyer" removed per user request
 const CONTACT_TYPE_OPTIONS = [
   "Advisor / KOL",
   "Ecosystem",
@@ -61,21 +47,59 @@ const CONTACT_TYPE_OPTIONS = [
 
 type ContactTypeStr = (typeof CONTACT_TYPE_OPTIONS)[number];
 
+// Titles — full alphabetic list matching Admin → Contacts
 const TITLE_OPTIONS = [
-  "Admin", "Advisor", "Analyst", "Associate", "Board Member",
-  "CEO", "CEO / Co-founder", "CFO", "Chief of Staff", "Co-Founder",
-  "COO", "CTO", "CTO / Co-founder", "Director", "Founder",
-  "General Counsel", "General Partner", "Head of Investments",
-  "Head of Portfolio", "Investment Manager", "Managing Director",
-  "Managing Partner", "Operating Partner", "Partner",
-  "Portfolio Manager", "President", "Principal", "Senior Associate",
-  "Senior Vice President", "Venture Partner", "Vice President", "Other",
+  "Admin",
+  "Advisor",
+  "Analyst",
+  "Associate",
+  "Board Member",
+  "CEO",
+  "CEO / Co-founder",
+  "CFO",
+  "Chief of Staff",
+  "Co-Founder",
+  "COO",
+  "CTO",
+  "CTO / Co-founder",
+  "Director",
+  "Founder",
+  "General Counsel",
+  "General Partner",
+  "Head of Investments",
+  "Head of Portfolio",
+  "Investment Manager",
+  "Managing Director",
+  "Managing Partner",
+  "Operating Partner",
+  "Partner",
+  "Portfolio Manager",
+  "President",
+  "Principal",
+  "Senior Associate",
+  "Senior Vice President",
+  "Venture Partner",
+  "Vice President",
+  "Other",
 ] as const;
 
+// Countries — alphabetic; "Other (custom…)" allows free entry
 const COUNTRY_OPTIONS = [
-  "Australia", "Brunei", "Canada", "China", "France", "Germany",
-  "India", "Israel", "Japan", "Malaysia", "Singapore", "South Korea",
-  "Thailand", "UK", "USA",
+  "Australia",
+  "Brunei",
+  "Canada",
+  "China",
+  "France",
+  "Germany",
+  "India",
+  "Israel",
+  "Japan",
+  "Malaysia",
+  "Singapore",
+  "South Korea",
+  "Thailand",
+  "UK",
+  "USA",
 ] as const;
 
 const CONTACT_TO_COMPANY_TYPE: Partial<Record<ContactTypeStr, CompanyType>> = {
@@ -87,6 +111,7 @@ const CONTACT_TO_COMPANY_TYPE: Partial<Record<ContactTypeStr, CompanyType>> = {
   "Government/Academic": "government",
 };
 
+// Maps display labels back to the DB enum values the contacts table expects
 const CONTACT_DISPLAY_TO_DB_TYPE: Record<string, Contact["type"]> = {
   "Advisor / KOL":       "advisor",
   "Ecosystem":           "ecosystem_partner",
@@ -108,7 +133,6 @@ const TYPE_BADGE: Record<string, string> = {
   government:        "bg-slate-100 text-slate-600 border-slate-200",
   other:             "bg-gray-50 text-gray-500 border-gray-200",
 };
-
 const TYPE_LABEL: Record<string, string> = {
   startup:           "Startup",
   lp:                "LP",
@@ -117,16 +141,14 @@ const TYPE_LABEL: Record<string, string> = {
   corporate:         "Corporate",
   government:        "Gov / Academic",
   other:             "Other",
+  // Legacy DB values
   investor:          "Fund / VC",
   "strategic partner": "Corporate",
   "limited partner": "LP",
 };
 
-const INPUT_CLS =
-  "h-9 text-sm border border-slate-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-brand-teal/40 focus:border-brand-teal text-slate-700 w-full transition-colors";
-
-const LS_COUNTRIES_KEY  = "pending_contacts_custom_countries";
-const LS_EXCLUSIONS_KEY = "pending_contacts_exclusions";
+// Shared input/select height class for consistency
+const INPUT_CLS = "h-[28px] text-xs border border-slate-300 rounded px-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 w-full";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -137,20 +159,13 @@ function getEmailDomain(email: string | null): string | null {
   if (!email?.includes("@")) return null;
   return extractRootDomain(email.split("@")[1]);
 }
-function scoreCompanies(
-  companies: CompanyStub[],
-  emailDomain: string | null
-): (CompanyStub & { score: number })[] {
+function scoreCompanies(companies: CompanyStub[], emailDomain: string | null): (CompanyStub & { score: number })[] {
   if (!emailDomain) return companies.map(co => ({ ...co, score: 0 }));
   const domainRoot = emailDomain.split(".")[0];
   return companies.map(co => {
     if (co.website != null) {
       const siteDomain = extractRootDomain(co.website);
-      if (
-        siteDomain === emailDomain ||
-        siteDomain.endsWith("." + emailDomain) ||
-        emailDomain.endsWith("." + siteDomain)
-      )
+      if (siteDomain === emailDomain || siteDomain.endsWith("." + emailDomain) || emailDomain.endsWith("." + siteDomain))
         return { ...co, score: 3 };
     }
     const nameLower = co.name.toLowerCase().replace(/\s+/g, "");
@@ -159,6 +174,7 @@ function scoreCompanies(
     return { ...co, score: 0 };
   });
 }
+
 function mapTypeToAdmin(raw: string | null): string {
   const map: Record<string, string> = {
     founder:           "Founder / Mgmt",
@@ -175,61 +191,31 @@ function mapTypeToAdmin(raw: string | null): string {
   return map[raw] ?? "Other";
 }
 
-// ── CompanyRow (inside CompanyDropdown list) ───────────────────────────────────
+// ── CompanyRow ─────────────────────────────────────────────────────────────────
 
 const CompanyRow = memo(function CompanyRow({
   company, selected, onSelect, onExpand,
-}: {
-  company: CompanyStub & { score: number };
-  selected: boolean;
-  onSelect: () => void;
-  onExpand: () => void;
-}) {
+}: { company: CompanyStub & { score: number }; selected: boolean; onSelect: () => void; onExpand: () => void }) {
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer",
-        selected && "bg-brand-tealTint"
-      )}
-    >
+    <div className={cn("flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer", selected && "bg-blue-50")}>
       <div
-        className={cn(
-          "w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center",
-          selected
-            ? "bg-brand-teal border-brand-teal"
-            : "border-slate-300 hover:border-brand-teal"
-        )}
+        className={cn("w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center",
+          selected ? "bg-blue-600 border-blue-600" : "border-slate-300 hover:border-blue-400")}
         onClick={onSelect}
       >
         {selected && <Check size={9} className="text-white" />}
       </div>
-      <button
-        type="button"
-        onClick={onSelect}
-        className="flex-1 flex items-center gap-1.5 text-left min-w-0"
-      >
-        <span
-          className={cn(
-            "text-xs truncate flex-1",
-            selected ? "text-brand-teal font-semibold" : "text-slate-700"
-          )}
-        >
+      <button type="button" onClick={onSelect} className="flex-1 flex items-center gap-1.5 text-left min-w-0">
+        <span className={cn("text-xs truncate flex-1", selected ? "text-blue-800 font-semibold" : "text-slate-700")}>
           {company.name}
         </span>
-        <span
-          className={cn(
-            "text-[9px] px-1 py-0.5 rounded border font-medium flex-shrink-0",
-            TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200"
-          )}
-        >
+        <span className={cn("text-[9px] px-1 py-0.5 rounded border font-medium flex-shrink-0",
+          TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
           {TYPE_LABEL[company.type] ?? company.type}
         </span>
       </button>
-      <button
-        type="button"
-        onClick={e => { e.stopPropagation(); onExpand(); }}
-        className="flex items-center gap-0.5 text-[9px] text-brand-teal hover:text-brand-tealDark bg-brand-tealTint hover:bg-teal-100 border border-teal-200 rounded px-1 py-0.5 font-medium flex-shrink-0"
-      >
+      <button type="button" onClick={e => { e.stopPropagation(); onExpand(); }}
+        className="flex items-center gap-0.5 text-[9px] text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded px-1 py-0.5 font-medium flex-shrink-0">
         <Maximize2 size={8} />
       </button>
     </div>
@@ -250,10 +236,7 @@ interface CompanyDropdownProps {
   onTypeChange?: (companyId: string, newType: string) => void;
 }
 
-function CompanyDropdown({
-  contactEmail, allCompanies, value, placeholder, onChange,
-  onExpand, onCreateNew, defaultCompanyType = "startup", onTypeChange,
-}: CompanyDropdownProps) {
+function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onChange, onExpand, onCreateNew, defaultCompanyType = "startup", onTypeChange }: CompanyDropdownProps) {
   const [open, setOpen]           = useState(false);
   const [search, setSearch]       = useState("");
   const [creating, setCreating]   = useState(false);
@@ -265,27 +248,26 @@ function CompanyDropdown({
   const [newLpType, setNewLpType]               = useState("");
   const [saving, setSaving]       = useState(false);
   const [showPartnerDropdown, setShowPartnerDropdown] = useState(false);
+  const [selectedPartnerId, setSelectedPartnerId]     = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const emailDomain  = useMemo(() => getEmailDomain(contactEmail), [contactEmail]);
-  const scored       = useMemo(() => scoreCompanies(allCompanies, emailDomain), [allCompanies, emailDomain]);
-  const q            = search.toLowerCase();
-  const filtered     = useMemo(
-    () => scored.filter(c => !q || c.name.toLowerCase().includes(q)).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)),
-    [scored, q]
-  );
-  const topMatches   = useMemo(() => filtered.filter(c => c.score >= 2), [filtered]);
-  const showTop      = topMatches.length > 0 && !q;
-  const selectedCompany = useMemo(() => allCompanies.find(c => c.id === value), [allCompanies, value]);
+  const emailDomain = useMemo(() => getEmailDomain(contactEmail), [contactEmail]);
+  const scored = useMemo(() => scoreCompanies(allCompanies, emailDomain), [allCompanies, emailDomain]);
+  const q = search.toLowerCase();
+  const filtered = useMemo(() =>
+    scored.filter(c => !q || c.name.toLowerCase().includes(q)).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)),
+    [scored, q]);
+  const topMatches = useMemo(() => filtered.filter(c => c.score >= 2), [filtered]);
+  const showTop = topMatches.length > 0 && !q;
 
   useEffect(() => {
     if (!open) return;
-    function outside(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    }
+    function outside(e: MouseEvent) { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false); }
     document.addEventListener("mousedown", outside);
     return () => document.removeEventListener("mousedown", outside);
   }, [open]);
+
+  const selectedCompany = useMemo(() => allCompanies.find(c => c.id === value), [allCompanies, value]);
 
   function pick(id: string) { onChange(id); setOpen(false); setSearch(""); setCreating(false); }
 
@@ -293,7 +275,7 @@ function CompanyDropdown({
     if (!newName.trim()) return;
     setSaving(true);
     const id = await onCreateNew(newName.trim(), newType || defaultCompanyType);
-    if (id) pick(id);
+    if (id) { pick(id); }
     setSaving(false);
     setCreating(false);
     setNewName("");
@@ -301,44 +283,32 @@ function CompanyDropdown({
 
   return (
     <div ref={wrapRef} className="relative w-full">
-      <div className={cn(INPUT_CLS, "flex items-center justify-between gap-1 pr-1 cursor-pointer")}>
-        <button
-          type="button"
-          onClick={() => setOpen(v => !v)}
-          className="flex items-center gap-1 flex-1 min-w-0 text-left"
-        >
-          <span className={cn("truncate flex-1 text-left text-sm", !selectedCompany && "text-slate-400")}>
+      <div className={cn(INPUT_CLS, "flex items-center justify-between gap-1 pr-1")}>
+        <button type="button" onClick={() => setOpen(v => !v)}
+          className="flex items-center gap-1 flex-1 min-w-0 text-left cursor-pointer">
+          <span className={cn("truncate flex-1 text-left text-xs", !selectedCompany && "text-slate-300")}>
             {selectedCompany?.name ?? placeholder}
           </span>
-          <ChevronDown size={13} className="text-slate-400 flex-shrink-0" />
+          <ChevronDown size={11} className="text-slate-400 flex-shrink-0" />
         </button>
         {selectedCompany && (
           editingType ? (
-            <select
-              autoFocus
-              value={selectedCompany.type}
+            <select autoFocus value={selectedCompany.type}
               onChange={async e => {
                 const t = e.target.value;
                 onTypeChange?.(selectedCompany.id, t);
                 setEditingType(false);
               }}
               onBlur={() => setEditingType(false)}
-              className="text-[9px] border border-brand-teal rounded px-0.5 py-0.5 bg-white cursor-pointer focus:outline-none ml-1 flex-shrink-0"
-            >
-              {COMPANY_TYPE_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
+              className="text-[9px] border border-blue-400 rounded px-0.5 py-0.5 bg-white cursor-pointer focus:outline-none ml-1 flex-shrink-0">
+              {COMPANY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           ) : (
-            <button
-              type="button"
+            <button type="button"
               onClick={e => { e.stopPropagation(); setEditingType(true); }}
               title="Click to change company type"
-              className={cn(
-                "text-[9px] px-1 py-0.5 rounded border font-medium flex-shrink-0 ml-1 hover:ring-1 hover:ring-brand-teal cursor-pointer",
-                TYPE_BADGE[selectedCompany.type] ?? "bg-slate-50 text-slate-500 border-slate-200"
-              )}
-            >
+              className={cn("text-[9px] px-1 py-0.5 rounded border font-medium flex-shrink-0 ml-1 hover:ring-1 hover:ring-blue-400 cursor-pointer",
+                TYPE_BADGE[selectedCompany.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
               {TYPE_LABEL[selectedCompany.type] ?? selectedCompany.type}
             </button>
           )
@@ -346,137 +316,92 @@ function CompanyDropdown({
       </div>
 
       {open && (
-        <div className="absolute z-30 top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
+        <div className="absolute z-30 top-full left-0 mt-0.5 w-64 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
           <div className="p-1.5 border-b border-slate-100">
             <div className="flex items-center gap-1 px-2 py-1 bg-slate-50 rounded">
               <Search size={11} className="text-slate-400 flex-shrink-0" />
-              <input
-                autoFocus
-                value={search}
-                onChange={e => setSearch(e.target.value)}
+              <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search companies…"
-                className="flex-1 text-xs bg-transparent outline-none placeholder:text-slate-400"
-              />
-              {search && (
-                <button onClick={() => setSearch("")}>
-                  <X size={10} className="text-slate-400" />
-                </button>
-              )}
+                className="flex-1 text-xs bg-transparent outline-none placeholder:text-slate-400" />
+              {search && <button onClick={() => setSearch("")}><X size={10} className="text-slate-400" /></button>}
             </div>
           </div>
           <div className="max-h-48 overflow-y-auto">
             {showTop && (
               <>
-                <p className="px-3 pt-1.5 pb-0.5 text-[9px] text-slate-400 uppercase tracking-wider font-semibold">
-                  Best match
-                </p>
+                <p className="px-3 pt-1.5 pb-0.5 text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Best match</p>
                 {topMatches.map(co => (
-                  <CompanyRow
-                    key={co.id}
-                    company={co}
-                    selected={value === co.id}
-                    onSelect={() => pick(co.id)}
-                    onExpand={() => { onExpand(co.id); setOpen(false); }}
-                  />
+                  <CompanyRow key={co.id} company={co} selected={value === co.id}
+                    onSelect={() => pick(co.id)} onExpand={() => { onExpand(co.id); setOpen(false); }} />
                 ))}
-                {filtered.filter(c => c.score < 2).length > 0 && (
-                  <div className="mx-3 my-0.5 border-t border-slate-100" />
-                )}
+                {filtered.filter(c => c.score < 2).length > 0 && <div className="mx-3 my-0.5 border-t border-slate-100" />}
               </>
             )}
-            {filtered
-              .filter(c => (showTop ? c.score < 2 : true))
-              .map(co => (
-                <CompanyRow
-                  key={co.id}
-                  company={co}
-                  selected={value === co.id}
-                  onSelect={() => pick(co.id)}
-                  onExpand={() => { onExpand(co.id); setOpen(false); }}
-                />
-              ))}
-            {filtered.length === 0 && (
-              <p className="px-3 py-4 text-xs text-slate-400 text-center">No companies found</p>
-            )}
+            {filtered.filter(c => showTop ? c.score < 2 : true).map(co => (
+              <CompanyRow key={co.id} company={co} selected={value === co.id}
+                onSelect={() => pick(co.id)} onExpand={() => { onExpand(co.id); setOpen(false); }} />
+            ))}
+            {filtered.length === 0 && <p className="px-3 py-4 text-xs text-slate-400 text-center">No companies found</p>}
           </div>
           <div className="border-t border-slate-100">
             {!creating ? (
-              <button
-                onClick={() => { setCreating(true); setNewName(search); setNewType(defaultCompanyType); }}
-                className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-brand-teal hover:bg-brand-tealTint transition-colors font-medium"
-              >
+              <button onClick={() => { setCreating(true); setNewName(search); setNewType(defaultCompanyType); setShowPartnerDropdown(false); setSelectedPartnerId(null); }}
+                className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-blue-600 hover:bg-blue-50 transition-colors font-medium">
                 <Plus size={11} /> Create new company
               </button>
             ) : (
               <div className="p-2 space-y-1.5">
-                <input
-                  value={newName}
-                  onChange={e => { setNewName(e.target.value); setShowPartnerDropdown(true); }}
+                <input value={newName} onChange={e => { setNewName(e.target.value); setShowPartnerDropdown(true); }}
                   onFocus={() => setShowPartnerDropdown(true)}
                   onBlur={() => setTimeout(() => setShowPartnerDropdown(false), 150)}
                   placeholder="Company name"
-                  className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-teal"
-                />
+                  className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 {showPartnerDropdown && (
                   <div className="absolute z-40 left-1.5 right-1.5 bg-white border border-slate-200 rounded shadow-lg max-h-32 overflow-y-auto">
-                    {allCompanies
-                      .filter(c => !newName || c.name.toLowerCase().includes(newName.toLowerCase()))
-                      .slice(0, 8)
-                      .map(c => (
-                        <button
-                          key={c.id}
-                          onMouseDown={() => { pick(c.id); setCreating(false); setShowPartnerDropdown(false); }}
-                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-brand-tealTint flex items-center justify-between gap-2"
-                        >
-                          <span className="font-medium text-slate-700">{c.name}</span>
-                          <span className={cn("text-[9px] px-1 py-0.5 rounded border font-medium",
-                            TYPE_BADGE[c.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
-                            {TYPE_LABEL[c.type] ?? c.type}
-                          </span>
-                        </button>
-                      ))}
+                    {allCompanies.filter(c => !newName || c.name.toLowerCase().includes(newName.toLowerCase())).slice(0, 8).map(c => (
+                      <button key={c.id} onMouseDown={() => { pick(c.id); setCreating(false); setSelectedPartnerId(c.id); setShowPartnerDropdown(false); }}
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 flex items-center justify-between gap-2">
+                        <span className="font-medium text-slate-700">{c.name}</span>
+                        <span className={cn("text-[9px] px-1 py-0.5 rounded border font-medium",
+                          TYPE_BADGE[c.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
+                          {TYPE_LABEL[c.type] ?? c.type}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 )}
-                <select
-                  value={newType}
-                  onChange={e => { setNewType(e.target.value); setNewInvestorType(""); setNewStrategicType(""); setNewLpType(""); }}
-                  className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-teal"
-                >
+                <select value={newType} onChange={e => { setNewType(e.target.value); setNewInvestorType(""); setNewStrategicType(""); setNewLpType(""); }}
+                  className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
                   {COMPANY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
                 {newType === "fund" && (
                   <select value={newInvestorType} onChange={e => setNewInvestorType(e.target.value)}
-                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-teal">
+                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
                     <option value="">Investor type…</option>
                     {INVESTOR_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 )}
                 {newType === "corporate" && (
                   <select value={newStrategicType} onChange={e => setNewStrategicType(e.target.value)}
-                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-teal">
+                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
                     <option value="">Strategic type…</option>
                     {STRATEGIC_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 )}
                 {newType === "lp" && (
                   <select value={newLpType} onChange={e => setNewLpType(e.target.value)}
-                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-teal">
+                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
                     <option value="">LP type…</option>
                     {LP_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 )}
                 <div className="flex gap-1.5">
-                  <button
-                    onClick={() => setCreating(false)}
-                    className="flex-1 py-1.5 border border-slate-200 rounded text-xs text-slate-600 hover:bg-slate-50"
-                  >
+                  <button onClick={() => setCreating(false)}
+                    className="flex-1 py-1.5 border border-slate-200 rounded text-xs text-slate-600 hover:bg-slate-50">
                     Cancel
                   </button>
-                  <button
-                    onClick={handleCreate}
-                    disabled={saving || !newName.trim()}
-                    className="flex-1 py-1.5 bg-brand-teal hover:bg-brand-tealDark disabled:opacity-50 text-white text-xs font-medium rounded flex items-center justify-center gap-1"
-                  >
+                  <button onClick={handleCreate} disabled={saving || !newName.trim()}
+                    className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium rounded flex items-center justify-center gap-1">
                     {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
                     {saving ? "Saving…" : "Create"}
                   </button>
@@ -490,12 +415,9 @@ function CompanyDropdown({
   );
 }
 
-// ── CompanyExpandPanel ─────────────────────────────────────────────────────────
+// ── Company Expand Panel ───────────────────────────────────────────────────────
 
-function CompanyExpandPanel({
-  companyId, onClose, createMode, onCreated, initialName, initialType,
-  onDeleted, onUpdated,
-}: {
+function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initialName, initialType, onDeleted, onUpdated }: {
   companyId: string;
   onClose: () => void;
   createMode?: boolean;
@@ -512,44 +434,52 @@ function CompanyExpandPanel({
   const [imgError, setImgError] = useState(false);
   const [editing, setEditing]   = useState(false);
   const [editName, setEditName] = useState("");
-  const [editWebsite, setEditWebsite]         = useState("");
+  const [editWebsite, setEditWebsite]       = useState("");
   const [editDescription, setEditDescription] = useState("");
-  const [editCity, setEditCity]               = useState("");
-  const [editCountry, setEditCountry]         = useState("");
-  const [editType, setEditType]               = useState("");
+  const [editCity, setEditCity]             = useState("");
+  const [editCountry, setEditCountry]       = useState("");
+  const [editType, setEditType]             = useState("");
   const [editInvestorType, setEditInvestorType]   = useState("");
   const [editStrategicType, setEditStrategicType] = useState("");
   const [editLpType, setEditLpType]               = useState("");
-  const [saving, setSaving]         = useState(false);
-  const [createSaving, setCreateSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting]     = useState(false);
-  const [deckUrl, setDeckUrl]       = useState<string | null>(null);
-  const [deckName, setDeckName]     = useState<string | null>(null);
-  const [deckUploading, setDeckUploading] = useState(false);
-  const [deckError, setDeckError]   = useState<string | null>(null);
-  const [deckDragOver, setDeckDragOver] = useState(false);
-  const deckInputRef                = useRef<HTMLInputElement>(null);
-  const [editingField, setEditingField] = useState<string | null>(null);
-  const [fieldDraft, setFieldDraft] = useState("");
-  const [fieldSaving, setFieldSaving] = useState(false);
-  const [nameError, setNameError]   = useState<string | null>(null);
+  const [saving, setSaving]                 = useState(false);
+  const [createSaving, setCreateSaving]     = useState(false);
+  const [confirmDelete, setConfirmDelete]   = useState(false);
+  const [deleting, setDeleting]             = useState(false);
+
+  // Deck upload
+  const [deckUrl, setDeckUrl]               = useState<string | null>(null);
+  const [deckName, setDeckName]             = useState<string | null>(null);
+  const [deckUploading, setDeckUploading]   = useState(false);
+  const [deckError, setDeckError]           = useState<string | null>(null);
+  const [deckDragOver, setDeckDragOver]     = useState(false);
+  const deckInputRef                        = useRef<HTMLInputElement>(null);
+
+  // Inline field editing
+  const [editingField, setEditingField]     = useState<string | null>(null);
+  const [fieldDraft, setFieldDraft]         = useState("");
+  const [fieldSaving, setFieldSaving]       = useState(false);
+  const [nameError, setNameError]           = useState<string | null>(null);
+
+  // Contact sub-panel
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [ceFirstName, setCeFirstName] = useState("");
-  const [ceLastName, setCeLastName]   = useState("");
-  const [ceTitle, setCeTitle]         = useState("");
-  const [ceType, setCeType]           = useState("");
-  const [ceLinkedin, setCeLinkedin]   = useState("");
-  const [ceCity, setCeCity]           = useState("");
-  const [ceCountry, setCeCountry]     = useState("");
-  const [contactSaving, setContactSaving] = useState(false);
+  const [ceFirstName, setCeFirstName]       = useState("");
+  const [ceLastName, setCeLastName]         = useState("");
+  const [ceTitle, setCeTitle]               = useState("");
+  const [ceType, setCeType]                 = useState("");
+  const [ceLinkedin, setCeLinkedin]         = useState("");
+  const [ceCity, setCeCity]                 = useState("");
+  const [ceCountry, setCeCountry]           = useState("");
+  const [contactSaving, setContactSaving]   = useState(false);
 
   async function handleDelete() {
     if (!company) return;
     setDeleting(true);
+    // Dismiss immediately — no waiting for network
     onDeleted?.(company.id);
     onClose();
-    await supabase.from("companies").delete().eq("id", company.id);
+    const { error } = await supabase.from("companies").delete().eq("id", company.id);
+    if (error) console.error("[delete company]", error);
   }
 
   useEffect(() => {
@@ -592,25 +522,26 @@ function CompanyExpandPanel({
     setEditLpType(company.lp_type ?? "");
     setEditing(true);
   }
-
   async function saveEdits() {
     if (createMode) {
       if (!editName.trim()) return;
       setCreateSaving(true);
       const { data, error } = await supabase.from("companies")
         .insert({
-          name: editName.trim(), type: editType || "startup",
-          investor_type:  editType === "fund"      ? (editInvestorType  || null) : null,
+          name: editName.trim(),
+          type: editType || "startup",
+          investor_type: editType === "fund" ? (editInvestorType || null) : null,
           strategic_type: editType === "corporate" ? (editStrategicType || null) : null,
-          lp_type:        editType === "lp"        ? (editLpType        || null) : null,
+          lp_type: editType === "lp" ? (editLpType || null) : null,
           website: editWebsite.trim() || null,
           description: editDescription.trim() || null,
           location_city: editCity.trim() || null,
           location_country: editCountry.trim() || null,
         })
-        .select("id").single();
+        .select("id")
+        .single();
       setCreateSaving(false);
-      if (error || !data) return;
+      if (error || !data) { console.error("[create company]", error); return; }
       onCreated?.(data.id);
       onClose();
       return;
@@ -624,14 +555,18 @@ function CompanyExpandPanel({
       location_city: editCity.trim() || null,
       location_country: editCountry.trim() || null,
       type: editType || company.type,
-      investor_type:  (editType || company.type) === "fund"      ? (editInvestorType  || null) : null,
+      investor_type: (editType || company.type) === "fund" ? (editInvestorType || null) : null,
       strategic_type: (editType || company.type) === "corporate" ? (editStrategicType || null) : null,
-      lp_type:        (editType || company.type) === "lp"        ? (editLpType        || null) : null,
+      lp_type: (editType || company.type) === "lp" ? (editLpType || null) : null,
     };
     const { error } = await supabase.from("companies").update(updates).eq("id", company.id);
     setSaving(false);
     if (error) {
-      if (error.code === "23505") setNameError(`A company named "${String(updates.name)}" already exists.`);
+      if (error.code === "23505") {
+        setNameError(`A company named "${String(updates.name)}" already exists.`);
+      } else {
+        console.error("[save company]", error);
+      }
       return;
     }
     setNameError(null);
@@ -640,7 +575,7 @@ function CompanyExpandPanel({
     onUpdated?.(company.id, {
       name: String(updates.name ?? company.name),
       type: String(updates.type ?? company.type),
-      website: (updates.website as string | null | undefined) ?? company.website,
+      website: updates.website as string | null | undefined ?? company.website,
     });
   }
 
@@ -659,8 +594,10 @@ function CompanyExpandPanel({
       setFieldSaving(false);
       if (field === "name" && fErr.code === "23505") {
         setNameError(`A company named "${value.trim()}" already exists.`);
-        setEditingField("name");
+        setEditingField("name"); // re-open inline edit so user can change it
         setFieldDraft(value);
+      } else {
+        console.error("[saveField]", fErr);
       }
       return;
     }
@@ -689,19 +626,22 @@ function CompanyExpandPanel({
   async function saveContact() {
     if (!selectedContact) return;
     setContactSaving(true);
+    // ceType is already a display label (e.g. "Advisor / KOL") matching the DB constraint
     const updates: Partial<Contact> = {
-      first_name: ceFirstName.trim() || selectedContact.first_name,
-      last_name:  ceLastName.trim()  || selectedContact.last_name,
-      title:      ceTitle.trim()     || selectedContact.title,
-      type:       ceType as Contact["type"],
-      linkedin_url:     ceLinkedin.trim() || selectedContact.linkedin_url,
-      location_city:    ceCity.trim()    || selectedContact.location_city,
-      location_country: ceCountry.trim() || selectedContact.location_country,
+      first_name:       ceFirstName.trim() || selectedContact.first_name,
+      last_name:        ceLastName.trim()  || selectedContact.last_name,
+      title:            ceTitle.trim()     || selectedContact.title,
+      type:             ceType as Contact["type"],
+      linkedin_url:     ceLinkedin.trim()  || selectedContact.linkedin_url,
+      location_city:    ceCity.trim()      || selectedContact.location_city,
+      location_country: ceCountry.trim()   || selectedContact.location_country,
     };
     const { error } = await supabase.from("contacts").update(updates).eq("id", selectedContact.id);
     if (!error) {
       setContacts(prev => prev.map(c => c.id === selectedContact.id ? { ...c, ...updates } as Contact : c));
       setSelectedContact(prev => prev ? { ...prev, ...updates } as Contact : prev);
+    } else {
+      console.error("[saveContact]", error);
     }
     setContactSaving(false);
   }
@@ -736,174 +676,272 @@ function CompanyExpandPanel({
     }
   }
 
-  const domain = company?.website
-    ? company.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
-    : null;
-  const clearbitUrl = domain
-    ? `https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128`
-    : null;
+  const domain = company?.website ? company.website.replace(/^https?:\/\//, "").replace(/\/.*$/, "") : null;
+  const clearbitUrl = domain ? `https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128` : null;
 
-  // Abbreviated panel JSX (same structure as before, styling updated to brand tokens)
   return (
     <>
       <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
-      <div className="fixed top-0 right-0 h-full w-[420px] bg-white shadow-2xl z-50 flex flex-col overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 sticky top-0 bg-white z-10">
-          {selectedContact ? (
+      <div className="fixed top-0 right-0 h-full w-[420px] bg-white shadow-2xl z-50 flex flex-col">
+        {selectedContact ? (
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
             <div className="flex items-center gap-2">
-              <IconButton aria-label="Back to company" onClick={() => setSelectedContact(null)}>
+              <button onClick={() => setSelectedContact(null)}
+                className="p-1 hover:bg-slate-100 rounded transition-colors text-slate-500 hover:text-slate-700">
                 <ArrowLeft size={16} />
-              </IconButton>
+              </button>
               <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
                 <span className="text-violet-600 text-[10px] font-bold">
                   {getInitials(`${selectedContact.first_name} ${selectedContact.last_name ?? ""}`)}
                 </span>
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-ink-900">
-                  {selectedContact.first_name} {selectedContact.last_name}
-                </h3>
-                <p className="text-xs text-ink-500">{selectedContact.title ?? selectedContact.type}</p>
+                <h3 className="text-sm font-semibold text-slate-900">{selectedContact.first_name} {selectedContact.last_name}</h3>
+                <p className="text-[10px] text-slate-400">{selectedContact.title ?? selectedContact.type}</p>
               </div>
             </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              {clearbitUrl && !imgError && (
-                <img
-                  src={clearbitUrl}
-                  alt=""
-                  onError={() => setImgError(true)}
-                  className="w-7 h-7 rounded object-contain"
-                />
-              )}
-              <h3 className="text-sm font-semibold text-ink-900">
-                {createMode ? "New Company" : loading ? "Loading…" : company?.name ?? "Company"}
-              </h3>
-            </div>
-          )}
-          <IconButton aria-label="Close panel" onClick={onClose}>
-            <X size={16} />
-          </IconButton>
-        </div>
-
-        {/* Body */}
-        {loading && !createMode ? (
-          <div className="flex items-center justify-center flex-1 py-16">
-            <Loader2 size={24} className="animate-spin text-slate-300" />
-          </div>
-        ) : selectedContact ? (
-          // Contact edit form
-          <div className="p-5 space-y-4 flex-1">
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: "First name", val: ceFirstName, set: setCeFirstName },
-                { label: "Last name",  val: ceLastName,  set: setCeLastName },
-              ].map(({ label, val, set }) => (
-                <div key={label}>
-                  <label className="block text-xs font-medium text-ink-500 mb-1">{label}</label>
-                  <input value={val} onChange={e => set(e.target.value)} className={INPUT_CLS} />
-                </div>
-              ))}
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-ink-500 mb-1">Title</label>
-              <input value={ceTitle} onChange={e => setCeTitle(e.target.value)} className={INPUT_CLS} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-ink-500 mb-1">Type</label>
-              <select value={ceType} onChange={e => setCeType(e.target.value)}
-                className={cn(INPUT_CLS, "cursor-pointer")}>
-                {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-ink-500 mb-1">LinkedIn URL</label>
-              <input value={ceLinkedin} onChange={e => setCeLinkedin(e.target.value)}
-                placeholder="https://linkedin.com/in/…" className={INPUT_CLS} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-ink-500 mb-1">City</label>
-                <input value={ceCity} onChange={e => setCeCity(e.target.value)} className={INPUT_CLS} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-ink-500 mb-1">Country</label>
-                <input value={ceCountry} onChange={e => setCeCountry(e.target.value)} className={INPUT_CLS} />
-              </div>
-            </div>
-            <Button onClick={saveContact} isLoading={contactSaving} className="w-full">
-              Save contact
-            </Button>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1"><X size={18} /></button>
           </div>
         ) : (
-          // Company view / edit
-          <div className="flex-1">
-            {/* Company fields */}
-            <div className="p-5 border-b border-slate-100">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+            <div className="flex items-center gap-2">
+              {clearbitUrl && !imgError ? (
+                <img src={clearbitUrl} alt={company?.name ?? ""} onError={() => setImgError(true)}
+                  className="w-8 h-8 rounded-lg object-contain bg-white border border-slate-200 p-0.5" />
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-xs font-bold">{company ? getInitials(company.name) : "…"}</span>
+                </div>
+              )}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">{createMode ? "New Company" : loading ? "Loading…" : company?.name ?? "Company"}</h3>
+                {company && (
+                  <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium",
+                    TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
+                    {TYPE_LABEL[company.type] ?? company.type}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {company && !editing && (
+                <button onClick={startEditing}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                  <Pencil size={11} /> Edit
+                </button>
+              )}
+              {company && (
+                <a href={`/crm/companies/${company.id}`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                  <Maximize2 size={12} /> Full profile
+                </a>
+              )}
+              <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1"><X size={18} /></button>
+            </div>
+          </div>
+        )}
+        {selectedContact ? (
+          /* ── Contact edit sub-panel ── */
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">First Name</p>
+                <input value={ceFirstName} onChange={e => setCeFirstName(e.target.value)}
+                  className={INPUT_CLS} />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">Last Name</p>
+                <input value={ceLastName} onChange={e => setCeLastName(e.target.value)}
+                  className={INPUT_CLS} />
+              </div>
+              <div className="col-span-2">
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">Email</p>
+                <div className={cn(INPUT_CLS, "flex items-center gap-1 bg-slate-50 text-slate-400 cursor-default")}>
+                  <Mail size={10} className="flex-shrink-0" />
+                  <span className="truncate text-[11px]">{selectedContact.email ?? "—"}</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">Title</p>
+                <select value={ceTitle} onChange={e => setCeTitle(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
+                  <option value="">— Title —</option>
+                  {TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">Type</p>
+                <select value={ceType} onChange={e => setCeType(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
+                  {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">LinkedIn</p>
+                <input value={ceLinkedin} onChange={e => setCeLinkedin(e.target.value)}
+                  placeholder="https://linkedin.com/in/…"
+                  className={INPUT_CLS} />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">City</p>
+                <input value={ceCity} onChange={e => setCeCity(e.target.value)}
+                  placeholder="City" className={INPUT_CLS} />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 mb-1">Country</p>
+                <input value={ceCountry} onChange={e => setCeCountry(e.target.value)}
+                  placeholder="Country" className={INPUT_CLS} />
+              </div>
+            </div>
+            <button onClick={saveContact} disabled={contactSaving}
+              className="w-full flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors">
+              {contactSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+              {contactSaving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        ) : loading ? (
+          <div className="flex-1 flex items-center justify-center"><Loader2 size={24} className="text-slate-300 animate-spin" /></div>
+        ) : (!company && !createMode) ? (
+          <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Company not found.</div>
+        ) : (
+          <div className="flex-1 overflow-y-auto">
+            {editing ? (
+              <div className="px-5 py-4 border-b border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Edit Company</p>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => setEditing(false)} className="text-xs px-2.5 py-1 border border-slate-200 rounded text-slate-500 hover:bg-slate-50">Cancel</button>
+                    <button onClick={saveEdits} disabled={saving}
+                      className="text-xs px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded font-medium flex items-center gap-1">
+                      {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Name</p>
+                    <input value={editName} onChange={e => { setEditName(e.target.value); setNameError(null); }} className={cn(INPUT_CLS, nameError && "border-red-400 focus:ring-red-400")} />
+                    {nameError && (
+                      <p className="text-[10px] text-red-500 mt-0.5 flex items-center gap-1">
+                        <X size={9} /> {nameError}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Type</p>
+                    <select value={editType} onChange={e => { setEditType(e.target.value); setEditInvestorType(""); setEditStrategicType(""); setEditLpType(""); }} className={cn(INPUT_CLS, "cursor-pointer")}>
+                      {COMPANY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  {editType === "fund" && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Investor Type</p>
+                      <select value={editInvestorType} onChange={e => setEditInvestorType(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
+                        <option value="">— Select —</option>
+                        {INVESTOR_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {editType === "corporate" && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Strategic Type</p>
+                      <select value={editStrategicType} onChange={e => setEditStrategicType(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
+                        <option value="">— Select —</option>
+                        {STRATEGIC_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {editType === "lp" && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-0.5">LP Type</p>
+                      <select value={editLpType} onChange={e => setEditLpType(e.target.value)} className={cn(INPUT_CLS, "cursor-pointer")}>
+                        <option value="">— Select —</option>
+                        {LP_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Website</p>
+                    <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)} placeholder="https://..." className={INPUT_CLS} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-0.5">City</p>
+                      <input value={editCity} onChange={e => setEditCity(e.target.value)} className={INPUT_CLS} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Country</p>
+                      <input value={editCountry} onChange={e => setEditCountry(e.target.value)} className={INPUT_CLS} />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Description</p>
+                    <textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={3}
+                      className="w-full text-xs border border-slate-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 resize-none" />
+                  </div>
+                </div>
+              </div>
+            ) : company ? (
+            <>
+            <div className="px-5 py-4 border-b border-slate-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">General Information</p>
+                <span className="text-[9px] text-slate-300 italic">double-click to edit</span>
+                {fieldSaving && <Loader2 size={10} className="animate-spin text-blue-400" />}
+              </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <p className="text-[10px] font-semibold text-ink-500 mb-1">Name</p>
+                {/* Company name */}
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Company</p>
                   {editingField === "name" ? (
-                    <input
-                      autoFocus
-                      value={fieldDraft}
-                      onChange={e => setFieldDraft(e.target.value)}
+                    <input autoFocus value={fieldDraft} onChange={e => { setFieldDraft(e.target.value); setNameError(null); }}
                       onBlur={() => void saveField("name", fieldDraft)}
-                      onKeyDown={e => {
-                        if (e.key === "Enter") void saveField("name", fieldDraft);
-                        if (e.key === "Escape") setEditingField(null);
-                      }}
-                      className={INPUT_CLS}
-                    />
+                      onKeyDown={e => { if (e.key === "Enter") void saveField("name", fieldDraft); if (e.key === "Escape") { setEditingField(null); setNameError(null); } }}
+                      className={cn("text-sm font-medium border rounded px-1.5 py-0.5 focus:outline-none w-full", nameError ? "border-red-400 focus:ring-1 focus:ring-red-400" : "border-blue-400")} />
                   ) : (
-                    <p
-                      className="text-sm text-ink-900 font-medium cursor-pointer hover:bg-brand-tealTint rounded px-1 -mx-1 py-0.5 transition-colors"
-                      onDoubleClick={() => { setEditingField("name"); setFieldDraft(company?.name ?? ""); setNameError(null); }}
-                    >
-                      {company?.name}
+                    <p className="text-sm text-slate-800 font-medium cursor-pointer hover:bg-blue-50 rounded px-1 -mx-1 py-0.5 transition-colors"
+                      onDoubleClick={() => { setEditingField("name"); setFieldDraft(company.name); setNameError(null); }}>
+                      {company.name}
                     </p>
                   )}
-                  {nameError && <p className="text-[10px] text-danger mt-0.5">{nameError}</p>}
+                  {nameError && editingField === "name" && (
+                    <p className="text-[10px] text-red-500 mt-0.5 flex items-center gap-1">
+                      <X size={9} /> {nameError}
+                    </p>
+                  )}
                 </div>
+                {/* Type */}
                 <div>
-                  <p className="text-[10px] font-semibold text-ink-500 mb-1">Type</p>
+                  <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Type</p>
                   {editingField === "type" ? (
-                    <select
-                      autoFocus
-                      value={fieldDraft}
+                    <select autoFocus value={fieldDraft}
                       onChange={e => void saveField("type", e.target.value)}
                       onBlur={() => setEditingField(null)}
-                      className={cn(INPUT_CLS, "cursor-pointer")}
-                    >
+                      className="text-xs border border-blue-400 rounded px-1 py-0.5 focus:outline-none bg-white cursor-pointer w-full">
                       {COMPANY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   ) : (
                     <span
-                      onDoubleClick={() => { setEditingField("type"); setFieldDraft(company?.type ?? ""); }}
-                      className={cn(
-                        "inline-flex text-xs px-1.5 py-0.5 rounded border font-medium cursor-pointer hover:ring-1 hover:ring-brand-teal",
-                        TYPE_BADGE[company?.type ?? ""] ?? "bg-slate-50 text-slate-500 border-slate-200"
-                      )}
-                    >
-                      {TYPE_LABEL[company?.type ?? ""] ?? company?.type}
+                      onDoubleClick={() => { setEditingField("type"); setFieldDraft(company.type); }}
+                      className={cn("inline-flex text-xs px-1.5 py-0.5 rounded border font-medium cursor-pointer hover:ring-1 hover:ring-blue-300",
+                        TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
+                      {TYPE_LABEL[company.type] ?? company.type}
                     </span>
                   )}
                 </div>
+                {/* Website */}
                 <div>
-                  <p className="text-[10px] font-semibold text-ink-500 mb-1">Website</p>
+                  <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Website</p>
                   {editingField === "website" ? (
-                    <input
-                      autoFocus value={fieldDraft} onChange={e => setFieldDraft(e.target.value)}
+                    <input autoFocus value={fieldDraft} onChange={e => setFieldDraft(e.target.value)}
                       onBlur={() => void saveField("website", fieldDraft)}
                       onKeyDown={e => { if (e.key === "Enter") void saveField("website", fieldDraft); if (e.key === "Escape") setEditingField(null); }}
-                      placeholder="https://…" className={INPUT_CLS}
-                    />
-                  ) : company?.website ? (
+                      placeholder="https://…"
+                      className="text-xs border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none w-full" />
+                  ) : company.website ? (
                     <div className="flex items-center gap-1 group cursor-pointer"
                       onDoubleClick={() => { setEditingField("website"); setFieldDraft(company.website ?? ""); }}>
                       <a href={company.website} target="_blank" rel="noopener noreferrer"
-                        className="text-xs text-link hover:underline flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                        onClick={e => e.stopPropagation()}>
                         <Globe size={11} />{company.website.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}
                       </a>
                     </div>
@@ -914,86 +952,149 @@ function CompanyExpandPanel({
                     </p>
                   )}
                 </div>
+                {/* LinkedIn */}
+                {company.linkedin_url && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">LinkedIn</p>
+                    <a href={company.linkedin_url} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                      <Linkedin size={11} /> Profile
+                    </a>
+                  </div>
+                )}
+                {/* Location */}
                 <div className="col-span-2">
-                  <p className="text-[10px] font-semibold text-ink-500 mb-1">Location</p>
+                  <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Location</p>
                   <div className="grid grid-cols-2 gap-2">
                     {editingField === "city" ? (
                       <input autoFocus value={fieldDraft} onChange={e => setFieldDraft(e.target.value)}
                         onBlur={() => void saveField("city", fieldDraft)}
                         onKeyDown={e => { if (e.key === "Enter") void saveField("city", fieldDraft); if (e.key === "Escape") setEditingField(null); }}
-                        placeholder="City" className={INPUT_CLS} />
+                        placeholder="City"
+                        className="text-sm border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none" />
                     ) : (
-                      <p className="text-sm text-ink-700 flex items-center gap-1 cursor-pointer hover:bg-brand-tealTint rounded px-1 -mx-1 py-0.5 transition-colors"
-                        onDoubleClick={() => { setEditingField("city"); setFieldDraft(company?.location_city ?? ""); }}>
-                        <MapPin size={11} className="text-ink-500 flex-shrink-0" />
-                        {company?.location_city || <span className="text-slate-300 italic text-xs">City</span>}
+                      <p className="text-sm text-slate-700 flex items-center gap-1 cursor-pointer hover:bg-blue-50 rounded px-1 -mx-1 py-0.5 transition-colors"
+                        onDoubleClick={() => { setEditingField("city"); setFieldDraft(company.location_city ?? ""); }}>
+                        <MapPin size={11} className="text-slate-400 flex-shrink-0" />
+                        {company.location_city || <span className="text-slate-300 italic text-xs">City</span>}
                       </p>
                     )}
                     {editingField === "country" ? (
                       <input autoFocus value={fieldDraft} onChange={e => setFieldDraft(e.target.value)}
                         onBlur={() => void saveField("country", fieldDraft)}
                         onKeyDown={e => { if (e.key === "Enter") void saveField("country", fieldDraft); if (e.key === "Escape") setEditingField(null); }}
-                        placeholder="Country" className={INPUT_CLS} />
+                        placeholder="Country"
+                        className="text-sm border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none" />
                     ) : (
-                      <p className="text-sm text-ink-700 cursor-pointer hover:bg-brand-tealTint rounded px-1 -mx-1 py-0.5 transition-colors"
-                        onDoubleClick={() => { setEditingField("country"); setFieldDraft(company?.location_country ?? ""); }}>
-                        {company?.location_country || <span className="text-slate-300 italic text-xs">Country</span>}
+                      <p className="text-sm text-slate-700 cursor-pointer hover:bg-blue-50 rounded px-1 -mx-1 py-0.5 transition-colors"
+                        onDoubleClick={() => { setEditingField("country"); setFieldDraft(company.location_country ?? ""); }}>
+                        {company.location_country || <span className="text-slate-300 italic text-xs">Country</span>}
                       </p>
                     )}
                   </div>
                 </div>
               </div>
             </div>
-
-            {/* Pitch deck */}
+            {company.description && (
+              <div className="px-5 py-4 border-b border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Description</p>
+                <p className="text-sm text-slate-600 leading-relaxed">{company.description}</p>
+              </div>
+            )}
+            {company.tags && company.tags.length > 0 && (
+              <div className="px-5 py-4 border-b border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+                  <Tag size={10} /> Tags
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {company.tags.map(t => (
+                    <span key={t} className="text-xs px-2 py-0.5 bg-violet-50 text-violet-700 rounded-full border border-violet-200">{t}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            </>
+            ) : null}
+            {/* Pitch Deck */}
             {!createMode && company && (
               <div className="px-5 py-4 border-b border-slate-100">
-                <p className="text-[10px] font-bold text-ink-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                   <FileText size={10} /> Pitch Deck
                 </p>
-                <input ref={deckInputRef} type="file" accept=".pdf,.pptx,.ppt,.key" className="hidden"
+                <input ref={deckInputRef} type="file" accept=".pdf,.pptx,.ppt,.key"
+                  className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleDeckUpload(f); e.target.value = ""; }} />
+
                 {deckUrl ? (
-                  <div className="flex items-center gap-2.5 p-3 bg-brand-tealTint border border-teal-200 rounded-xl">
-                    <FileText size={15} className="text-brand-teal flex-shrink-0" />
-                    <a href={deckUrl} target="_blank" rel="noopener noreferrer"
-                      className="text-xs text-brand-teal font-semibold hover:underline truncate flex-1">
-                      {deckName ?? "View Deck"}
-                    </a>
-                    <button onClick={() => deckInputRef.current?.click()}
-                      className="text-[10px] text-ink-500 hover:text-ink-700 border border-slate-200 bg-white rounded-lg px-2 py-1 transition-colors">
-                      Replace
-                    </button>
+                  /* ── Deck already uploaded ── */
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2.5 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <FileText size={15} className="text-blue-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <a href={deckUrl} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-blue-700 font-semibold hover:underline truncate block">
+                          {deckName ?? "View Deck"}
+                        </a>
+                        <p className="text-[10px] text-blue-400 mt-0.5">Click to open · PDF / PPTX</p>
+                      </div>
+                      <button onClick={() => deckInputRef.current?.click()}
+                        className="text-[10px] text-slate-500 hover:text-slate-700 border border-slate-200 bg-white rounded-lg px-2 py-1 flex-shrink-0 transition-colors">
+                        Replace
+                      </button>
+                    </div>
                   </div>
                 ) : (
+                  /* ── Drag & drop zone ── */
                   <div
                     onClick={() => !deckUploading && deckInputRef.current?.click()}
                     onDragOver={e => { e.preventDefault(); setDeckDragOver(true); }}
                     onDragLeave={() => setDeckDragOver(false)}
-                    onDrop={e => { e.preventDefault(); setDeckDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handleDeckUpload(f); }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      setDeckDragOver(false);
+                      const f = e.dataTransfer.files?.[0];
+                      if (f) handleDeckUpload(f);
+                    }}
                     className={cn(
-                      "flex flex-col items-center justify-center gap-2 py-6 rounded-xl border-2 border-dashed transition-all cursor-pointer select-none",
-                      deckUploading ? "border-brand-teal bg-brand-tealTint cursor-default"
-                        : deckDragOver ? "border-brand-teal bg-brand-tealTint scale-[1.01]"
-                        : "border-slate-200 bg-slate-50 hover:border-brand-teal hover:bg-brand-tealTint"
+                      "relative flex flex-col items-center justify-center gap-2 py-6 rounded-xl border-2 border-dashed transition-all cursor-pointer select-none",
+                      deckUploading
+                        ? "border-blue-300 bg-blue-50 cursor-default"
+                        : deckDragOver
+                        ? "border-blue-400 bg-blue-50 scale-[1.01]"
+                        : "border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50"
                     )}
                   >
                     {deckUploading ? (
-                      <><Loader2 size={20} className="text-brand-teal animate-spin" /><p className="text-xs text-brand-teal font-medium">Uploading…</p></>
+                      <>
+                        <Loader2 size={20} className="text-blue-500 animate-spin" />
+                        <p className="text-xs text-blue-600 font-medium">Uploading…</p>
+                      </>
+                    ) : deckDragOver ? (
+                      <>
+                        <Upload size={20} className="text-blue-500" />
+                        <p className="text-xs text-blue-600 font-semibold">Drop to upload</p>
+                      </>
                     ) : (
-                      <><Upload size={16} className="text-ink-500" />
-                      <p className="text-xs text-ink-700 font-medium">Drop deck or <span className="text-brand-teal">browse</span></p>
-                      <p className="text-[10px] text-ink-500">PDF, PPTX, PPT, KEY</p></>
+                      <>
+                        <div className="w-9 h-9 bg-white border border-slate-200 rounded-xl flex items-center justify-center shadow-sm">
+                          <Upload size={16} className="text-slate-400" />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-slate-600 font-medium">Drop deck here or <span className="text-blue-600">browse</span></p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">PDF, PPTX, PPT, KEY</p>
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
-                {deckError && <p className="text-[10px] text-danger mt-1.5">{deckError}</p>}
+                {deckError && <p className="text-[10px] text-red-500 mt-1.5 flex items-center gap-1"><X size={9}/>{deckError}</p>}
               </div>
             )}
 
-            {/* Contacts */}
             <div className="px-5 py-4">
-              <p className="text-[10px] font-bold text-ink-500 uppercase tracking-widest mb-3 flex items-center gap-1">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1">
                 <Users size={10} /> Contacts ({contacts.length})
               </p>
               {contacts.length === 0 ? (
@@ -1002,46 +1103,66 @@ function CompanyExpandPanel({
                 <div className="space-y-2">
                   {contacts.map(c => (
                     <button key={c.id} onClick={() => openContact(c)}
-                      className="w-full flex items-center gap-3 p-2.5 bg-slate-50 hover:bg-brand-tealTint hover:border-teal-200 border border-transparent rounded-lg transition-all text-left group">
+                      className="w-full flex items-center gap-3 p-2.5 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 border border-transparent rounded-lg transition-all text-left group">
                       <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
                         <span className="text-violet-600 text-[10px] font-bold">
                           {getInitials(`${c.first_name} ${c.last_name ?? ""}`)}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-ink-900 truncate group-hover:text-brand-teal">
+                        <p className="text-xs font-semibold text-slate-800 truncate group-hover:text-blue-700">
                           {c.first_name} {c.last_name}
+                          {c.is_primary_contact && (
+                            <span className="ml-1.5 text-[9px] text-blue-600 bg-blue-50 px-1 py-0.5 rounded">Primary</span>
+                          )}
                         </p>
-                        <p className="text-[10px] text-ink-500 truncate">{c.title ?? c.type}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[10px] text-slate-400 truncate">{c.title ?? c.type}</p>
+                          {c.last_contact_date && (
+                            <span className="text-[9px] text-slate-300 flex items-center gap-0.5 flex-shrink-0">
+                              <Clock size={8} /> {formatDate(c.last_contact_date)}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <ChevronRight size={11} className="text-slate-300 group-hover:text-brand-teal" />
+                      <div className="flex gap-1.5 text-slate-300 items-center">
+                        {c.email && <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="hover:text-blue-600 transition-colors"><Mail size={12} /></a>}
+                        {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="hover:text-blue-600 transition-colors"><ExternalLink size={12} /></a>}
+                        <ChevronRight size={11} className="text-slate-300 group-hover:text-blue-400 transition-colors" />
+                      </div>
                     </button>
                   ))}
+                  {contacts.length >= 5 && company && (
+                    <a href={`/crm/companies/${company.id}`} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1">
+                      View all contacts <ChevronRight size={11} />
+                    </a>
+                  )}
                 </div>
               )}
             </div>
           </div>
         )}
-
-        {/* Footer */}
         {company && !createMode && !selectedContact && (
-          <div className="px-5 py-4 border-t border-slate-200 space-y-2 sticky bottom-0 bg-white">
+          <div className="px-5 py-4 border-t border-slate-200 space-y-2">
             <a href={`/crm/companies/${company.id}`}
-              className="flex items-center justify-center gap-2 w-full py-2 bg-brand-teal hover:bg-brand-tealDark text-white text-sm font-medium rounded-lg transition-colors">
+              className="flex items-center justify-center gap-2 w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
               Open Full Profile <ChevronRight size={14} />
             </a>
             {confirmDelete ? (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-danger flex-1">Delete this company and unlink all contacts?</span>
-                <button onClick={() => setConfirmDelete(false)} className="text-xs px-2.5 py-1 border border-slate-200 rounded text-ink-500 hover:bg-slate-50">Cancel</button>
-                <Button variant="destructive" size="sm" onClick={handleDelete} isLoading={deleting}>
-                  <Trash2 size={10} /> Delete
-                </Button>
+                <span className="text-xs text-red-600 flex-1">Delete this company and unlink all contacts?</span>
+                <button onClick={() => setConfirmDelete(false)} className="text-xs px-2.5 py-1 border border-slate-200 rounded text-slate-500 hover:bg-slate-50">Cancel</button>
+                <button onClick={handleDelete} disabled={deleting}
+                  className="text-xs px-2.5 py-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded font-medium flex items-center gap-1">
+                  {deleting ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />} Delete
+                </button>
               </div>
             ) : (
-              <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)} className="w-full">
+              <button onClick={() => setConfirmDelete(true)}
+                className="flex items-center justify-center gap-1.5 w-full py-2 border border-red-200 text-red-500 hover:bg-red-50 text-sm font-medium rounded-lg transition-colors">
                 <Trash2 size={13} /> Delete Company
-              </Button>
+              </button>
             )}
           </div>
         )}
@@ -1050,86 +1171,11 @@ function CompanyExpandPanel({
   );
 }
 
-// ── Left list row (display-only, 48 px, no form state) ────────────────────────
+// ── ContactRow ────────────────────────────────────────────────────────────────
 
-const ListRow = memo(function ListRow({
-  contact,
-  selected,
-  checked,
-  onSelect,
-  onCheck,
-}: {
-  contact: PendingContact;
-  selected: boolean;
-  checked: boolean;
-  onSelect: () => void;
-  onCheck: (checked: boolean) => void;
-}) {
-  const initials = getInitials(`${contact.first_name ?? ""} ${contact.last_name ?? ""}`);
-  const hasRequired = !!(contact.type && contact.location_country);
-
-  return (
-    <div
-      role="option"
-      aria-selected={selected}
-      onClick={onSelect}
-      className={cn(
-        "h-12 flex items-center gap-2.5 px-3 cursor-pointer border-b border-slate-100 transition-colors",
-        selected ? "bg-brand-tealTint" : "hover:bg-slate-50"
-      )}
-    >
-      {/* Checkbox */}
-      <button
-        type="button"
-        aria-label={checked ? "Deselect contact" : "Select contact"}
-        onClick={e => { e.stopPropagation(); onCheck(!checked); }}
-        className="flex-shrink-0 text-ink-500 hover:text-brand-teal transition-colors"
-      >
-        {checked ? (
-          <CheckSquare size={14} className="text-brand-teal" />
-        ) : (
-          <Square size={14} />
-        )}
-      </button>
-
-      {/* Avatar */}
-      <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
-        <span className="text-violet-600 text-[10px] font-bold">{initials}</span>
-      </div>
-
-      {/* Name + meta */}
-      <div className="flex-1 min-w-0">
-        <p className={cn("text-xs font-semibold truncate", selected ? "text-brand-teal" : "text-ink-900")}>
-          {contact.first_name ?? ""} {contact.last_name ?? ""}
-        </p>
-        <p className="text-[10px] text-ink-500 truncate">
-          {contact.email ?? contact.company?.name ?? "—"}
-        </p>
-      </div>
-
-      {/* Ready indicator */}
-      <div
-        title={hasRequired ? "Ready to confirm" : "Missing type or country"}
-        className={cn(
-          "w-1.5 h-1.5 rounded-full flex-shrink-0",
-          hasRequired ? "bg-success" : "bg-slate-300"
-        )}
-      />
-    </div>
-  );
-});
-
-// ── Detail panel (single controlled form for selected contact) ─────────────────
-
-function ContactDetailPanel({
-  contact,
-  allCompanies,
-  onConfirmed,
-  onDiscarded,
-  onExpand,
-  onCompanyUpdated,
-  customCountries,
-  onAddCustomCountry,
+const ContactRow = memo(function ContactRow({
+  contact, allCompanies, onConfirmed, onDiscarded, onExpand,
+  onCompanyUpdated, customCountries, onAddCustomCountry,
 }: {
   contact: PendingContact;
   allCompanies: CompanyStub[];
@@ -1141,15 +1187,14 @@ function ContactDetailPanel({
   onAddCustomCountry: (country: string) => void;
 }) {
   const supabase = useMemo(() => createClient(), []);
-
-  const [firstName,    setFirstName]    = useState(contact.first_name ?? "");
-  const [lastName,     setLastName]     = useState(contact.last_name ?? "");
-  const [type,         setType]         = useState<string>(() => mapTypeToAdmin(contact.type));
-  const [title,        setTitle]        = useState(contact.title ?? "");
-  const [customTitle,  setCustomTitle]  = useState("");
-  const [companyId,    setCompanyId]    = useState(contact.company_id ?? "");
-  const [city,         setCity]         = useState(contact.location_city ?? "");
-  const [country,      setCountry]      = useState(() => {
+  const [firstName, setFirstName] = useState(contact.first_name ?? "");
+  const [lastName,  setLastName]  = useState(contact.last_name ?? "");
+  const [type,      setType]      = useState<string>(() => mapTypeToAdmin(contact.type));
+  const [title,     setTitle]     = useState(contact.title ?? "");
+  const [customTitle, setCustomTitle] = useState("");
+  const [companyId, setCompanyId] = useState(contact.company_id ?? "");
+  const [city,      setCity]      = useState(contact.location_city ?? "");
+  const [country,   setCountry]   = useState(() => {
     const c = contact.location_country ?? "";
     return (COUNTRY_OPTIONS as readonly string[]).includes(c) ? c : (c ? "__custom__" : "");
   });
@@ -1161,34 +1206,18 @@ function ContactDetailPanel({
   const [extraCompanies, setExtraCompanies] = useState<CompanyStub[]>([]);
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [createPanelName, setCreatePanelName] = useState("");
-  const [createPanelDefaultType, setCreatePanelDefaultType] = useState("startup");
-
-  // Reset form when selected contact changes
-  useEffect(() => {
-    setFirstName(contact.first_name ?? "");
-    setLastName(contact.last_name ?? "");
-    setType(mapTypeToAdmin(contact.type));
-    setTitle(contact.title ?? "");
-    setCustomTitle("");
-    setCompanyId(contact.company_id ?? "");
-    setCity(contact.location_city ?? "");
-    const c = contact.location_country ?? "";
-    setCountry((COUNTRY_OPTIONS as readonly string[]).includes(c) ? c : (c ? "__custom__" : ""));
-    setCustomCountry((COUNTRY_OPTIONS as readonly string[]).includes(c) ? "" : c);
-    setExtraCompanies([]);
-    setBusy(false);
-  }, [contact.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mergedCompanies = useMemo(
     () => (extraCompanies.length ? [...extraCompanies, ...allCompanies] : allCompanies),
     [extraCompanies, allCompanies]
   );
 
+  const [createPanelDefaultType, setCreatePanelDefaultType] = useState("startup");
   const handleCreateCompany = useCallback(async (name: string, coType: string): Promise<string | null> => {
     setCreatePanelName(name);
     setCreatePanelDefaultType(coType);
     setShowCreatePanel(true);
-    return null;
+    return null; // panel will handle creation
   }, []);
 
   const handleCompanyCreated = useCallback(async (newId: string) => {
@@ -1203,16 +1232,17 @@ function ContactDetailPanel({
 
   const resolvedTitle   = title === "Other" ? customTitle : title;
   const resolvedCountry = country === "__custom__" ? customCountry : country;
-  const canConfirm      = !!type && !!resolvedCountry && !busy;
 
   async function confirm() {
-    if (!canConfirm) return;
+    if (!type || !resolvedCountry) return;
     setBusy(true);
+    const resolvedCompanyId = companyId || null;
+    // Persist custom country for future dropdowns
     if (country === "__custom__" && customCountry.trim()) {
       onAddCustomCountry(customCountry.trim());
     }
-    const resolvedCompanyId = companyId || null;
-
+    // Save contact — type is already the display label (e.g. "Advisor / KOL")
+    // which matches the DB contacts_type_check constraint exactly.
     const contactSave = supabase.from("contacts").update({
       first_name:       firstName.trim() || contact.first_name,
       last_name:        lastName.trim()  || contact.last_name,
@@ -1224,224 +1254,148 @@ function ContactDetailPanel({
       status:           "active",
     }).eq("id", contact.id);
 
+    // Sync company type: use the type shown in the badge (the company's current
+    // type from mergedCompanies, which was just re-fetched from DB on mount).
+    // Only update if the badge type and the contact-type mapping agree, OR if
+    // the company has no type / type is "other" (catch-all fallback).
     const companySave = (() => {
       if (!resolvedCompanyId) return null;
       const co = mergedCompanies.find(c => c.id === resolvedCompanyId);
       if (!co) return null;
       const mappedType = CONTACT_TO_COMPANY_TYPE[type as ContactTypeStr];
+      // Always write the company type back — the badge reflects the live DB value
+      // (re-fetched client-side on mount), so this keeps the DB in sync with what
+      // the user sees. Only skip if no meaningful type can be determined.
       const typeToWrite = co.type && co.type !== "other" ? co.type : (mappedType ?? null);
-      if (!typeToWrite || typeToWrite === co.type) return null;
+      if (!typeToWrite || typeToWrite === co.type) return null; // already correct
       return supabase.from("companies").update({ type: typeToWrite }).eq("id", resolvedCompanyId);
     })();
 
-    const [{ error: ce }] = await Promise.all([contactSave, companySave ?? Promise.resolve({ error: null })]);
-    if (ce) { setBusy(false); return; }
+    const [{ error: ce }, coResult] = await Promise.all([contactSave, companySave ?? Promise.resolve({ error: null })]);
+    if (ce) {
+      console.error("[confirm] contact save error:", ce);
+      setBusy(false);
+      return; // Don't dismiss — let the user see the row is still there and retry
+    }
+    if ((coResult as { error: unknown } | null)?.error) {
+      console.error("[confirm] company save error:", (coResult as { error: unknown }).error);
+    }
+    // Only dismiss from the queue after a confirmed successful save
     onConfirmed(contact.id);
   }
 
   async function discard() {
     setBusy(true);
+    // Dismiss immediately — no waiting for network
     onDiscarded(contact.id);
-    await supabase.from("contacts").update({ status: "archived" }).eq("id", contact.id);
+    const { error } = await supabase.from("contacts").update({ status: "archived" }).eq("id", contact.id);
+    if (error) console.error("[discard] update failed:", error);
   }
 
+  const initials = getInitials(`${firstName} ${lastName}`);
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Contact header */}
-      <div className="px-5 pt-5 pb-4 border-b border-slate-100">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
-            <span className="text-violet-600 text-sm font-bold">
-              {getInitials(`${firstName} ${lastName}`)}
-            </span>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-ink-900">
-              {firstName || contact.first_name} {lastName || contact.last_name}
-            </p>
-            <p className="text-xs text-ink-500">{contact.email ?? "No email"}</p>
-          </div>
-        </div>
+    <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2.5 hover:border-slate-300 hover:bg-slate-50/40 transition-all">
 
-        {/* Name row */}
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div>
-            <label htmlFor={`fn-${contact.id}`} className="block text-xs font-medium text-ink-500 mb-1">
-              First name
-            </label>
-            <input
-              id={`fn-${contact.id}`}
-              value={firstName}
-              onChange={e => setFirstName(e.target.value)}
-              className={INPUT_CLS}
-            />
-          </div>
-          <div>
-            <label htmlFor={`ln-${contact.id}`} className="block text-xs font-medium text-ink-500 mb-1">
-              Last name
-            </label>
-            <input
-              id={`ln-${contact.id}`}
-              value={lastName}
-              onChange={e => setLastName(e.target.value)}
-              className={INPUT_CLS}
-            />
-          </div>
-        </div>
+      {/* Avatar */}
+      <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+        <span className="text-violet-600 text-[10px] font-bold">{initials}</span>
+      </div>
 
-        {/* Email (read-only) */}
-        <div className="mb-3">
-          <label className="block text-xs font-medium text-ink-500 mb-1">Email</label>
-          <div className={cn(INPUT_CLS, "flex items-center gap-2 bg-slate-50 text-ink-500 cursor-default")}>
-            <Mail size={13} className="flex-shrink-0 text-ink-500" />
-            <span className="truncate text-sm">{contact.email ?? "—"}</span>
-          </div>
+      {/* Name */}
+      <div className="w-48 flex-shrink-0 flex gap-1">
+        <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First"
+          className={cn(INPUT_CLS, "w-1/2")} />
+        <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last"
+          className={cn(INPUT_CLS, "w-1/2")} />
+      </div>
+
+      {/* Email — fixed, not editable */}
+      <div className="w-56 flex-shrink-0">
+        <div className={cn(INPUT_CLS, "flex items-center gap-1 bg-slate-50 text-slate-500 cursor-default overflow-hidden")}>
+          <Mail size={10} className="flex-shrink-0 text-slate-400" />
+          <span className="truncate text-[11px]">{contact.email ?? "—"}</span>
         </div>
       </div>
 
-      {/* Scrollable fields */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-        {/* Type */}
-        <div>
-          <label htmlFor={`type-${contact.id}`} className="block text-xs font-medium text-ink-500 mb-1">
-            Type <span className="text-danger">*</span>
-          </label>
-          <select
-            id={`type-${contact.id}`}
-            value={type}
-            onChange={e => setType(e.target.value)}
-            className={cn(INPUT_CLS, "cursor-pointer")}
-          >
-            {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
+      {/* Type */}
+      <select value={type} onChange={e => setType(e.target.value)}
+        className={cn(INPUT_CLS, "w-36 flex-shrink-0 cursor-pointer")}>
+        {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
 
-        {/* Title */}
-        <div>
-          <label htmlFor={`title-${contact.id}`} className="block text-xs font-medium text-ink-500 mb-1">
-            Title
-          </label>
-          <select
-            id={`title-${contact.id}`}
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            className={cn(INPUT_CLS, "cursor-pointer")}
-          >
-            <option value="">— Select title —</option>
-            {TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-          {title === "Other" && (
-            <input
-              value={customTitle}
-              onChange={e => setCustomTitle(e.target.value)}
-              placeholder="Enter title"
-              className={cn(INPUT_CLS, "mt-2")}
-              aria-label="Custom title"
-            />
-          )}
-        </div>
-
-        {/* Company */}
-        <div>
-          <label className="block text-xs font-medium text-ink-500 mb-1">Company</label>
-          <CompanyDropdown
-            contactEmail={contact.email}
-            allCompanies={mergedCompanies}
-            value={companyId}
-            placeholder={contact.company?.name || "Select company…"}
-            onChange={setCompanyId}
-            onExpand={onExpand}
-            onCreateNew={handleCreateCompany}
-            defaultCompanyType={CONTACT_TO_COMPANY_TYPE[type as ContactTypeStr] ?? "startup"}
-            onTypeChange={async (coId, newType) => {
-              const sb = createClient();
-              const { error } = await sb.from("companies").update({ type: newType }).eq("id", coId);
-              if (!error) {
-                setExtraCompanies(prev => prev.map(c => c.id === coId ? { ...c, type: newType } : c));
-                onCompanyUpdated(coId, { type: newType });
-              }
-            }}
-          />
-        </div>
-
-        {/* City + Country */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor={`city-${contact.id}`} className="block text-xs font-medium text-ink-500 mb-1">
-              City
-            </label>
-            <input
-              id={`city-${contact.id}`}
-              value={city}
-              onChange={e => setCity(e.target.value)}
-              placeholder="City"
-              className={INPUT_CLS}
-            />
-          </div>
-          <div>
-            <label htmlFor={`country-${contact.id}`} className="block text-xs font-medium text-ink-500 mb-1">
-              Country <span className="text-danger">*</span>
-            </label>
-            <select
-              id={`country-${contact.id}`}
-              value={country}
-              onChange={e => setCountry(e.target.value)}
-              className={cn(INPUT_CLS, "cursor-pointer")}
-            >
-              <option value="">Select…</option>
-              {[
-                ...COUNTRY_OPTIONS,
-                ...customCountries.filter(c => !(COUNTRY_OPTIONS as readonly string[]).includes(c)),
-              ]
-                .sort()
-                .map(c => <option key={c} value={c}>{c}</option>)}
-              <option value="__custom__">Other…</option>
-            </select>
-            {country === "__custom__" && (
-              <input
-                value={customCountry}
-                onChange={e => setCustomCountry(e.target.value)}
-                placeholder="Country name"
-                className={cn(INPUT_CLS, "mt-2")}
-                aria-label="Custom country name"
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Added date */}
-        <p className="text-xs text-ink-500">
-          Added {formatDate(contact.created_at)}
-        </p>
+      {/* Title */}
+      <div className="w-32 flex-shrink-0 space-y-1">
+        <select value={title} onChange={e => setTitle(e.target.value)}
+          className={cn(INPUT_CLS, "cursor-pointer")}>
+          <option value="">— Title —</option>
+          {TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        {title === "Other" && (
+          <input value={customTitle} onChange={e => setCustomTitle(e.target.value)}
+            placeholder="Custom title"
+            className={cn(INPUT_CLS)} />
+        )}
       </div>
+
+      {/* Company */}
+      <div className="w-48 flex-shrink-0">
+        <CompanyDropdown
+          contactEmail={contact.email}
+          allCompanies={mergedCompanies}
+          value={companyId}
+          placeholder={contact.company?.name || "Select company…"}
+          onChange={setCompanyId}
+          onExpand={onExpand}
+          onCreateNew={handleCreateCompany}
+          defaultCompanyType={CONTACT_TO_COMPANY_TYPE[type as ContactTypeStr] ?? "startup"}
+          onTypeChange={async (coId, newType) => {
+            // Update the company type directly in the DB and refresh local state
+            const supabase = createClient();
+            const { error } = await supabase.from("companies").update({ type: newType }).eq("id", coId);
+            if (!error) {
+              setExtraCompanies(prev => prev.map(c => c.id === coId ? { ...c, type: newType } : c));
+              onCompanyUpdated(coId, { type: newType });
+            }
+          }}
+        />
+      </div>
+
+      {/* City */}
+      <input value={city} onChange={e => setCity(e.target.value)} placeholder="City"
+        className={cn(INPUT_CLS, "w-20 flex-shrink-0")} />
+
+      {/* Country */}
+      <div className="w-28 flex-shrink-0 space-y-1">
+        <select value={country} onChange={e => setCountry(e.target.value)}
+          className={cn(INPUT_CLS, "cursor-pointer")}>
+          <option value="">Country</option>
+          {[...COUNTRY_OPTIONS, ...customCountries.filter(c => !(COUNTRY_OPTIONS as readonly string[]).includes(c))].sort().map(c => <option key={c} value={c}>{c}</option>)}
+          <option value="__custom__">Other (type below)…</option>
+        </select>
+        {country === "__custom__" && (
+          <input value={customCountry} onChange={e => setCustomCountry(e.target.value)}
+            placeholder="Country name"
+            className={cn(INPUT_CLS)} />
+        )}
+      </div>
+
+      {/* Added date */}
+      <span className="text-[10px] text-slate-400 flex-shrink-0 w-20 truncate text-right">
+        {formatDate(contact.created_at)}
+      </span>
 
       {/* Actions */}
-      <div className="px-5 py-4 border-t border-slate-200 flex gap-2">
-        <Button
-          onClick={confirm}
-          disabled={!canConfirm}
-          isLoading={busy}
-          className="flex-1"
-        >
-          <Check size={14} /> Confirm
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => onDiscarded(contact.id)}
-          disabled={busy}
-          className="px-3"
-          title="Skip to next"
-        >
-          Skip
-        </Button>
-        <IconButton
-          aria-label="Reject contact"
-          variant="destructive"
-          onClick={discard}
-          disabled={busy}
-        >
-          <X size={14} />
-        </IconButton>
+      <div className="flex gap-1 flex-shrink-0 ml-auto">
+        <button onClick={confirm} disabled={busy || !type || !resolvedCountry}
+          className="flex items-center gap-1 px-2.5 h-[28px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium rounded transition-colors">
+          {busy ? <Loader2 size={10} className="animate-spin" /> : <Check size={11} />}
+          Confirm
+        </button>
+        <button onClick={discard} disabled={busy} title="Discard"
+          className="flex items-center justify-center w-7 h-[28px] border border-red-200 hover:bg-red-50 disabled:opacity-50 text-red-400 rounded transition-colors">
+          <X size={12} />
+        </button>
       </div>
 
       {showCreatePanel && (
@@ -1457,76 +1411,78 @@ function ContactDetailPanel({
       )}
     </div>
   );
+});
+
+// ── SortHeader ─────────────────────────────────────────────────────────────────
+
+function SortHeader({ label, sortKey, active, dir, onSort, className }: {
+  label: string; sortKey: SortKey; active: boolean; dir: SortDir;
+  onSort: (k: SortKey) => void; className?: string;
+}) {
+  return (
+    <button onClick={() => onSort(sortKey)}
+      className={cn("flex items-center gap-0.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors", className)}>
+      {label}
+      {active
+        ? (dir === "asc" ? <ChevronUp size={10} className="text-blue-500" /> : <ChevronDown size={10} className="text-blue-500" />)
+        : <ChevronDown size={10} className="opacity-30" />}
+    </button>
+  );
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export function PendingContactsClient({
-  initialContacts,
-  companies,
-  total,
-  cursor,
-  pageSize,
-  initialQuery,
-}: Props) {
-  const router     = useRouter();
-  const pathname   = usePathname();
-  const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
+const LS_EXCLUSIONS_KEY  = "pending_contacts_exclusions";
+const LS_COUNTRIES_KEY   = "pending_contacts_custom_countries";
 
-  const [contacts, setContacts]           = useState<PendingContact[]>(initialContacts);
-  const [totalCount, setTotalCount]       = useState(total);
-  const [companiesState, setCompaniesState] = useState<CompanyStub[]>(companies);
-  const [selectedId, setSelectedId]       = useState<string | null>(
-    initialContacts[0]?.id ?? null
-  );
-  const [checkedIds, setCheckedIds]       = useState<Set<string>>(new Set());
+export function PendingContactsClient({ initialContacts, companies }: Props) {
+  const [contacts, setContacts]               = useState<PendingContact[]>(initialContacts);
+  const [companiesState, setCompaniesState]   = useState<CompanyStub[]>(companies);
   const [expandedCompanyId, setExpandedCompanyId] = useState<string | null>(null);
   const [customCountries, setCustomCountries] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(LS_COUNTRIES_KEY) ?? "[]") as string[]; } catch { return []; }
   });
-  const [exclusions, setExclusions]       = useState<string[]>(() => {
+  const [sortKey, setSortKey]                 = useState<SortKey>("added");
+  const [sortDir, setSortDir]                 = useState<SortDir>("desc");
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [exclusions, setExclusions]           = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(LS_EXCLUSIONS_KEY) ?? "[]") as string[]; } catch { return []; }
   });
-  const [searchValue, setSearchValue]     = useState(initialQuery);
-  const [bulkWorking, setBulkWorking]     = useState(false);
-  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [newExclusion, setNewExclusion]       = useState("");
 
-  const listParentRef = useRef<HTMLDivElement>(null);
-
-  // Refresh companies from DB on mount (badges may be stale from SSR snapshot)
+  // Re-fetch companies client-side on mount so badges always show the current
+  // DB type, not the SSR snapshot (which may be stale if Admin→Companies was
+  // updated after the page rendered).
   useEffect(() => {
     const supabase = createClient();
-    supabase.from("companies").select("id, name, type, website").order("name").limit(10000)
-      .then(({ data }) => { if (data?.length) setCompaniesState(data as CompanyStub[]); });
+    supabase
+      .from("companies")
+      .select("id, name, type, website")
+      .order("name")
+      .limit(10000)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setCompaniesState(data as CompanyStub[]);
+        }
+      });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounced server search via router navigation
-  function handleSearchChange(val: string) {
-    setSearchValue(val);
-    if (searchDebounce.current) clearTimeout(searchDebounce.current);
-    searchDebounce.current = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (val) params.set("q", val); else params.delete("q");
-      params.set("cursor", "0");
-      startTransition(() => router.push(`${pathname}?${params.toString()}`));
-    }, 250);
+  // Persist exclusions to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem(LS_EXCLUSIONS_KEY, JSON.stringify(exclusions));
+  }, [exclusions]);
+
+  function addExclusion() {
+    const word = newExclusion.trim().toLowerCase();
+    if (!word || exclusions.includes(word)) return;
+    setExclusions(prev => [...prev, word]);
+    setNewExclusion("");
+  }
+  function removeExclusion(word: string) {
+    setExclusions(prev => prev.filter(e => e !== word));
   }
 
-  function goToPage(newCursor: number) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("cursor", String(newCursor));
-    startTransition(() => router.push(`${pathname}?${params.toString()}`));
-  }
-
-  function setPageSize(size: number) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("pageSize", String(size));
-    params.set("cursor", "0");
-    startTransition(() => router.push(`${pathname}?${params.toString()}`));
-  }
-
-  // Apply email exclusion filter client-side
+  // Filter contacts by exclusion words
   const visibleContacts = useMemo(() => {
     if (!exclusions.length) return contacts;
     return contacts.filter(c => {
@@ -1535,59 +1491,31 @@ export function PendingContactsClient({
     });
   }, [contacts, exclusions]);
 
-  // Virtualizer
-  const rowVirtualizer = useVirtualizer({
-    count: visibleContacts.length,
-    getScrollElement: () => listParentRef.current,
-    estimateSize: () => 48,
-    overscan: 5,
-  });
+  const hiddenCount = contacts.length - visibleContacts.length;
 
-  // Keyboard navigation: arrow keys change selection
-  const listRef = useRef<HTMLDivElement>(null);
-  function handleListKeyDown(e: React.KeyboardEvent) {
-    const idx = visibleContacts.findIndex(c => c.id === selectedId);
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      const next = visibleContacts[idx + 1];
-      if (next) setSelectedId(next.id);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      const prev = visibleContacts[idx - 1];
-      if (prev) setSelectedId(prev.id);
-    }
-  }
-
-  // Auto-scroll selected row into view
-  useEffect(() => {
-    const idx = visibleContacts.findIndex(c => c.id === selectedId);
-    if (idx >= 0) rowVirtualizer.scrollToIndex(idx, { align: "auto" });
-  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Select all / none
-  const allChecked = checkedIds.size === visibleContacts.length && visibleContacts.length > 0;
-  function toggleAll() {
-    setCheckedIds(allChecked ? new Set() : new Set(visibleContacts.map(c => c.id)));
-  }
-
-  const handleConfirmed = useCallback((id: string) => {
-    setContacts(prev => {
-      const next = prev.filter(c => c.id !== id);
-      // Auto-advance selection
-      const oldIdx = prev.findIndex(c => c.id === id);
-      const nextContact = next[oldIdx] ?? next[oldIdx - 1] ?? null;
-      setSelectedId(nextContact?.id ?? null);
-      return next;
+  // Sort
+  const sortedContacts = useMemo(() => {
+    return [...visibleContacts].sort((a, b) => {
+      let av = "", bv = "";
+      if (sortKey === "name")    { av = `${a.first_name} ${a.last_name ?? ""}`.toLowerCase(); bv = `${b.first_name} ${b.last_name ?? ""}`.toLowerCase(); }
+      if (sortKey === "email")   { av = a.email ?? ""; bv = b.email ?? ""; }
+      if (sortKey === "type")    { av = a.type ?? ""; bv = b.type ?? ""; }
+      if (sortKey === "title")   { av = a.title ?? ""; bv = b.title ?? ""; }
+      if (sortKey === "country") { av = a.location_country ?? ""; bv = b.location_country ?? ""; }
+      if (sortKey === "added")   { av = a.created_at ?? ""; bv = b.created_at ?? ""; }
+      const cmp = av.localeCompare(bv);
+      return sortDir === "asc" ? cmp : -cmp;
     });
-    setTotalCount(n => n - 1);
-    setCheckedIds(prev => { const s = new Set(prev); s.delete(id); return s; });
-  }, []);
+  }, [visibleContacts, sortKey, sortDir]);
 
-  const handleDiscarded = useCallback((id: string) => {
-    handleConfirmed(id); // same removal + advance logic
-  }, [handleConfirmed]);
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  }
 
-  const handleExpand    = useCallback((id: string) => setExpandedCompanyId(id), []);
+  const handleConfirmed = useCallback((id: string) => { setContacts(prev => prev.filter(c => c.id !== id)); }, []);
+  const handleDiscarded = useCallback((id: string) => { setContacts(prev => prev.filter(c => c.id !== id)); }, []);
+  const handleExpand    = useCallback((id: string) => { setExpandedCompanyId(id); }, []);
 
   const handleCompanyUpdated = useCallback((id: string, updates: Partial<CompanyStub>) => {
     setCompaniesState(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
@@ -1603,236 +1531,120 @@ export function PendingContactsClient({
     });
   }, []);
 
-  // Bulk confirm
-  async function bulkConfirm() {
-    const ids = Array.from(checkedIds);
-    if (!ids.length) return;
-    setBulkWorking(true);
-    const supabase = createClient();
-    await supabase.rpc("confirm_contacts", { ids });
-    ids.forEach(id => handleConfirmed(id));
-    setCheckedIds(new Set());
-    setBulkWorking(false);
-  }
-
-  // Bulk reject
-  async function bulkReject() {
-    const ids = Array.from(checkedIds);
-    if (!ids.length) return;
-    setBulkWorking(true);
-    const supabase = createClient();
-    await supabase.rpc("reject_contacts", { ids });
-    ids.forEach(id => handleDiscarded(id));
-    setCheckedIds(new Set());
-    setBulkWorking(false);
-  }
-
-  // Export CSV
-  function exportCSV() {
-    const rows = visibleContacts.filter(c => checkedIds.size === 0 || checkedIds.has(c.id));
-    const headers = ["first_name","last_name","email","type","title","company","city","country","added"];
-    const csv = [
-      headers.join(","),
-      ...rows.map(c => [
-        c.first_name ?? "", c.last_name ?? "", c.email ?? "",
-        c.type ?? "", c.title ?? "", c.company?.name ?? "",
-        c.location_city ?? "", c.location_country ?? "",
-        formatDate(c.created_at),
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url; a.download = "pending-contacts.csv"; a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  const selectedContact = visibleContacts.find(c => c.id === selectedId) ?? null;
-
-  if (totalCount === 0 && !initialQuery) {
+  if (contacts.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <EmptyState
-          icon={<UserPlus className="h-7 w-7" />}
-          title="No new contacts"
-          description="Contacts missing a type or country appear here for review."
-        />
+        <div className="text-center text-slate-400">
+          <UserPlus size={40} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-medium">No new contacts</p>
+          <p className="text-xs mt-1">Contacts missing a type or country will appear here for review.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white flex-shrink-0 flex-wrap gap-y-2">
-        {/* Search */}
-        <div className="relative flex-1 min-w-48">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-500 pointer-events-none" />
-          <input
-            value={searchValue}
-            onChange={e => handleSearchChange(e.target.value)}
-            placeholder="Search name, email…"
-            aria-label="Search contacts"
-            className="h-9 w-full pl-9 pr-3 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-teal/40 focus:border-brand-teal"
-          />
-          {isPending && <Loader2 size={12} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-ink-500" />}
-        </div>
+    <div className="flex-1 overflow-auto p-4">
 
-        {/* Bulk actions (shown when contacts are checked) */}
-        {checkedIds.size > 0 && (
-          <>
-            <Button onClick={bulkConfirm} isLoading={bulkWorking} size="sm">
-              <Check size={13} /> Confirm {checkedIds.size}
-            </Button>
-            <Button variant="destructive" size="sm" onClick={bulkReject} isLoading={bulkWorking}>
-              <X size={13} /> Reject {checkedIds.size}
-            </Button>
-          </>
-        )}
-
-        <Button variant="secondary" size="sm" onClick={exportCSV}>
-          <Download size={13} /> Export CSV
-        </Button>
-
-        {/* Page size selector */}
-        <div className="flex items-center gap-1.5 text-xs text-ink-500">
-          <span>Show</span>
-          <select
-            value={pageSize}
-            onChange={e => setPageSize(Number(e.target.value))}
-            aria-label="Contacts per page"
-            className="h-8 border border-slate-200 rounded-md px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-teal/40 cursor-pointer"
-          >
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-          <span>of {totalCount}</span>
-        </div>
-      </div>
-
-      {/* Two-column body */}
-      <div className="flex-1 flex min-h-0">
-        {/* LEFT: virtualized list */}
-        <div className="w-72 flex-shrink-0 border-r border-slate-200 flex flex-col min-h-0">
-          {/* List header */}
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50 flex-shrink-0">
-            <button
-              type="button"
-              aria-label={allChecked ? "Deselect all" : "Select all"}
-              onClick={toggleAll}
-              className="text-ink-500 hover:text-brand-teal transition-colors"
-            >
-              {allChecked ? <CheckSquare size={14} className="text-brand-teal" /> : <Square size={14} />}
-            </button>
-            <span className="text-xs text-ink-500 flex-1">
-              {visibleContacts.length} contact{visibleContacts.length !== 1 ? "s" : ""}
-              {checkedIds.size > 0 && ` · ${checkedIds.size} selected`}
-            </span>
-          </div>
-
-          {/* Scroll container */}
-          <div
-            ref={listParentRef}
-            className="flex-1 overflow-y-auto"
-            role="listbox"
-            aria-label="Pending contacts"
-            tabIndex={0}
-            onKeyDown={handleListKeyDown}
-          >
-            <div
-              style={{ height: rowVirtualizer.getTotalSize(), position: "relative" }}
-            >
-              {rowVirtualizer.getVirtualItems().map(virtualRow => {
-                const contact = visibleContacts[virtualRow.index];
-                return (
-                  <div
-                    key={contact.id}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                  >
-                    <ListRow
-                      contact={contact}
-                      selected={selectedId === contact.id}
-                      checked={checkedIds.has(contact.id)}
-                      onSelect={() => setSelectedId(contact.id)}
-                      onCheck={checked => {
-                        setCheckedIds(prev => {
-                          const s = new Set(prev);
-                          checked ? s.add(contact.id) : s.delete(contact.id);
-                          return s;
-                        });
-                      }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Pagination controls */}
-          {totalCount > pageSize && (
-            <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100 bg-slate-50 flex-shrink-0 text-xs text-ink-500">
-              <button
-                disabled={cursor === 0}
-                onClick={() => goToPage(Math.max(0, cursor - pageSize))}
-                className="disabled:opacity-30 hover:text-brand-teal transition-colors"
-              >
-                Prev
-              </button>
-              <span>{cursor + 1}–{Math.min(cursor + pageSize, totalCount)} of {totalCount}</span>
-              <button
-                disabled={cursor + pageSize >= totalCount}
-                onClick={() => goToPage(cursor + pageSize)}
-                className="disabled:opacity-30 hover:text-brand-teal transition-colors"
-              >
-                Next
-              </button>
-            </div>
+      {/* Banner + controls */}
+      <div className="mb-3 flex items-center gap-3 flex-wrap">
+        <div className="flex-1 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700 flex items-center gap-2">
+          <span className="font-semibold">{visibleContacts.length} contact{visibleContacts.length !== 1 ? "s" : ""}</span>
+          <span>need enrichment. Fill in the fields then click <strong>Confirm</strong>.</span>
+          {hiddenCount > 0 && (
+            <span className="ml-auto text-slate-500 italic">{hiddenCount} hidden by email filter</span>
           )}
         </div>
+        <button onClick={() => setShowFilterPanel(v => !v)}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors",
+            showFilterPanel
+              ? "bg-blue-600 border-blue-600 text-white"
+              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+          )}>
+          <SlidersHorizontal size={12} />
+          Email Filter {exclusions.length > 0 && `(${exclusions.length})`}
+        </button>
+      </div>
 
-        {/* RIGHT: detail panel */}
-        <div className="flex-1 min-w-0 overflow-hidden">
-          {selectedContact ? (
-            <ContactDetailPanel
-              key={selectedContact.id}
-              contact={selectedContact}
-              allCompanies={companiesState}
-              onConfirmed={handleConfirmed}
-              onDiscarded={handleDiscarded}
-              onExpand={handleExpand}
-              onCompanyUpdated={handleCompanyUpdated}
-              customCountries={customCountries}
-              onAddCustomCountry={handleAddCustomCountry}
+      {/* Email exclusion filter panel */}
+      {showFilterPanel && (
+        <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-amber-800 mb-0.5">Exclude emails containing these words</p>
+            <p className="text-[11px] text-amber-600">Contacts whose email address contains any of these words will be hidden from this list. Case-insensitive.</p>
+          </div>
+
+          {/* Existing exclusion tags */}
+          {exclusions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {exclusions.map(word => (
+                <span key={word} className="flex items-center gap-1 px-2 py-1 bg-white border border-amber-300 rounded-lg text-xs text-amber-800 font-mono">
+                  {word}
+                  <button onClick={() => removeExclusion(word)} className="text-amber-400 hover:text-red-500 transition-colors">
+                    <Trash2 size={10} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Add new exclusion */}
+          <div className="flex gap-2">
+            <input
+              value={newExclusion}
+              onChange={e => setNewExclusion(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && addExclusion()}
+              placeholder="e.g. info, marketing, newsletter, noreply…"
+              className="flex-1 h-[28px] text-xs border border-amber-300 rounded-lg px-3 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400 text-slate-700 placeholder:text-slate-400"
             />
-          ) : (
-            <div className="flex items-center justify-center h-full text-ink-500">
-              <EmptyState
-                icon={<UserPlus className="h-7 w-7" />}
-                title={totalCount === 0 ? "All caught up" : "Select a contact"}
-                description={
-                  totalCount === 0
-                    ? "No pending contacts remain."
-                    : "Click a name on the left to review it."
-                }
-              />
-            </div>
-          )}
+            <button onClick={addExclusion} disabled={!newExclusion.trim()}
+              className="flex items-center gap-1 px-3 h-[28px] bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors">
+              <Plus size={11} /> Add
+            </button>
+          </div>
+
+          <p className="text-[10px] text-amber-500">
+            Common exclusions: <button onClick={() => { const common = ["info", "marketing", "newsletter", "noreply", "no-reply", "donotreply", "notifications", "updates", "alerts", "bounce", "support", "hello", "contact"]; setExclusions(prev => [...prev, ...common.filter(w => !prev.includes(w))]); }} className="underline hover:text-amber-700">Add common spam patterns</button>
+          </p>
         </div>
+      )}
+
+      {/* Column headers */}
+      <div className="flex items-center gap-2 px-3 mb-1">
+        <div className="w-7 flex-shrink-0" />
+        <SortHeader label="Name / Contact" sortKey="name"    active={sortKey==="name"}    dir={sortDir} onSort={handleSort} className="w-48 flex-shrink-0" />
+        <SortHeader label="Email"          sortKey="email"   active={sortKey==="email"}   dir={sortDir} onSort={handleSort} className="w-56 flex-shrink-0" />
+        <SortHeader label="Type *"         sortKey="type"    active={sortKey==="type"}    dir={sortDir} onSort={handleSort} className="w-36 flex-shrink-0" />
+        <SortHeader label="Title"          sortKey="title"   active={sortKey==="title"}   dir={sortDir} onSort={handleSort} className="w-32 flex-shrink-0" />
+        <div className="w-48 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Company</div>
+        <div className="w-20 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">City</div>
+        <SortHeader label="Country *"      sortKey="country" active={sortKey==="country"} dir={sortDir} onSort={handleSort} className="w-28 flex-shrink-0" />
+        <SortHeader label="Added"          sortKey="added"   active={sortKey==="added"}   dir={sortDir} onSort={handleSort} className="w-20 flex-shrink-0 justify-end" />
       </div>
 
-      {/* Company expand drawer */}
+      {/* Rows */}
+      <div className="space-y-1">
+        {sortedContacts.map(c => (
+          <ContactRow
+            key={c.id}
+            contact={c}
+            allCompanies={companiesState}
+            onConfirmed={handleConfirmed}
+            onDiscarded={handleDiscarded}
+            onExpand={handleExpand}
+            onCompanyUpdated={handleCompanyUpdated}
+            customCountries={customCountries}
+            onAddCustomCountry={handleAddCustomCountry}
+          />
+        ))}
+      </div>
+
       {expandedCompanyId && (
         <CompanyExpandPanel
           companyId={expandedCompanyId}
           onClose={() => setExpandedCompanyId(null)}
-          onDeleted={id => {
+          onDeleted={(id) => {
             setContacts(prev => prev.map(c => c.company_id === id ? { ...c, company_id: null, company: undefined } : c));
             setExpandedCompanyId(null);
           }}
