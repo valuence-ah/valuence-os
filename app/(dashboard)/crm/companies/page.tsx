@@ -14,7 +14,7 @@ export default async function AllCompaniesPage() {
     supabase
       .from("companies")
       .select("*")
-      .order("updated_at", { ascending: false })
+      .order("name", { ascending: true })
       .limit(10000) as unknown as Promise<{ data: Company[] | null; error: unknown }>,
     // Fetch active contacts with names so we can show avatar icons per company
     supabase

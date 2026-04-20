@@ -3385,70 +3385,74 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       )}
 
       <style>{`
-        /* ── react-data-grid custom theming ── */
+        /* ── react-data-grid — Valuence OS light theme ── */
         .admin-grid .rdg {
           font-size: 12px;
           font-family: ui-sans-serif, system-ui, sans-serif;
-          border: none;
-          --rdg-header-background-color: #1e293b;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          overflow: hidden;
+          --rdg-header-background-color: #f8fafc;
           --rdg-header-row-height: 36px;
-          --rdg-row-height: 32px;
-          --rdg-selection-color: #3b82f6;
+          --rdg-row-height: 34px;
+          --rdg-selection-color: #0D3D38;
           --rdg-font-size: 12px;
           --rdg-color: #1e293b;
-          --rdg-border-color: #e2e8f0;
+          --rdg-border-color: #f1f5f9;
           --rdg-summary-border-color: #e2e8f0;
           --rdg-background-color: #fff;
-          --rdg-row-hover-background-color: #f0f9ff;
-          --rdg-checkbox-color: #3b82f6;
-          --rdg-checkbox-focus-color: #2563eb;
-          --rdg-checkbox-disabled-border-color: #94a3b8;
-          --rdg-checkbox-disabled-background-color: #e2e8f0;
+          --rdg-row-hover-background-color: #f8fafc;
+          --rdg-checkbox-color: #0D3D38;
+          --rdg-checkbox-focus-color: #0D3D38;
+          --rdg-checkbox-disabled-border-color: #cbd5e1;
+          --rdg-checkbox-disabled-background-color: #f1f5f9;
           --rdg-cell-frozen-box-shadow: 2px 0 4px rgba(0,0,0,0.06);
         }
         .admin-grid .rdg-header-row {
-          background: #1e293b;
-          color: #fff;
-          font-weight: 600;
+          background: #f8fafc;
+          color: #64748b;
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.03em;
-          font-size: 11px;
+          letter-spacing: 0.05em;
+          font-size: 10px;
+          border-bottom: 1px solid #e2e8f0;
         }
         .admin-grid .rdg-header-row .rdg-cell {
-          border-right-color: #334155;
-          border-bottom-color: #334155;
+          border-right-color: #e2e8f0;
+          border-bottom-color: #e2e8f0;
           padding: 0;
         }
         .admin-grid .rdg-header-cell-content {
           width: 100%;
           box-sizing: border-box;
         }
-        .admin-grid .rdg-row:nth-child(even) {
-          background-color: #f8fafc;
-        }
-        .admin-grid .rdg-row:nth-child(odd) {
-          background-color: #ffffff;
+        .admin-grid .rdg-row {
+          border-bottom: 1px solid #f1f5f9;
         }
         .admin-grid .rdg-row:hover {
-          background-color: #eff6ff !important;
+          background-color: #f8fafc !important;
         }
         .admin-grid .rdg-row[aria-selected="true"] {
-          background-color: #dbeafe !important;
+          background-color: #f0fdfa !important;
         }
         .admin-grid .rdg-cell {
-          padding: 0 8px;
+          padding: 0 10px;
           display: flex;
           align-items: center;
+          border-right: 1px solid #f1f5f9;
         }
         .admin-grid .rdg-cell[aria-selected="true"] {
-          outline: 2px solid #3b82f6;
+          outline: 2px solid #0D3D38;
           outline-offset: -2px;
         }
         .admin-grid .rdg-text-editor {
           font-size: 12px;
-          padding: 0 8px;
+          padding: 0 10px;
           background: #fff;
-          border: 2px solid #3b82f6;
+          border: 2px solid #0D3D38;
+        }
+        .admin-grid .rdg-sort-icon {
+          color: #0D3D38;
         }
       `}</style>
     </div>

@@ -149,7 +149,7 @@ ${content.slice(0, 14000)}`;
   let summaryText: string;
   try {
     const { text } = await generateText({
-      model:       anthropic("claude-3-5-haiku-20241022"),
+      model:       anthropic("claude-haiku-4-5"),
       prompt,
       maxTokens:   600,
       temperature: 0.3,

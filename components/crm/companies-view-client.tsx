@@ -189,14 +189,17 @@ function InlineTypePicker({ company, onUpdate }: { company: Company; onUpdate: (
         title="Click to change type"
         onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
       >
-        {typeList.map(t => (
-          <span key={t} className={cn(
-            "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium transition-opacity group-hover:opacity-75",
-            TYPE_BADGE[t] ?? "bg-slate-50 text-slate-600"
-          )}>
-            {TYPE_LABEL[t] ?? t}
-          </span>
-        ))}
+        {typeList.map(t => {
+          const tl = (t ?? "").toLowerCase();
+          return (
+            <span key={t} className={cn(
+              "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium transition-opacity group-hover:opacity-75",
+              TYPE_BADGE[tl] ?? "bg-slate-50 text-slate-600"
+            )}>
+              {TYPE_LABEL[tl] ?? t}
+            </span>
+          );
+        })}
       </div>
       {open && (
         <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 min-w-[170px] overflow-hidden">
@@ -265,11 +268,14 @@ const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
       const typeList = (c.types && c.types.length > 0) ? c.types : [c.type];
       return (
         <div className="flex flex-wrap gap-1">
-          {typeList.map(t => (
-            <span key={t} className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium", TYPE_BADGE[t] ?? "bg-slate-50 text-slate-600")}>
-              {TYPE_LABEL[t] ?? t}
-            </span>
-          ))}
+          {typeList.map(t => {
+            const tl = (t ?? "").toLowerCase();
+            return (
+              <span key={t} className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium", TYPE_BADGE[tl] ?? "bg-slate-50 text-slate-600")}>
+                {TYPE_LABEL[tl] ?? t}
+              </span>
+            );
+          })}
         </div>
       );
     },
@@ -641,8 +647,8 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const [sortKey, setSortKey] = useState<SortKey>(cfg.sortKeys[1]?.key ?? "name");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const [fStatus, setFStatus]   = useState("");
   const [fSector, setFSector]   = useState("");

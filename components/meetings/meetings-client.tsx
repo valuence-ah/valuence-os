@@ -401,28 +401,62 @@ export function MeetingsClient({
   const [sortKey, setSortKey]                       = useState<SortKey>("date");
   const [sortDir, setSortDir]                       = useState<SortDir>("desc");
   const [selectedIds, setSelectedIds]               = useState<Set<string>>(new Set());
-  const [colWidths, setColWidths]                   = useState<ColWidths>(DEFAULT_WIDTHS);
-  const selectAllRef                                = useRef<HTMLInputElement>(null);
-  const dragRef                                     = useRef<{ col: keyof ColWidths; startX: number; startW: number } | null>(null);
+  const COL_WIDTHS_KEY = "meetings_col_widths";
 
-  // Column resize via mouse drag
-  const startResize = useCallback((e: React.MouseEvent, col: keyof ColWidths) => {
-    e.preventDefault();
-    dragRef.current = { col, startX: e.clientX, startW: colWidths[col] };
-    const onMove = (ev: MouseEvent) => {
-      if (!dragRef.current) return;
-      const delta = ev.clientX - dragRef.current.startX;
-      const newW  = Math.max(60, dragRef.current.startW + delta);
-      setColWidths(prev => ({ ...prev, [dragRef.current!.col]: newW }));
-    };
-    const onUp = () => {
-      dragRef.current = null;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+  const [colWidths, setColWidths]                   = useState<ColWidths>(DEFAULT_WIDTHS);
+  const [isDragging, setIsDragging]                 = useState(false);
+  const selectAllRef                                = useRef<HTMLInputElement>(null);
+
+  // Load saved widths from localStorage after mount (localStorage not available on server)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(COL_WIDTHS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<ColWidths>;
+        setColWidths(prev => ({ ...prev, ...parsed }));
+      }
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist widths to localStorage after every change (debounced via pointer-up)
+  // We save on every setColWidths call which is fine — it's only called during/after drag
+  useEffect(() => {
+    try { localStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(colWidths)); } catch { /* ignore */ }
   }, [colWidths]);
+
+  // Column resize via Pointer Capture — stays locked to the handle element even
+  // if the cursor moves off it, making drags rock-solid across slow movements.
+  // startResize is a plain function (not useCallback) so it always closes over
+  // the current colWidths — no stale-closure issues.
+  function startResize(e: React.PointerEvent<HTMLDivElement>, col: keyof ColWidths) {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+
+    setIsDragging(true);
+    document.body.style.cursor     = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const startX = e.clientX;
+    const startW = colWidths[col]; // captured from current state at pointer-down
+
+    function onMove(ev: PointerEvent) {
+      const delta = ev.clientX - startX;
+      const newW  = Math.max(60, startW + delta);
+      setColWidths(prev => ({ ...prev, [col]: newW }));
+    }
+    function onUp() {
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup",   onUp);
+      document.body.style.cursor     = "";
+      document.body.style.userSelect = "";
+      setIsDragging(false);
+    }
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup",   onUp);
+  }
 
   // ── Stats ─────────────────────────────────────────────────────────────────
 
@@ -844,7 +878,7 @@ export function MeetingsClient({
       )}
 
       {/* ── Table header ────────────────────────────────────────────────────── */}
-      <div className="bg-slate-50 border-b border-slate-200 flex-shrink-0 select-none">
+      <div className="bg-slate-50 border-b border-slate-200 flex-shrink-0 select-none" style={{ userSelect: isDragging ? "none" : undefined }}>
         <div className="flex items-center min-h-[34px]">
           {/* Left strip placeholder */}
           <div className="w-[3px] ml-0 mr-5 flex-shrink-0" />
@@ -875,14 +909,12 @@ export function MeetingsClient({
                 currentDir={sortDir}
                 onSort={col === "attendees" ? () => {} : handleSort}
               />
-              {/* Drag handle */}
+              {/* Drag handle — pointer capture for smooth resize */}
               <div
-                onMouseDown={e => startResize(e, col)}
-                className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize flex items-center justify-center group/drag"
+                onPointerDown={e => startResize(e, col)}
+                className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize border-r-2 border-slate-200 hover:border-brand-teal active:border-brand-teal transition-colors z-10"
                 title="Drag to resize"
-              >
-                <div className="w-px h-4 bg-slate-200 group-hover/drag:bg-brand-teal transition-colors" />
-              </div>
+              />
             </div>
           ))}
 

@@ -1,16 +1,15 @@
-// POST /api/meetings/[id]/export-pdf
-// Generates a meeting summary PDF (client supplies base64), uploads to Supabase
-// Storage, inserts a company_documents record, and returns the result.
+// ─── POST /api/meetings/[id]/export-pdf ──────────────────────────────────────
+// Receives a base64-encoded PDF generated client-side, uploads it to the
+// "meeting-transcripts" Supabase Storage bucket, and creates a company_documents
+// record so it appears in the Meeting Transcripts panel.
 //
-// Request body:
-//   { company_id: string, pdf_base64: string }
-//
-// The PDF is generated client-side (lib/generate-meeting-pdf.ts) and sent as
-// base64 to avoid Node.js/jspdf compatibility concerns in serverless functions.
+// Body: { company_id: string, pdf_base64: string }
 
-import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { NextResponse }       from "next/server";
+import { createClient }       from "@/lib/supabase/server";
+import { createAdminClient }  from "@/lib/supabase/admin";
+
+export const maxDuration = 30;
 
 export async function POST(
   req: Request,
@@ -18,75 +17,87 @@ export async function POST(
 ) {
   const { id } = await params;
 
+  // ── Auth ─────────────────────────────────────────────────────────────────
   const supabaseUser = await createClient();
   const { data: { user } } = await supabaseUser.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json() as { company_id: string; pdf_base64: string };
-  const { company_id, pdf_base64 } = body;
-
-  if (!company_id)  return NextResponse.json({ error: "company_id required" }, { status: 400 });
-  if (!pdf_base64)  return NextResponse.json({ error: "pdf_base64 required" }, { status: 400 });
-
   const supabase = createAdminClient();
 
-  // Fetch meeting record to build the filename
-  const { data: meeting, error: meetingErr } = await supabase
+  // ── Parse body ────────────────────────────────────────────────────────────
+  let body: { company_id?: string; pdf_base64?: string };
+  try {
+    body = await req.json() as { company_id?: string; pdf_base64?: string };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const { company_id, pdf_base64 } = body;
+  if (!company_id || !pdf_base64) {
+    return NextResponse.json(
+      { error: "company_id and pdf_base64 are required" },
+      { status: 400 }
+    );
+  }
+
+  // ── Fetch meeting metadata ────────────────────────────────────────────────
+  const { data: meeting } = await supabase
     .from("interactions")
     .select("id, subject, date")
     .eq("id", id)
     .single();
 
-  if (meetingErr || !meeting) {
-    return NextResponse.json({ error: meetingErr?.message ?? "Meeting not found" }, { status: 404 });
+  if (!meeting) {
+    return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
   }
 
-  // Decode base64 PDF into a Buffer
+  // ── Build a clean file name ───────────────────────────────────────────────
+  const rawTitle  = ((meeting.subject as string | null) ?? "Meeting").trim();
+  const safeTitle = rawTitle
+    .replace(/[^a-zA-Z0-9\s\-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 60) || "Meeting";
+  const dateStr   = meeting.date
+    ? new Date(meeting.date as string).toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+  const fileName  = `${safeTitle}-${dateStr}.pdf`;
+
+  // Unique path per export (timestamp prefix avoids collisions on re-export)
+  const storagePath = `${company_id}/${id}/${Date.now()}-${fileName}`;
+
+  // ── Decode base64 → Buffer ────────────────────────────────────────────────
   const pdfBuffer = Buffer.from(pdf_base64, "base64");
 
-  // Build storage path
-  const dateSlug = meeting.date ? meeting.date.slice(0, 10) : new Date().toISOString().slice(0, 10);
-  const safeName = (meeting.subject ?? "meeting").replace(/[^a-zA-Z0-9_\-\s]/g, "").trim().replace(/\s+/g, "_").slice(0, 60);
-  const fileName    = `${safeName}_${dateSlug}_summary.pdf`;
-  const storagePath = `${company_id}/${id}_${dateSlug}_summary.pdf`;
-
-  // Ensure the bucket exists (idempotent)
-  await supabase.storage.createBucket("meeting-transcripts", { public: false }).catch(() => {/* already exists */});
-
-  // Upload PDF to Supabase Storage
+  // ── Upload to Supabase Storage ────────────────────────────────────────────
   const { error: uploadErr } = await supabase.storage
     .from("meeting-transcripts")
     .upload(storagePath, pdfBuffer, {
       contentType: "application/pdf",
-      upsert: true,
+      upsert:      false,
     });
 
   if (uploadErr) {
+    console.error("[export-pdf] storage upload failed:", uploadErr.message);
     return NextResponse.json({ error: uploadErr.message }, { status: 500 });
   }
 
-  // Insert company_documents record
-  const { data: doc, error: docErr } = await supabase
-    .from("company_documents" as "documents") // cast to avoid missing type
+  // ── Insert into company_documents ─────────────────────────────────────────
+  const { error: docErr } = await (supabase
+    .from("company_documents" as "documents")
     .insert({
-      company_id,
       meeting_id:    id,
-      document_type: "meeting_transcript",
+      company_id,
       file_name:     fileName,
       storage_path:  storagePath,
-      created_by:    user.id,
-    } as unknown as Record<string, unknown>)
-    .select("id")
-    .single();
+      document_type: "meeting_transcript",
+      uploaded_at:   new Date().toISOString(),
+    }) as unknown as Promise<{ error: { message: string } | null }>);
 
   if (docErr) {
-    return NextResponse.json({ error: docErr.message }, { status: 500 });
+    // Non-fatal: storage upload succeeded — log the DB insert error
+    console.warn("[export-pdf] company_documents insert warning:", docErr.message);
   }
 
-  return NextResponse.json({
-    success:      true,
-    storage_path: storagePath,
-    document_id:  (doc as unknown as { id: string }).id,
-    file_name:    fileName,
-  });
+  return NextResponse.json({ ok: true, file_name: fileName, storage_path: storagePath });
 }
