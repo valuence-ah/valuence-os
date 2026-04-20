@@ -1688,7 +1688,15 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   // ── Column order persistence ──────────────────────────────────────────────
   const [companyColOrder, setCompanyColOrder] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
-    try { return JSON.parse(localStorage.getItem("admin_company_col_order") ?? "[]"); } catch { return []; }
+    try {
+      const saved = JSON.parse(localStorage.getItem("admin_company_col_order") ?? "[]") as string[];
+      // If "type" isn't in the saved order yet (order was saved before this column was promoted),
+      // insert it as the very first moveable column so it appears right after "Company".
+      if (saved.length > 0 && !saved.includes("type")) {
+        return ["type", ...saved];
+      }
+      return saved;
+    } catch { return []; }
   });
   const [contactColOrder, setContactColOrder] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
