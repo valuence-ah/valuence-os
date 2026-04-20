@@ -122,7 +122,7 @@ function DocUpload({
   );
 }
 
-// ── Investment tile (view + edit) ─────────────────────────────────────────────
+// ── Investment tile — collapsed row, expands on click ────────────────────────
 function InvestmentTile({
   inv,
   onUpdated,
@@ -132,6 +132,7 @@ function InvestmentTile({
   onUpdated: (updated: PortfolioInvestment) => void;
   onDeleted: (id: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     funding_round: inv.funding_round ?? "",
@@ -147,8 +148,34 @@ function InvestmentTile({
   });
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [memoName, setMemoName] = useState<string | null>(inv.memo_file_name);
+  const [memoName, setMemoName] = useState<string | null>(inv.memo_file_name ?? null);
   const [subDocName, setSubDocName] = useState<string | null>(inv.subscription_doc_file_name ?? null);
+
+  const isSafe = inv.investment_type === "safe";
+  const lbl = isSafe ? "text-violet-500" : "text-blue-500";
+  const val = isSafe ? "text-violet-900" : "text-blue-900";
+  const bgRow = isSafe ? "bg-violet-50 divide-violet-200 border-violet-200" : "bg-blue-50 divide-blue-200 border-blue-200";
+
+  const dataFields = [
+    { label: "Our Investment", value: fmtMoney(inv.investment_amount) },
+    { label: "Round Size",     value: fmtMoney(inv.round_size) },
+    { label: "Close Date",     value: fmtDate(inv.close_date) },
+    ...(isSafe
+      ? [{ label: "Val. Cap", value: fmtMoney(inv.valuation_cap) }, { label: "Discount", value: fmtPct(inv.discount) }]
+      : [{ label: "Pre-Money", value: fmtMoney(inv.pre_money_valuation) }, { label: "Ownership", value: fmtPct(inv.ownership_pct) }]
+    ),
+  ];
+
+  function startEdit(e: React.MouseEvent) {
+    e.stopPropagation();
+    setExpanded(true);
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setExpanded(false);
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -169,6 +196,7 @@ function InvestmentTile({
     await supabase.from("portfolio_investments").update(updates).eq("id", inv.id);
     setSaving(false);
     setEditing(false);
+    setExpanded(false);
     onUpdated({ ...inv, ...updates });
   }
 
@@ -181,40 +209,47 @@ function InvestmentTile({
     onDeleted(inv.id);
   }
 
-  // Round type badge
-  const typeBadge = inv.investment_type === "safe"
-    ? "bg-violet-100 text-violet-700"
-    : inv.investment_type === "priced_round"
-    ? "bg-blue-100 text-blue-700"
-    : "bg-slate-100 text-slate-500";
-  const typeLabel = inv.investment_type === "safe" ? "SAFE" : inv.investment_type === "priced_round" ? "Priced Round" : "—";
+  const isOpen = expanded || editing;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-      {/* Tile header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col">
-            <span className="text-sm font-bold text-slate-800">
-              {inv.funding_round ?? <span className="text-slate-400 font-normal italic">Round TBD</span>}
-            </span>
-            {inv.close_date && (
-              <span className="text-[10px] text-slate-400 mt-0.5">{fmtDate(inv.close_date)}</span>
-            )}
-          </div>
-          <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", typeBadge)}>
-            {typeLabel}
+    <div className={cn("bg-white border rounded-xl shadow-sm overflow-hidden transition-shadow", isSafe ? "border-violet-200" : "border-blue-200", isOpen && "shadow-md")}>
+
+      {/* ── Single summary row — click anywhere to expand/collapse ── */}
+      <div
+        className={cn("flex items-stretch divide-x cursor-pointer select-none transition-colors", bgRow, !editing && "hover:brightness-[0.97]")}
+        onClick={() => !editing && setExpanded(p => !p)}
+      >
+        {/* Cell 0: Round label + type */}
+        <div className="px-3 py-2.5 flex flex-col justify-center flex-shrink-0 min-w-[80px]">
+          <span className="text-[11px] font-bold text-slate-800 leading-tight truncate">
+            {inv.funding_round ?? <span className="italic font-normal text-slate-400 text-[10px]">TBD</span>}
+          </span>
+          <span className={cn("text-[9px] font-semibold mt-0.5", lbl)}>
+            {isSafe ? "SAFE" : "Priced"}
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          {!editing && (
-            <button
-              onClick={() => setEditing(true)}
-              className="text-xs text-slate-400 hover:text-blue-600 px-2.5 py-1 border border-slate-200 rounded-lg hover:border-blue-300 transition-colors"
-            >
-              Edit
-            </button>
+
+        {/* Data cells */}
+        {dataFields.map(({ label, value }) => (
+          <div key={label} className="flex-1 px-3 py-2.5 min-w-0">
+            <p className={cn("text-[9px] font-semibold uppercase tracking-wide mb-0.5", lbl)}>{label}</p>
+            <p className={cn("text-xs font-bold truncate", val)}>{value}</p>
+          </div>
+        ))}
+
+        {/* Actions + doc indicators + chevron */}
+        <div
+          className="px-3 py-2.5 flex items-center gap-2 flex-shrink-0 bg-white/70"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Tiny doc indicators */}
+          {(memoName || subDocName) && (
+            <div className="flex items-center gap-1 mr-1">
+              {memoName && <span title={`Memo: ${memoName}`}><FileText size={11} className="text-blue-400" /></span>}
+              {subDocName && <span title={`Sub doc: ${subDocName}`}><FileText size={11} className="text-violet-400" /></span>}
+            </div>
           )}
+
           {confirmDelete ? (
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-slate-500">Delete?</span>
@@ -222,170 +257,149 @@ function InvestmentTile({
               <button onClick={() => setConfirmDelete(false)} className="text-[10px] text-slate-400 hover:text-slate-600">No</button>
             </div>
           ) : (
-            <button onClick={() => setConfirmDelete(true)} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors">
-              <Trash2 size={13} />
-            </button>
+            <>
+              <button onClick={startEdit} className="text-[10px] text-slate-400 hover:text-blue-600 transition-colors">Edit</button>
+              <button
+                onClick={e => { e.stopPropagation(); setConfirmDelete(true); }}
+                className="p-0.5 text-slate-300 hover:text-red-500 transition-colors"
+              >
+                <Trash2 size={12} />
+              </button>
+            </>
+          )}
+          <ChevronDown
+            size={13}
+            className={cn("text-slate-400 transition-transform duration-200 ml-1", isOpen && "rotate-180")}
+          />
+        </div>
+      </div>
+
+      {/* ── Expanded panel ── */}
+      {isOpen && (
+        <div className="border-t border-slate-100 px-4 py-3">
+          {editing ? (
+            /* Edit form */
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Funding Round</label>
+                  <select value={form.funding_round} onChange={e => setForm(p => ({ ...p, funding_round: e.target.value }))}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">— Select —</option>
+                    {FUNDING_ROUNDS.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Investment Type</label>
+                  <div className="flex gap-2">
+                    {(["safe", "priced_round"] as const).map(t => (
+                      <button key={t} type="button"
+                        onClick={() => setForm(p => ({ ...p, investment_type: t }))}
+                        className={cn("flex-1 py-2 text-xs font-medium rounded-lg border transition-colors",
+                          form.investment_type === t
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-blue-300")}>
+                        {t === "safe" ? "SAFE" : "Priced Round"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Investment Amount (USD)</label>
+                  <input type="number" value={form.investment_amount} onChange={e => setForm(p => ({ ...p, investment_amount: e.target.value }))}
+                    placeholder="e.g. 500000"
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Round Size (USD)</label>
+                  <input type="number" value={form.round_size} onChange={e => setForm(p => ({ ...p, round_size: e.target.value }))}
+                    placeholder="e.g. 3000000"
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Close Date</label>
+                  <input type="date" value={form.close_date} onChange={e => setForm(p => ({ ...p, close_date: e.target.value }))}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              {form.investment_type === "safe" ? (
+                <div className="grid grid-cols-2 gap-3 p-3 bg-violet-50 rounded-xl border border-violet-100">
+                  <div>
+                    <label className="text-[10px] font-semibold text-violet-600 uppercase tracking-wide block mb-1">Valuation Cap (USD)</label>
+                    <input type="number" value={form.valuation_cap} onChange={e => setForm(p => ({ ...p, valuation_cap: e.target.value }))}
+                      placeholder="e.g. 8000000"
+                      className="w-full text-sm border border-violet-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-violet-600 uppercase tracking-wide block mb-1">Discount (%)</label>
+                    <input type="number" value={form.discount} onChange={e => setForm(p => ({ ...p, discount: e.target.value }))}
+                      placeholder="e.g. 20"
+                      className="w-full text-sm border border-violet-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                  <div>
+                    <label className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide block mb-1">Pre-Money Valuation (USD)</label>
+                    <input type="number" value={form.pre_money_valuation} onChange={e => setForm(p => ({ ...p, pre_money_valuation: e.target.value }))}
+                      placeholder="e.g. 10000000"
+                      className="w-full text-sm border border-blue-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide block mb-1">Ownership (%)</label>
+                    <input type="number" value={form.ownership_pct} onChange={e => setForm(p => ({ ...p, ownership_pct: e.target.value }))}
+                      placeholder="e.g. 10.5"
+                      className="w-full text-sm border border-blue-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Notes</label>
+                <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                  rows={2} placeholder="Any additional details…"
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={cancelEdit}
+                  className="flex-1 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">
+                  Cancel
+                </button>
+                <button onClick={handleSave} disabled={saving}
+                  className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? <><Loader2 size={13} className="animate-spin" />Saving…</> : <><Check size={13} />Save</>}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Documents + notes */
+            <div className="space-y-3">
+              {inv.notes && <p className="text-xs text-slate-500 leading-relaxed italic">{inv.notes}</p>}
+              <div className="flex gap-3">
+                <DocUpload
+                  investmentId={inv.id}
+                  label="Investment Memo"
+                  pathField="memo_storage_path"
+                  nameField="memo_file_name"
+                  existingName={memoName}
+                  onUploaded={(_, name) => setMemoName(name)}
+                />
+                <DocUpload
+                  investmentId={inv.id}
+                  label="Subscription Document"
+                  pathField="subscription_doc_storage_path"
+                  nameField="subscription_doc_file_name"
+                  existingName={subDocName}
+                  onUploaded={(_, name) => setSubDocName(name)}
+                />
+              </div>
+            </div>
           )}
         </div>
-      </div>
-
-      {/* Tile body */}
-      <div className="px-5 py-4 space-y-4">
-        {editing ? (
-          <div className="space-y-4">
-            {/* Row 1: Round + Type */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Funding Round</label>
-                <select value={form.funding_round} onChange={e => setForm(p => ({ ...p, funding_round: e.target.value }))}
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">— Select —</option>
-                  {FUNDING_ROUNDS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Investment Type</label>
-                <div className="flex gap-2">
-                  {(["safe", "priced_round"] as const).map(t => (
-                    <button key={t} type="button"
-                      onClick={() => setForm(p => ({ ...p, investment_type: t }))}
-                      className={cn("flex-1 py-2 text-xs font-medium rounded-lg border transition-colors",
-                        form.investment_type === t
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white text-slate-600 border-slate-200 hover:border-blue-300")}>
-                      {t === "safe" ? "SAFE" : "Priced Round"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Row 2: Amounts */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Investment Amount (USD)</label>
-                <input type="number" value={form.investment_amount} onChange={e => setForm(p => ({ ...p, investment_amount: e.target.value }))}
-                  placeholder="e.g. 500000"
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Round Size (USD)</label>
-                <input type="number" value={form.round_size} onChange={e => setForm(p => ({ ...p, round_size: e.target.value }))}
-                  placeholder="e.g. 3000000"
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-            </div>
-
-            {/* Row 3: Close date */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Close Date</label>
-                <input type="date" value={form.close_date} onChange={e => setForm(p => ({ ...p, close_date: e.target.value }))}
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-            </div>
-
-            {/* Conditional fields */}
-            {form.investment_type === "safe" ? (
-              <div className="grid grid-cols-2 gap-3 p-3 bg-violet-50 rounded-xl border border-violet-100">
-                <div>
-                  <label className="text-[10px] font-semibold text-violet-600 uppercase tracking-wide block mb-1">Valuation Cap (USD)</label>
-                  <input type="number" value={form.valuation_cap} onChange={e => setForm(p => ({ ...p, valuation_cap: e.target.value }))}
-                    placeholder="e.g. 8000000"
-                    className="w-full text-sm border border-violet-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-violet-600 uppercase tracking-wide block mb-1">Discount (%)</label>
-                  <input type="number" value={form.discount} onChange={e => setForm(p => ({ ...p, discount: e.target.value }))}
-                    placeholder="e.g. 20"
-                    className="w-full text-sm border border-violet-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400" />
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                <div>
-                  <label className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide block mb-1">Pre-Money Valuation (USD)</label>
-                  <input type="number" value={form.pre_money_valuation} onChange={e => setForm(p => ({ ...p, pre_money_valuation: e.target.value }))}
-                    placeholder="e.g. 10000000"
-                    className="w-full text-sm border border-blue-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide block mb-1">Ownership (%)</label>
-                  <input type="number" value={form.ownership_pct} onChange={e => setForm(p => ({ ...p, ownership_pct: e.target.value }))}
-                    placeholder="e.g. 10.5"
-                    className="w-full text-sm border border-blue-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                </div>
-              </div>
-            )}
-
-            {/* Notes */}
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Notes</label>
-              <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
-                rows={2} placeholder="Any additional details…"
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-            </div>
-
-            {/* Action row */}
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => setEditing(false)}
-                className="flex-1 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">
-                Cancel
-              </button>
-              <button onClick={handleSave} disabled={saving}
-                className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
-                {saving ? <><Loader2 size={13} className="animate-spin" />Saving…</> : <><Check size={13} />Save</>}
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* ── View mode — single compact row ── */
-          <div className="space-y-2">
-            <div className={`flex items-center gap-0 divide-x rounded-xl overflow-hidden border ${inv.investment_type === "safe" ? "divide-violet-200 border-violet-200 bg-violet-50" : "divide-blue-200 border-blue-200 bg-blue-50"}`}>
-              {[
-                { label: "Our Investment", value: fmtMoney(inv.investment_amount) },
-                { label: "Round Size",     value: fmtMoney(inv.round_size) },
-                { label: "Close Date",     value: inv.close_date ? new Date(inv.close_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—" },
-                ...(inv.investment_type === "safe"
-                  ? [
-                      { label: "Valuation Cap", value: fmtMoney(inv.valuation_cap) },
-                      { label: "Discount",       value: fmtPct(inv.discount) },
-                    ]
-                  : [
-                      { label: "Pre-Money Val.", value: fmtMoney(inv.pre_money_valuation) },
-                      { label: "Ownership",      value: fmtPct(inv.ownership_pct) },
-                    ]),
-              ].map(({ label, value }) => (
-                <div key={label} className="flex-1 px-3 py-2 min-w-0">
-                  <p className={`text-[9px] font-semibold uppercase tracking-wide mb-0.5 ${inv.investment_type === "safe" ? "text-violet-500" : "text-blue-500"}`}>{label}</p>
-                  <p className={`text-xs font-bold truncate ${inv.investment_type === "safe" ? "text-violet-900" : "text-blue-900"}`}>{value}</p>
-                </div>
-              ))}
-            </div>
-            {inv.notes && <p className="text-xs text-slate-500 leading-relaxed">{inv.notes}</p>}
-          </div>
-        )}
-
-        {/* ── Documents — always visible, outside the edit/view conditional ── */}
-        <div className="pt-2 border-t border-slate-100 flex gap-3">
-          <DocUpload
-            investmentId={inv.id}
-            label="Investment Memo"
-            pathField="memo_storage_path"
-            nameField="memo_file_name"
-            existingName={memoName}
-            onUploaded={(_, name) => setMemoName(name)}
-          />
-          <DocUpload
-            investmentId={inv.id}
-            label="Subscription Document"
-            pathField="subscription_doc_storage_path"
-            nameField="subscription_doc_file_name"
-            existingName={subDocName}
-            onUploaded={(_, name) => setSubDocName(name)}
-          />
-        </div>
-      </div>
+      )}
     </div>
   );
 }

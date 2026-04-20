@@ -384,7 +384,7 @@ export function PortfolioOverviewTab({
                 const isSafe = inv.investment_type === "safe";
                 return (
                   <div key={inv.id} className={`rounded-lg px-2.5 py-2 ${isSafe ? "bg-violet-50" : "bg-blue-50"}`}>
-                    {/* Row 1: badge + type + amount */}
+                    {/* Row 1: badge + type + amount + doc indicators */}
                     <div className="flex items-center gap-2">
                       <span className={`text-[9px] font-bold px-1.5 py-px rounded-full whitespace-nowrap flex-shrink-0 ${isSafe ? "bg-violet-200 text-violet-800" : "bg-blue-200 text-blue-800"}`}>
                         {inv.funding_round ?? (isSafe ? "SAFE" : "Priced")}
@@ -394,6 +394,13 @@ export function PortfolioOverviewTab({
                       </span>
                       {inv.investment_amount !== null && (
                         <span className="text-xs font-bold text-slate-800 ml-auto">{fmtMoney(inv.investment_amount)}</span>
+                      )}
+                      {/* Doc indicator icons */}
+                      {inv.memo_file_name && (
+                        <span title={`Memo: ${inv.memo_file_name}`}><FileText size={10} className={isSafe ? "text-violet-400" : "text-blue-400"} /></span>
+                      )}
+                      {inv.subscription_doc_file_name && (
+                        <span title={`Sub doc: ${inv.subscription_doc_file_name}`}><FileText size={10} className="text-slate-400" /></span>
                       )}
                     </div>
                     {/* Row 2: SAFE/priced details + date */}
