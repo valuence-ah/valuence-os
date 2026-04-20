@@ -240,7 +240,7 @@ function InvestmentTile({
       </div>
 
       {/* Tile body */}
-      <div className="px-5 py-4">
+      <div className="px-5 py-4 space-y-4">
         {editing ? (
           <div className="space-y-4">
             {/* Row 1: Round + Type */}
@@ -396,15 +396,17 @@ function InvestmentTile({
             {inv.notes && (
               <p className="text-xs text-slate-500 leading-relaxed">{inv.notes}</p>
             )}
-
-            {/* Memo upload */}
-            <MemoUpload
-              investmentId={inv.id}
-              existingName={memoName}
-              onUploaded={(_, name) => setMemoName(name)}
-            />
           </div>
         )}
+
+        {/* ── Memo upload — always visible, outside the edit/view conditional ── */}
+        <div className="pt-2 border-t border-slate-100">
+          <MemoUpload
+            investmentId={inv.id}
+            existingName={memoName}
+            onUploaded={(_, name) => setMemoName(name)}
+          />
+        </div>
       </div>
     </div>
   );
