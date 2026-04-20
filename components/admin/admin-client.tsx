@@ -3389,9 +3389,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         .admin-grid .rdg {
           font-size: 12px;
           font-family: ui-sans-serif, system-ui, sans-serif;
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          overflow: hidden;
+          border: none;
           --rdg-header-background-color: #f8fafc;
           --rdg-header-row-height: 36px;
           --rdg-row-height: 34px;
