@@ -469,6 +469,8 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm]           = useState<Partial<Company>>({ type: "startup", sectors: [] });
   const [addSaving, setAddSaving]       = useState(false);
+  const [addDeckFile, setAddDeckFile]   = useState<File | null>(null);
+  const addDeckInputRef                 = useRef<HTMLInputElement>(null);
 
   // Memo generation
   const [generatingMemo, setGeneratingMemo] = useState(false);
@@ -1007,12 +1009,40 @@ export function PipelineClient({ initialCompanies }: Props) {
           created_by: user?.id ?? null,
         });
       }
+      // Optionally upload pitch deck
+      if (addDeckFile) {
+        try {
+          const safeName = addDeckFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const filePath = `${data.id}/${Date.now()}-${safeName}`;
+          const { error: storageErr } = await supabase.storage
+            .from("decks")
+            .upload(filePath, addDeckFile, { contentType: addDeckFile.type || "application/octet-stream", upsert: true });
+          if (!storageErr) {
+            const { data: { publicUrl } } = supabase.storage.from("decks").getPublicUrl(filePath);
+            await Promise.all([
+              supabase.from("documents").insert({
+                company_id:   data.id,
+                name:         addDeckFile.name,
+                type:         "deck",
+                storage_path: filePath,
+                mime_type:    addDeckFile.type || "application/octet-stream",
+                file_size:    addDeckFile.size,
+                uploaded_by:  user?.id ?? null,
+              }),
+              supabase.from("companies").update({ pitch_deck_url: publicUrl }).eq("id", data.id),
+            ]);
+          }
+        } catch (deckErr) {
+          console.error("[addCompany] deck upload failed:", deckErr);
+        }
+      }
       setCompanies(prev => [data, ...prev]);
       setSelectedId(data.id);
       setShowAddModal(false);
       setAddForm({ type: "startup", sectors: [] });
       setAddModalContactOpen(false);
       setAddModalContact({ first_name: "", last_name: "", email: "", title: "" });
+      setAddDeckFile(null);
     } else {
       alert(error?.message ?? "Failed to add company");
     }
@@ -3300,8 +3330,39 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </div>
               </div>
 
+              {/* Pitch Deck */}
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">Pitch Deck <span className="text-slate-400 font-normal">(optional)</span></label>
+                <input
+                  ref={addDeckInputRef}
+                  type="file"
+                  accept=".pdf,.ppt,.pptx,.key"
+                  className="hidden"
+                  onChange={e => setAddDeckFile(e.target.files?.[0] ?? null)}
+                />
+                {addDeckFile ? (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500 flex-shrink-0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span className="text-xs text-slate-700 flex-1 truncate">{addDeckFile.name}</span>
+                    <button type="button" onClick={() => { setAddDeckFile(null); if (addDeckInputRef.current) addDeckInputRef.current.value = ""; }}
+                      className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => addDeckInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 border-2 border-dashed border-slate-200 rounded-lg text-xs text-slate-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Upload deck (PDF, PPT, Keynote)
+                  </button>
+                )}
+              </div>
+
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => { setShowAddModal(false); setAddModalContactOpen(false); setAddModalContact({ first_name: "", last_name: "", email: "", title: "" }); }}
+                <button type="button" onClick={() => { setShowAddModal(false); setAddModalContactOpen(false); setAddModalContact({ first_name: "", last_name: "", email: "", title: "" }); setAddDeckFile(null); if (addDeckInputRef.current) addDeckInputRef.current.value = ""; }}
                   className="flex-1 py-2.5 border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50">
                   Cancel
                 </button>
