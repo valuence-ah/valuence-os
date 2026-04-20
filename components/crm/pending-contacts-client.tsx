@@ -148,7 +148,7 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 // Shared input/select height class for consistency
-const INPUT_CLS = "h-[28px] text-xs border border-slate-300 rounded px-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 w-full";
+const INPUT_CLS = "h-8 text-xs border border-slate-200 rounded-md px-2 bg-white focus:outline-none focus:ring-2 focus:ring-brand-teal/30 focus:border-brand-teal text-slate-700 w-full transition-colors placeholder:text-slate-300";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -283,9 +283,9 @@ function CompanyDropdown({ contactEmail, allCompanies, value, placeholder, onCha
 
   return (
     <div ref={wrapRef} className="relative w-full">
-      <div className={cn(INPUT_CLS, "flex items-center justify-between gap-1 pr-1")}>
+      <div className={cn(INPUT_CLS, "flex items-center justify-between gap-1 pr-1 cursor-pointer")}>
         <button type="button" onClick={() => setOpen(v => !v)}
-          className="flex items-center gap-1 flex-1 min-w-0 text-left cursor-pointer">
+          className="flex items-center gap-1 flex-1 min-w-0 text-left">
           <span className={cn("truncate flex-1 text-left text-xs", !selectedCompany && "text-slate-300")}>
             {selectedCompany?.name ?? placeholder}
           </span>
@@ -1292,13 +1292,25 @@ const ContactRow = memo(function ContactRow({
     if (error) console.error("[discard] update failed:", error);
   }
 
-  const initials = getInitials(`${firstName} ${lastName}`);
+  const initials       = getInitials(`${firstName} ${lastName}`);
+  const isReady        = !!type && !!resolvedCountry;
 
   return (
-    <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2.5 hover:border-slate-300 hover:bg-slate-50/40 transition-all">
+    <div className={cn(
+      "group flex items-center gap-2 bg-white border rounded-lg px-3 py-2 transition-all",
+      isReady
+        ? "border-slate-200 hover:border-brand-teal/40 hover:shadow-sm"
+        : "border-slate-200 hover:border-slate-300"
+    )}>
+
+      {/* Ready indicator strip */}
+      <div className={cn(
+        "w-0.5 h-6 rounded-full flex-shrink-0 transition-colors",
+        isReady ? "bg-brand-teal" : "bg-slate-200"
+      )} />
 
       {/* Avatar */}
-      <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+      <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 ring-2 ring-white">
         <span className="text-violet-600 text-[10px] font-bold">{initials}</span>
       </div>
 
@@ -1312,22 +1324,22 @@ const ContactRow = memo(function ContactRow({
 
       {/* Email — fixed, not editable */}
       <div className="w-56 flex-shrink-0">
-        <div className={cn(INPUT_CLS, "flex items-center gap-1 bg-slate-50 text-slate-500 cursor-default overflow-hidden")}>
-          <Mail size={10} className="flex-shrink-0 text-slate-400" />
+        <div className={cn(INPUT_CLS, "flex items-center gap-1.5 bg-slate-50 text-slate-400 cursor-default overflow-hidden border-slate-100")}>
+          <Mail size={10} className="flex-shrink-0 text-slate-300" />
           <span className="truncate text-[11px]">{contact.email ?? "—"}</span>
         </div>
       </div>
 
       {/* Type */}
       <select value={type} onChange={e => setType(e.target.value)}
-        className={cn(INPUT_CLS, "w-36 flex-shrink-0 cursor-pointer")}>
+        className={cn(INPUT_CLS, "w-36 flex-shrink-0 cursor-pointer", !type && "text-slate-400")}>
         {CONTACT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
 
       {/* Title */}
       <div className="w-32 flex-shrink-0 space-y-1">
         <select value={title} onChange={e => setTitle(e.target.value)}
-          className={cn(INPUT_CLS, "cursor-pointer")}>
+          className={cn(INPUT_CLS, "cursor-pointer", !title && "text-slate-400")}>
           <option value="">— Title —</option>
           {TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
@@ -1350,7 +1362,6 @@ const ContactRow = memo(function ContactRow({
           onCreateNew={handleCreateCompany}
           defaultCompanyType={CONTACT_TO_COMPANY_TYPE[type as ContactTypeStr] ?? "startup"}
           onTypeChange={async (coId, newType) => {
-            // Update the company type directly in the DB and refresh local state
             const supabase = createClient();
             const { error } = await supabase.from("companies").update({ type: newType }).eq("id", coId);
             if (!error) {
@@ -1368,7 +1379,7 @@ const ContactRow = memo(function ContactRow({
       {/* Country */}
       <div className="w-28 flex-shrink-0 space-y-1">
         <select value={country} onChange={e => setCountry(e.target.value)}
-          className={cn(INPUT_CLS, "cursor-pointer")}>
+          className={cn(INPUT_CLS, "cursor-pointer", !country && "text-slate-400")}>
           <option value="">Country</option>
           {[...COUNTRY_OPTIONS, ...customCountries.filter(c => !(COUNTRY_OPTIONS as readonly string[]).includes(c))].sort().map(c => <option key={c} value={c}>{c}</option>)}
           <option value="__custom__">Other (type below)…</option>
@@ -1381,20 +1392,33 @@ const ContactRow = memo(function ContactRow({
       </div>
 
       {/* Added date */}
-      <span className="text-[10px] text-slate-400 flex-shrink-0 w-20 truncate text-right">
+      <span className="text-[10px] text-slate-400 flex-shrink-0 w-20 truncate text-right tabular-nums">
         {formatDate(contact.created_at)}
       </span>
 
       {/* Actions */}
-      <div className="flex gap-1 flex-shrink-0 ml-auto">
-        <button onClick={confirm} disabled={busy || !type || !resolvedCountry}
-          className="flex items-center gap-1 px-2.5 h-[28px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium rounded transition-colors">
+      <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+        <button
+          onClick={confirm}
+          disabled={busy || !isReady}
+          title={!isReady ? "Fill in Type and Country first" : "Confirm contact"}
+          className={cn(
+            "flex items-center gap-1 px-3 h-8 text-xs font-semibold rounded-md transition-all",
+            isReady
+              ? "bg-brand-teal hover:bg-brand-tealDark text-white shadow-sm"
+              : "bg-slate-100 text-slate-300 cursor-not-allowed"
+          )}
+        >
           {busy ? <Loader2 size={10} className="animate-spin" /> : <Check size={11} />}
           Confirm
         </button>
-        <button onClick={discard} disabled={busy} title="Discard"
-          className="flex items-center justify-center w-7 h-[28px] border border-red-200 hover:bg-red-50 disabled:opacity-50 text-red-400 rounded transition-colors">
-          <X size={12} />
+        <button
+          onClick={discard}
+          disabled={busy}
+          title="Discard contact"
+          className="flex items-center justify-center w-8 h-8 border border-slate-200 hover:border-danger hover:bg-red-50 hover:text-danger disabled:opacity-40 text-slate-400 rounded-md transition-all"
+        >
+          <X size={13} />
         </button>
       </div>
 
@@ -1420,12 +1444,20 @@ function SortHeader({ label, sortKey, active, dir, onSort, className }: {
   onSort: (k: SortKey) => void; className?: string;
 }) {
   return (
-    <button onClick={() => onSort(sortKey)}
-      className={cn("flex items-center gap-0.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors", className)}>
+    <button
+      onClick={() => onSort(sortKey)}
+      className={cn(
+        "flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+        active ? "text-brand-teal" : "text-slate-400 hover:text-slate-600",
+        className
+      )}
+    >
       {label}
       {active
-        ? (dir === "asc" ? <ChevronUp size={10} className="text-blue-500" /> : <ChevronDown size={10} className="text-blue-500" />)
-        : <ChevronDown size={10} className="opacity-30" />}
+        ? (dir === "asc"
+            ? <ChevronUp size={10} className="text-brand-teal" />
+            : <ChevronDown size={10} className="text-brand-teal" />)
+        : <ChevronDown size={10} className="opacity-20" />}
     </button>
   );
 }
@@ -1531,113 +1563,154 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
     });
   }, []);
 
+  const readyCount = visibleContacts.filter(c => c.type && c.location_country).length;
+
   if (contacts.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-center text-slate-400">
-          <UserPlus size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm font-medium">No new contacts</p>
-          <p className="text-xs mt-1">Contacts missing a type or country will appear here for review.</p>
+        <div className="text-center">
+          <div className="w-14 h-14 rounded-full bg-brand-tealTint flex items-center justify-center mx-auto mb-4">
+            <UserPlus size={24} className="text-brand-teal" />
+          </div>
+          <p className="text-sm font-semibold text-slate-700">All caught up</p>
+          <p className="text-xs text-slate-400 mt-1">No contacts waiting for review.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-auto p-4">
+    <div className="flex-1 flex flex-col min-h-0">
 
-      {/* Banner + controls */}
-      <div className="mb-3 flex items-center gap-3 flex-wrap">
-        <div className="flex-1 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700 flex items-center gap-2">
-          <span className="font-semibold">{visibleContacts.length} contact{visibleContacts.length !== 1 ? "s" : ""}</span>
-          <span>need enrichment. Fill in the fields then click <strong>Confirm</strong>.</span>
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white flex-shrink-0 flex-wrap gap-y-2">
+        {/* Stats pill */}
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-tealTint border border-teal-200 rounded-full text-xs text-brand-teal font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-teal inline-block" />
+          <span>{visibleContacts.length} pending</span>
+          {readyCount > 0 && (
+            <span className="text-slate-400 font-normal">· {readyCount} ready to confirm</span>
+          )}
           {hiddenCount > 0 && (
-            <span className="ml-auto text-slate-500 italic">{hiddenCount} hidden by email filter</span>
+            <span className="text-slate-400 font-normal">· {hiddenCount} hidden</span>
           )}
         </div>
-        <button onClick={() => setShowFilterPanel(v => !v)}
+
+        <div className="flex-1" />
+
+        {/* Email filter toggle */}
+        <button
+          onClick={() => setShowFilterPanel(v => !v)}
           className={cn(
-            "flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors",
+            "flex items-center gap-1.5 px-3 h-8 text-xs font-medium rounded-md border transition-all",
             showFilterPanel
-              ? "bg-blue-600 border-blue-600 text-white"
-              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-          )}>
+              ? "bg-brand-teal border-brand-teal text-white shadow-sm"
+              : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+          )}
+        >
           <SlidersHorizontal size={12} />
-          Email Filter {exclusions.length > 0 && `(${exclusions.length})`}
+          Email Filter {exclusions.length > 0 && (
+            <span className={cn(
+              "ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold",
+              showFilterPanel ? "bg-white/20 text-white" : "bg-brand-teal text-white"
+            )}>
+              {exclusions.length}
+            </span>
+          )}
         </button>
       </div>
 
       {/* Email exclusion filter panel */}
       {showFilterPanel && (
-        <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-          <div>
-            <p className="text-xs font-semibold text-amber-800 mb-0.5">Exclude emails containing these words</p>
-            <p className="text-[11px] text-amber-600">Contacts whose email address contains any of these words will be hidden from this list. Case-insensitive.</p>
-          </div>
-
-          {/* Existing exclusion tags */}
-          {exclusions.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {exclusions.map(word => (
-                <span key={word} className="flex items-center gap-1 px-2 py-1 bg-white border border-amber-300 rounded-lg text-xs text-amber-800 font-mono">
-                  {word}
-                  <button onClick={() => removeExclusion(word)} className="text-amber-400 hover:text-red-500 transition-colors">
-                    <Trash2 size={10} />
-                  </button>
-                </span>
-              ))}
+        <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 flex-shrink-0">
+          <div className="flex items-start gap-4 flex-wrap">
+            <div className="flex-1 min-w-52">
+              <p className="text-xs font-semibold text-amber-800 mb-0.5">Exclude emails containing</p>
+              <p className="text-[11px] text-amber-600">Hidden from the list. Case-insensitive.</p>
             </div>
-          )}
-
-          {/* Add new exclusion */}
-          <div className="flex gap-2">
-            <input
-              value={newExclusion}
-              onChange={e => setNewExclusion(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && addExclusion()}
-              placeholder="e.g. info, marketing, newsletter, noreply…"
-              className="flex-1 h-[28px] text-xs border border-amber-300 rounded-lg px-3 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400 text-slate-700 placeholder:text-slate-400"
-            />
-            <button onClick={addExclusion} disabled={!newExclusion.trim()}
-              className="flex items-center gap-1 px-3 h-[28px] bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors">
-              <Plus size={11} /> Add
-            </button>
+            {exclusions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 flex-1">
+                {exclusions.map(word => (
+                  <span key={word} className="flex items-center gap-1 px-2 py-1 bg-white border border-amber-200 rounded-md text-xs text-amber-800 font-mono">
+                    {word}
+                    <button onClick={() => removeExclusion(word)} className="text-amber-300 hover:text-danger transition-colors ml-0.5">
+                      <X size={10} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2 items-center">
+              <input
+                value={newExclusion}
+                onChange={e => setNewExclusion(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addExclusion()}
+                placeholder="Add keyword…"
+                className="h-8 text-xs border border-amber-200 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300 text-slate-700 placeholder:text-slate-300 w-40"
+              />
+              <button
+                onClick={addExclusion}
+                disabled={!newExclusion.trim()}
+                className="flex items-center gap-1 px-3 h-8 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-xs font-medium rounded-md transition-colors"
+              >
+                <Plus size={11} /> Add
+              </button>
+              <button
+                onClick={() => {
+                  const common = ["info","marketing","newsletter","noreply","no-reply","donotreply","notifications","updates","alerts","bounce","support","hello","contact"];
+                  setExclusions(prev => [...prev, ...common.filter(w => !prev.includes(w))]);
+                }}
+                className="text-[11px] text-amber-600 hover:text-amber-800 underline underline-offset-2 whitespace-nowrap"
+              >
+                Add spam patterns
+              </button>
+            </div>
           </div>
-
-          <p className="text-[10px] text-amber-500">
-            Common exclusions: <button onClick={() => { const common = ["info", "marketing", "newsletter", "noreply", "no-reply", "donotreply", "notifications", "updates", "alerts", "bounce", "support", "hello", "contact"]; setExclusions(prev => [...prev, ...common.filter(w => !prev.includes(w))]); }} className="underline hover:text-amber-700">Add common spam patterns</button>
-          </p>
         </div>
       )}
 
-      {/* Column headers */}
-      <div className="flex items-center gap-2 px-3 mb-1">
-        <div className="w-7 flex-shrink-0" />
-        <SortHeader label="Name / Contact" sortKey="name"    active={sortKey==="name"}    dir={sortDir} onSort={handleSort} className="w-48 flex-shrink-0" />
-        <SortHeader label="Email"          sortKey="email"   active={sortKey==="email"}   dir={sortDir} onSort={handleSort} className="w-56 flex-shrink-0" />
-        <SortHeader label="Type *"         sortKey="type"    active={sortKey==="type"}    dir={sortDir} onSort={handleSort} className="w-36 flex-shrink-0" />
-        <SortHeader label="Title"          sortKey="title"   active={sortKey==="title"}   dir={sortDir} onSort={handleSort} className="w-32 flex-shrink-0" />
-        <div className="w-48 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Company</div>
-        <div className="w-20 flex-shrink-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">City</div>
-        <SortHeader label="Country *"      sortKey="country" active={sortKey==="country"} dir={sortDir} onSort={handleSort} className="w-28 flex-shrink-0" />
-        <SortHeader label="Added"          sortKey="added"   active={sortKey==="added"}   dir={sortDir} onSort={handleSort} className="w-20 flex-shrink-0 justify-end" />
-      </div>
+      {/* Scrollable table area */}
+      <div className="flex-1 overflow-auto">
+        <div className="min-w-max px-4 pb-6">
 
-      {/* Rows */}
-      <div className="space-y-1">
-        {sortedContacts.map(c => (
-          <ContactRow
-            key={c.id}
-            contact={c}
-            allCompanies={companiesState}
-            onConfirmed={handleConfirmed}
-            onDiscarded={handleDiscarded}
-            onExpand={handleExpand}
-            onCompanyUpdated={handleCompanyUpdated}
-            customCountries={customCountries}
-            onAddCustomCountry={handleAddCustomCountry}
-          />
-        ))}
+          {/* Sticky column headers */}
+          <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2.5 bg-slate-50 border-b border-slate-200 mb-0">
+            {/* indicator + avatar gutter */}
+            <div className="w-[18px] flex-shrink-0" />
+            <div className="w-7 flex-shrink-0" />
+            <SortHeader label="Name"    sortKey="name"    active={sortKey==="name"}    dir={sortDir} onSort={handleSort} className="w-48 flex-shrink-0" />
+            <SortHeader label="Email"   sortKey="email"   active={sortKey==="email"}   dir={sortDir} onSort={handleSort} className="w-56 flex-shrink-0" />
+            <SortHeader label="Type ✦"  sortKey="type"    active={sortKey==="type"}    dir={sortDir} onSort={handleSort} className="w-36 flex-shrink-0" />
+            <SortHeader label="Title"   sortKey="title"   active={sortKey==="title"}   dir={sortDir} onSort={handleSort} className="w-32 flex-shrink-0" />
+            <div className="w-48 flex-shrink-0 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Company</div>
+            <div className="w-20 flex-shrink-0 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">City</div>
+            <SortHeader label="Country ✦" sortKey="country" active={sortKey==="country"} dir={sortDir} onSort={handleSort} className="w-28 flex-shrink-0" />
+            <SortHeader label="Added"   sortKey="added"   active={sortKey==="added"}   dir={sortDir} onSort={handleSort} className="w-20 flex-shrink-0 justify-end" />
+            <div className="w-24 flex-shrink-0" />
+          </div>
+
+          {/* Rows */}
+          <div className="space-y-1 pt-1">
+            {sortedContacts.map(c => (
+              <ContactRow
+                key={c.id}
+                contact={c}
+                allCompanies={companiesState}
+                onConfirmed={handleConfirmed}
+                onDiscarded={handleDiscarded}
+                onExpand={handleExpand}
+                onCompanyUpdated={handleCompanyUpdated}
+                customCountries={customCountries}
+                onAddCustomCountry={handleAddCustomCountry}
+              />
+            ))}
+          </div>
+
+          {/* Footer hint */}
+          <p className="text-[10px] text-slate-300 mt-4 px-3">
+            ✦ Required fields. Green strip = ready to confirm.
+          </p>
+        </div>
       </div>
 
       {expandedCompanyId && (
