@@ -458,6 +458,8 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
   // Inline field editing
   const [editingField, setEditingField]     = useState<string | null>(null);
   const [fieldDraft, setFieldDraft]         = useState("");
+  // For country dropdown: "__custom__" means user wants to type a custom value
+  const [customCountryDraft, setCustomCountryDraft] = useState("");
   const [fieldSaving, setFieldSaving]       = useState(false);
   const [nameError, setNameError]           = useState<string | null>(null);
 
@@ -589,15 +591,22 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
     else if (field === "website") updates.website = value.trim() || null;
     else if (field === "city")    updates.location_city = value.trim() || null;
     else if (field === "country") updates.location_country = value.trim() || null;
-    const { error: fErr } = await supabase.from("companies").update(updates).eq("id", company.id);
-    if (fErr) {
+
+    // Use the API route (admin client) so RLS doesn't silently block the update
+    const res = await fetch(`/api/companies/${company.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Unknown error" }));
       setFieldSaving(false);
-      if (field === "name" && fErr.code === "23505") {
+      if (field === "name" && (err as { error?: string }).error?.includes("duplicate")) {
         setNameError(`A company named "${value.trim()}" already exists.`);
-        setEditingField("name"); // re-open inline edit so user can change it
+        setEditingField("name");
         setFieldDraft(value);
       } else {
-        console.error("[saveField]", fErr);
+        console.error("[saveField]", err);
       }
       return;
     }
@@ -920,10 +929,15 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
                     </select>
                   ) : (
                     <span
-                      onDoubleClick={() => { setEditingField("type"); setFieldDraft(company.type); }}
+                      onDoubleClick={() => {
+                        // Normalize to lowercase DB enum value (e.g. "Fund" → "fund")
+                        const normalized = (company.type ?? "").toLowerCase();
+                        setEditingField("type");
+                        setFieldDraft(normalized);
+                      }}
                       className={cn("inline-flex text-xs px-1.5 py-0.5 rounded border font-medium cursor-pointer hover:ring-1 hover:ring-blue-300",
-                        TYPE_BADGE[company.type] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
-                      {TYPE_LABEL[company.type] ?? company.type}
+                        TYPE_BADGE[(company.type ?? "").toLowerCase()] ?? "bg-slate-50 text-slate-500 border-slate-200")}>
+                      {TYPE_LABEL[(company.type ?? "").toLowerCase()] ?? company.type}
                     </span>
                   )}
                 </div>
@@ -980,14 +994,60 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
                       </p>
                     )}
                     {editingField === "country" ? (
-                      <input autoFocus value={fieldDraft} onChange={e => setFieldDraft(e.target.value)}
-                        onBlur={() => void saveField("country", fieldDraft)}
-                        onKeyDown={e => { if (e.key === "Enter") void saveField("country", fieldDraft); if (e.key === "Escape") setEditingField(null); }}
-                        placeholder="Country"
-                        className="text-sm border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none" />
+                      <div className="flex flex-col gap-1">
+                        <select
+                          autoFocus
+                          value={fieldDraft}
+                          onChange={e => {
+                            setFieldDraft(e.target.value);
+                            if (e.target.value !== "__custom__") {
+                              void saveField("country", e.target.value);
+                            }
+                          }}
+                          onBlur={() => {
+                            if (fieldDraft === "__custom__") {
+                              // Don't close — wait for the text input
+                            } else {
+                              setEditingField(null);
+                            }
+                          }}
+                          className="text-xs border border-blue-400 rounded px-1 py-0.5 focus:outline-none bg-white w-full"
+                        >
+                          <option value="">— Select country —</option>
+                          {(COUNTRY_OPTIONS as readonly string[]).map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                          <option value="__custom__">Other — type manually…</option>
+                        </select>
+                        {fieldDraft === "__custom__" && (
+                          <input
+                            autoFocus
+                            value={customCountryDraft}
+                            onChange={e => setCustomCountryDraft(e.target.value)}
+                            onBlur={() => {
+                              if (customCountryDraft.trim()) void saveField("country", customCountryDraft.trim());
+                              else setEditingField(null);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") { void saveField("country", customCountryDraft.trim()); }
+                              if (e.key === "Escape") { setEditingField(null); setCustomCountryDraft(""); }
+                            }}
+                            placeholder="Type country name…"
+                            className="text-xs border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none w-full"
+                          />
+                        )}
+                      </div>
                     ) : (
-                      <p className="text-sm text-slate-700 cursor-pointer hover:bg-blue-50 rounded px-1 -mx-1 py-0.5 transition-colors"
-                        onDoubleClick={() => { setEditingField("country"); setFieldDraft(company.location_country ?? ""); }}>
+                      <p
+                        className="text-sm text-slate-700 cursor-pointer hover:bg-blue-50 rounded px-1 -mx-1 py-0.5 transition-colors"
+                        onDoubleClick={() => {
+                          const existing = company.location_country ?? "";
+                          const isKnown = (COUNTRY_OPTIONS as readonly string[]).includes(existing);
+                          setFieldDraft(existing && !isKnown ? "__custom__" : existing);
+                          setCustomCountryDraft(existing && !isKnown ? existing : "");
+                          setEditingField("country");
+                        }}
+                      >
                         {company.location_country || <span className="text-slate-300 italic text-xs">Country</span>}
                       </p>
                     )}
