@@ -50,13 +50,19 @@ function emptyForm() {
   };
 }
 
-// ── Memo upload zone ──────────────────────────────────────────────────────────
-function MemoUpload({
+// ── Generic document upload zone ─────────────────────────────────────────────
+function DocUpload({
   investmentId,
+  label,
+  pathField,
+  nameField,
   existingName,
   onUploaded,
 }: {
   investmentId: string;
+  label: string;
+  pathField: string;        // DB column for storage path, e.g. "memo_storage_path"
+  nameField: string;        // DB column for file name, e.g. "memo_file_name"
   existingName: string | null;
   onUploaded: (path: string, name: string) => void;
 }) {
@@ -70,64 +76,47 @@ function MemoUpload({
     setUploading(true);
     const supabase = createClient();
     const ext = file.name.split(".").pop() ?? "pdf";
-    const path = `${investmentId}/${Date.now()}.${ext}`;
+    const path = `${investmentId}/${pathField}/${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage
       .from("investment-memos")
       .upload(path, file, { upsert: true });
     if (upErr) { setError(upErr.message); setUploading(false); return; }
     await supabase
       .from("portfolio_investments")
-      .update({ memo_storage_path: path, memo_file_name: file.name, updated_at: new Date().toISOString() })
+      .update({ [pathField]: path, [nameField]: file.name, updated_at: new Date().toISOString() })
       .eq("id", investmentId);
     onUploaded(path, file.name);
     setUploading(false);
   }
 
   return (
-    <div>
-      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Investment Memo</p>
+    <div className="flex-1 min-w-0">
+      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{label}</p>
       {existingName ? (
         <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
           <FileText size={13} className="text-blue-600 flex-shrink-0" />
           <span className="text-xs text-blue-700 font-medium truncate flex-1">{existingName}</span>
-          <button
-            onClick={() => inputRef.current?.click()}
-            className="text-[10px] text-blue-500 hover:text-blue-700 flex-shrink-0"
-          >Replace</button>
+          <button onClick={() => inputRef.current?.click()} className="text-[10px] text-blue-500 hover:text-blue-700 flex-shrink-0">Replace</button>
         </div>
       ) : (
         <div
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
-          onDrop={e => {
-            e.preventDefault();
-            setDragOver(false);
-            const file = e.dataTransfer.files?.[0];
-            if (file) upload(file);
-          }}
+          onDrop={e => { e.preventDefault(); setDragOver(false); const file = e.dataTransfer.files?.[0]; if (file) upload(file); }}
           onClick={() => inputRef.current?.click()}
           className={cn(
             "border-2 border-dashed rounded-lg p-3 flex items-center justify-center gap-2 cursor-pointer transition-colors",
             dragOver ? "border-blue-400 bg-blue-50" : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
           )}
         >
-          {uploading ? (
-            <Loader2 size={13} className="animate-spin text-blue-500" />
-          ) : (
-            <Upload size={13} className="text-slate-400" />
-          )}
+          {uploading ? <Loader2 size={13} className="animate-spin text-blue-500" /> : <Upload size={13} className="text-slate-400" />}
           <span className="text-xs text-slate-500">
             {uploading ? "Uploading…" : dragOver ? "Drop to upload" : "Drag & drop or click"}
           </span>
         </div>
       )}
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".pdf,.doc,.docx,.ppt,.pptx"
-        className="hidden"
-        onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); }}
-      />
+      <input ref={inputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx" className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); }} />
       {error && <p className="text-[10px] text-red-500 mt-1">{error}</p>}
     </div>
   );
@@ -159,6 +148,7 @@ function InvestmentTile({
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [memoName, setMemoName] = useState<string | null>(inv.memo_file_name);
+  const [subDocName, setSubDocName] = useState<string | null>(inv.subscription_doc_file_name ?? null);
 
   async function handleSave() {
     setSaving(true);
@@ -399,12 +389,23 @@ function InvestmentTile({
           </div>
         )}
 
-        {/* ── Memo upload — always visible, outside the edit/view conditional ── */}
-        <div className="pt-2 border-t border-slate-100">
-          <MemoUpload
+        {/* ── Documents — always visible, outside the edit/view conditional ── */}
+        <div className="pt-2 border-t border-slate-100 flex gap-3">
+          <DocUpload
             investmentId={inv.id}
+            label="Investment Memo"
+            pathField="memo_storage_path"
+            nameField="memo_file_name"
             existingName={memoName}
             onUploaded={(_, name) => setMemoName(name)}
+          />
+          <DocUpload
+            investmentId={inv.id}
+            label="Subscription Document"
+            pathField="subscription_doc_storage_path"
+            nameField="subscription_doc_file_name"
+            existingName={subDocName}
+            onUploaded={(_, name) => setSubDocName(name)}
           />
         </div>
       </div>

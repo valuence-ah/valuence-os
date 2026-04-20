@@ -395,9 +395,11 @@ export interface PortfolioInvestment {
   // Priced Round fields
   pre_money_valuation: number | null;
   ownership_pct: number | null;
-  // Memo
+  // Documents
   memo_storage_path: string | null;
   memo_file_name: string | null;
+  subscription_doc_storage_path: string | null;
+  subscription_doc_file_name: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
