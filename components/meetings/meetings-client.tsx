@@ -205,7 +205,7 @@ function MeetingTableRow({
       </div>
 
       {/* Company — no icon */}
-      <div className="flex-shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.company }}>
+      <div className="flex-shrink-0 pl-3 pr-6 overflow-hidden" style={{ width: colWidths.company }}>
         {meeting.company ? (
           <div className="flex items-center gap-1">
             <Link
@@ -234,17 +234,17 @@ function MeetingTableRow({
       </div>
 
       {/* Attendees */}
-      <div className="flex-shrink-0 pr-4" style={{ width: colWidths.attendees }}>
+      <div className="flex-shrink-0 pl-3 pr-6" style={{ width: colWidths.attendees }}>
         <AttendeeAvatars attendees={meeting.attendees} />
       </div>
 
       {/* Meeting type */}
-      <div className="flex-shrink-0 pr-4" style={{ width: colWidths.type }}>
+      <div className="flex-shrink-0 pl-3 pr-6" style={{ width: colWidths.type }}>
         <MeetingTypeBadge type={meeting.meeting_type} />
       </div>
 
       {/* Date + duration */}
-      <div className="flex-shrink-0 pr-4" style={{ width: colWidths.date }}>
+      <div className="flex-shrink-0 pl-3 pr-6" style={{ width: colWidths.date }}>
         <span className="flex items-center gap-1 text-[11px] text-slate-500 whitespace-nowrap">
           <Calendar size={10} className="flex-shrink-0 text-slate-400" />
           {formatDate(meeting.date)}
@@ -257,7 +257,7 @@ function MeetingTableRow({
       </div>
 
       {/* Resolution status */}
-      <div className="flex-shrink-0 pr-4" style={{ width: colWidths.status }}>
+      <div className="flex-shrink-0 pl-3 pr-6" style={{ width: colWidths.status }}>
         <ResolutionPill status={meeting.resolution_status} />
       </div>
 
@@ -901,18 +901,21 @@ export function MeetingsClient({
 
           {/* Resizable columns */}
           {(["company", "attendees", "type", "date", "status"] as const).map(col => (
-            <div key={col} className="relative flex-shrink-0 pr-4 flex items-center" style={{ width: colWidths[col] }}>
-              <ColHeader
-                label={col === "attendees" ? "People" : col.charAt(0).toUpperCase() + col.slice(1)}
-                sortKey={col === "attendees" ? "subject" : col as SortKey}
-                currentSort={sortKey}
-                currentDir={sortDir}
-                onSort={col === "attendees" ? () => {} : handleSort}
-              />
-              {/* Drag handle — pointer capture for smooth resize */}
+            <div key={col} className="relative flex-shrink-0 flex items-center" style={{ width: colWidths[col] }}>
+              {/* Content with breathing room on both sides */}
+              <div className="pl-3 pr-6 flex items-center min-w-0 flex-1">
+                <ColHeader
+                  label={col === "attendees" ? "People" : col.charAt(0).toUpperCase() + col.slice(1)}
+                  sortKey={col === "attendees" ? "subject" : col as SortKey}
+                  currentSort={sortKey}
+                  currentDir={sortDir}
+                  onSort={col === "attendees" ? () => {} : handleSort}
+                />
+              </div>
+              {/* Drag handle — sits flush at the far right edge */}
               <div
                 onPointerDown={e => startResize(e, col)}
-                className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize border-r-2 border-slate-200 hover:border-brand-teal active:border-brand-teal transition-colors z-10"
+                className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize border-r-2 border-slate-200 hover:border-brand-teal active:border-brand-teal transition-colors z-10"
                 title="Drag to resize"
               />
             </div>
