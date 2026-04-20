@@ -339,53 +339,30 @@ function InvestmentTile({
             </div>
           </div>
         ) : (
-          /* ── View mode ── */
-          <div className="space-y-4">
-            {/* Key metrics row */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[10px] text-slate-400 mb-0.5">Our Investment</p>
-                <p className="text-sm font-bold text-slate-800">{fmtMoney(inv.investment_amount)}</p>
-              </div>
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[10px] text-slate-400 mb-0.5">Round Size</p>
-                <p className="text-sm font-bold text-slate-800">{fmtMoney(inv.round_size)}</p>
-              </div>
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[10px] text-slate-400 mb-0.5">Close Date</p>
-                <p className="text-sm font-bold text-slate-800">{fmtDate(inv.close_date)}</p>
-              </div>
+          /* ── View mode — single compact row ── */
+          <div className="space-y-2">
+            <div className={`flex items-center gap-0 divide-x rounded-xl overflow-hidden border ${inv.investment_type === "safe" ? "divide-violet-200 border-violet-200 bg-violet-50" : "divide-blue-200 border-blue-200 bg-blue-50"}`}>
+              {[
+                { label: "Our Investment", value: fmtMoney(inv.investment_amount) },
+                { label: "Round Size",     value: fmtMoney(inv.round_size) },
+                { label: "Close Date",     value: inv.close_date ? new Date(inv.close_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—" },
+                ...(inv.investment_type === "safe"
+                  ? [
+                      { label: "Valuation Cap", value: fmtMoney(inv.valuation_cap) },
+                      { label: "Discount",       value: fmtPct(inv.discount) },
+                    ]
+                  : [
+                      { label: "Pre-Money Val.", value: fmtMoney(inv.pre_money_valuation) },
+                      { label: "Ownership",      value: fmtPct(inv.ownership_pct) },
+                    ]),
+              ].map(({ label, value }) => (
+                <div key={label} className="flex-1 px-3 py-2 min-w-0">
+                  <p className={`text-[9px] font-semibold uppercase tracking-wide mb-0.5 ${inv.investment_type === "safe" ? "text-violet-500" : "text-blue-500"}`}>{label}</p>
+                  <p className={`text-xs font-bold truncate ${inv.investment_type === "safe" ? "text-violet-900" : "text-blue-900"}`}>{value}</p>
+                </div>
+              ))}
             </div>
-
-            {/* Conditional details */}
-            {inv.investment_type === "safe" && (
-              <div className="grid grid-cols-2 gap-3 p-3 bg-violet-50 rounded-xl border border-violet-100">
-                <div>
-                  <p className="text-[10px] font-semibold text-violet-500 mb-0.5">Valuation Cap</p>
-                  <p className="text-sm font-bold text-violet-800">{fmtMoney(inv.valuation_cap)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-violet-500 mb-0.5">Discount</p>
-                  <p className="text-sm font-bold text-violet-800">{fmtPct(inv.discount)}</p>
-                </div>
-              </div>
-            )}
-            {inv.investment_type === "priced_round" && (
-              <div className="grid grid-cols-2 gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                <div>
-                  <p className="text-[10px] font-semibold text-blue-500 mb-0.5">Pre-Money Valuation</p>
-                  <p className="text-sm font-bold text-blue-800">{fmtMoney(inv.pre_money_valuation)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-blue-500 mb-0.5">Ownership</p>
-                  <p className="text-sm font-bold text-blue-800">{fmtPct(inv.ownership_pct)}</p>
-                </div>
-              </div>
-            )}
-
-            {inv.notes && (
-              <p className="text-xs text-slate-500 leading-relaxed">{inv.notes}</p>
-            )}
+            {inv.notes && <p className="text-xs text-slate-500 leading-relaxed">{inv.notes}</p>}
           </div>
         )}
 
@@ -413,6 +390,67 @@ function InvestmentTile({
   );
 }
 
+// ── Pending file picker (stores file in state, uploads later) ─────────────────
+function PendingFilePicker({
+  label,
+  file,
+  onChange,
+}: {
+  label: string;
+  file: File | null;
+  onChange: (f: File | null) => void;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex-1 min-w-0">
+      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{label}</p>
+      {file ? (
+        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+          <FileText size={13} className="text-green-600 flex-shrink-0" />
+          <span className="text-xs text-green-700 font-medium truncate flex-1">{file.name}</span>
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="text-green-400 hover:text-red-500 flex-shrink-0 transition-colors"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      ) : (
+        <div
+          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={e => {
+            e.preventDefault();
+            setDragOver(false);
+            const f = e.dataTransfer.files?.[0];
+            if (f) onChange(f);
+          }}
+          onClick={() => inputRef.current?.click()}
+          className={cn(
+            "border-2 border-dashed rounded-lg p-3 flex items-center justify-center gap-2 cursor-pointer transition-colors",
+            dragOver ? "border-blue-400 bg-blue-50" : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
+          )}
+        >
+          <Upload size={13} className="text-slate-400" />
+          <span className="text-xs text-slate-500">
+            {dragOver ? "Drop to attach" : "Drag & drop or click"}
+          </span>
+        </div>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.ppt,.pptx"
+        className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) onChange(f); }}
+      />
+    </div>
+  );
+}
+
 // ── Add investment form ────────────────────────────────────────────────────────
 function AddInvestmentForm({
   companyId,
@@ -425,6 +463,8 @@ function AddInvestmentForm({
 }) {
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [memoFile, setMemoFile] = useState<File | null>(null);
+  const [subDocFile, setSubDocFile] = useState<File | null>(null);
 
   async function handleSave() {
     setSaving(true);
@@ -442,13 +482,52 @@ function AddInvestmentForm({
       ownership_pct: form.investment_type === "priced_round" && form.ownership_pct ? Number(form.ownership_pct) : null,
       notes: form.notes || null,
     };
+
+    // 1 — Insert record to get the ID
     const { data, error } = await supabase
       .from("portfolio_investments")
       .insert(payload)
       .select()
       .single();
+
+    if (error || !data) { setSaving(false); return; }
+    const id = (data as PortfolioInvestment).id;
+    let finalRow = data as PortfolioInvestment;
+
+    // 2 — Upload memo if selected
+    if (memoFile) {
+      const ext = memoFile.name.split(".").pop() ?? "pdf";
+      const path = `${id}/memo_storage_path/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("investment-memos")
+        .upload(path, memoFile, { upsert: true });
+      if (!upErr) {
+        await supabase
+          .from("portfolio_investments")
+          .update({ memo_storage_path: path, memo_file_name: memoFile.name, updated_at: new Date().toISOString() })
+          .eq("id", id);
+        finalRow = { ...finalRow, memo_storage_path: path, memo_file_name: memoFile.name };
+      }
+    }
+
+    // 3 — Upload subscription doc if selected
+    if (subDocFile) {
+      const ext = subDocFile.name.split(".").pop() ?? "pdf";
+      const path = `${id}/subscription_doc_storage_path/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("investment-memos")
+        .upload(path, subDocFile, { upsert: true });
+      if (!upErr) {
+        await supabase
+          .from("portfolio_investments")
+          .update({ subscription_doc_storage_path: path, subscription_doc_file_name: subDocFile.name, updated_at: new Date().toISOString() })
+          .eq("id", id);
+        finalRow = { ...finalRow, subscription_doc_storage_path: path, subscription_doc_file_name: subDocFile.name };
+      }
+    }
+
     setSaving(false);
-    if (!error && data) onAdded(data as PortfolioInvestment);
+    onAdded(finalRow);
   }
 
   return (
@@ -549,6 +628,15 @@ function AddInvestmentForm({
         <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
           rows={2} placeholder="Any additional details…"
           className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+      </div>
+
+      {/* Document uploads */}
+      <div className="pt-1 border-t border-slate-100">
+        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Documents (optional)</p>
+        <div className="flex gap-3">
+          <PendingFilePicker label="Investment Memo" file={memoFile} onChange={setMemoFile} />
+          <PendingFilePicker label="Subscription Document" file={subDocFile} onChange={setSubDocFile} />
+        </div>
       </div>
 
       <div className="flex gap-2 pt-1">

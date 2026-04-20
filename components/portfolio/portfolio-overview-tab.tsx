@@ -371,7 +371,7 @@ export function PortfolioOverviewTab({
     <div className="p-5 space-y-4 overflow-y-auto h-full">
 
       {/* ═══ ROW 1: Valuence Investment (left) + Fundraise Tracker (right) ══════ */}
-      <div className="grid grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-2 gap-4 items-stretch">
 
         {/* Left: Valuence Investment — compact 2-row-per-round cards */}
         <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col min-h-[110px]">
@@ -503,7 +503,7 @@ export function PortfolioOverviewTab({
         </div>
       </div>
 
-      {/* ═══ ROW 2: Key Metrics (left) + Key Milestones (right) ════════════════ */}
+      {/* ═══ ROW 2: Key Metrics (left) + Meeting History (right) ═════════════════ */}
       <div className="grid grid-cols-2 gap-4 items-start">
 
         {/* Left: Key metrics */}
@@ -572,7 +572,38 @@ export function PortfolioOverviewTab({
           {latestKpi && !editingKpis && <p className="text-[10px] text-slate-400 mt-1">Period: {latestKpi.period}</p>}
         </div>
 
-        {/* Right: Key milestones */}
+        {/* Right: Meeting history */}
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between mb-2 flex-shrink-0">
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Meeting history</h3>
+            <button onClick={() => setShowFullTimeline(true)} className="text-[10px] text-blue-500 hover:text-blue-700">View all →</button>
+          </div>
+          <div className="h-[96px] overflow-y-auto pr-0.5">
+            {interactions.filter(i => i.type === "meeting").length === 0 ? (
+              <p className="text-xs text-slate-400">No meetings logged yet</p>
+            ) : (
+              <div className="space-y-1">
+                {interactions.filter(i => i.type === "meeting").slice(0, 8).map(i => (
+                  <button key={i.id} onClick={() => setSelectedInteraction(i)}
+                    className="flex items-start gap-2.5 w-full text-left hover:bg-violet-50 rounded-lg px-2 py-1.5 -mx-2 transition-colors group">
+                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-violet-400" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-semibold text-slate-800 truncate">{i.subject ?? "Meeting"}</p>
+                      {i.summary && <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{i.summary}</p>}
+                      <p className="text-[10px] text-slate-400 mt-0.5">{new Date(i.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ ROW 3: Key Milestones (left) + Strategic Initiatives (right) ════════ */}
+      <div className="grid grid-cols-2 gap-4 items-start">
+
+        {/* Left: Key milestones */}
         <div className="flex flex-col">
           <div className="flex items-center justify-between mb-2 flex-shrink-0">
             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Key milestones</h3>
@@ -580,7 +611,7 @@ export function PortfolioOverviewTab({
               <Plus size={10} /> Add
             </button>
           </div>
-          <div className="h-[96px] overflow-y-auto space-y-1 pr-0.5">
+          <div className="h-[180px] overflow-y-auto space-y-1 pr-0.5">
             {localMilestones.length === 0 && !addingMilestone && (
               <p className="text-xs text-slate-400">No milestones yet.</p>
             )}
@@ -650,37 +681,6 @@ export function PortfolioOverviewTab({
               </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* ═══ ROW 3: Meeting History (left) + Strategic Initiatives (right) ═════ */}
-      <div className="grid grid-cols-2 gap-4 items-start">
-
-        {/* Left: Meeting history */}
-        <div className="flex flex-col">
-          <div className="flex items-center justify-between mb-2 flex-shrink-0">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Meeting history</h3>
-            <button onClick={() => setShowFullTimeline(true)} className="text-[10px] text-blue-500 hover:text-blue-700">View all →</button>
-          </div>
-          <div className="h-[180px] overflow-y-auto pr-0.5">
-            {interactions.filter(i => i.type === "meeting").length === 0 ? (
-              <p className="text-xs text-slate-400">No meetings logged yet</p>
-            ) : (
-              <div className="space-y-1">
-                {interactions.filter(i => i.type === "meeting").slice(0, 8).map(i => (
-                  <button key={i.id} onClick={() => setSelectedInteraction(i)}
-                    className="flex items-start gap-2.5 w-full text-left hover:bg-violet-50 rounded-lg px-2 py-1.5 -mx-2 transition-colors group">
-                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-violet-400" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[12px] font-semibold text-slate-800 truncate">{i.subject ?? "Meeting"}</p>
-                      {i.summary && <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{i.summary}</p>}
-                      <p className="text-[10px] text-slate-400 mt-0.5">{new Date(i.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Right: Strategic initiatives */}
