@@ -5,7 +5,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import {
   X, FileText, Building2, Users, Search,
-  ChevronRight, Clock, Pencil, Plus, Trash2,
+  ChevronRight, Clock, Pencil, Plus, Trash2, Sparkles, Loader2,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
@@ -104,9 +104,16 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SummaryTab({ meeting }: { meeting: MeetingRow }) {
+function SummaryTab({
+  meeting, onSummarize, summarizing,
+}: {
+  meeting: MeetingRow;
+  onSummarize: () => void;
+  summarizing: boolean;
+}) {
   const raw = meeting.ai_summary ?? meeting.summary ?? meeting.body;
   const fmt = formatMeetingSummary(raw);
+  const hasTranscript = !!(meeting.transcript_text || meeting.transcript_url);
   const displayNextSteps = fmt.nextSteps.length > 0 ? fmt.nextSteps : (meeting.action_items ?? []);
 
   // Nothing at all
@@ -147,9 +154,36 @@ function SummaryTab({ meeting }: { meeting: MeetingRow }) {
         </div>
       </div>
 
+      {/* Summarize with Claude — only when transcript exists */}
+      {hasTranscript && (
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            AI Summary
+          </p>
+          <button
+            onClick={onSummarize}
+            disabled={summarizing}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors",
+              summarizing
+                ? "bg-violet-100 text-violet-400 cursor-not-allowed"
+                : "bg-violet-600 hover:bg-violet-700 text-white"
+            )}
+          >
+            {summarizing
+              ? <Loader2 size={11} className="animate-spin" />
+              : <Sparkles size={11} />
+            }
+            {summarizing ? "Summarizing…" : "Summarize with Claude"}
+          </button>
+        </div>
+      )}
+
       {totallyEmpty ? (
         <p className="text-sm text-slate-400 italic">
-          Fireflies did not return a summary for this meeting.
+          {hasTranscript
+            ? "No summary yet — click \"Summarize with Claude\" above."
+            : "Fireflies did not return a summary for this meeting."}
         </p>
       ) : (
         <>
@@ -563,6 +597,7 @@ function LinksTab({
 
 export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("summary");
+  const [summarizing, setSummarizing] = useState(false);
 
   // Title editing
   const [editingTitle, setEditingTitle] = useState(false);
@@ -607,6 +642,19 @@ export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
     onUpdate({ id: meeting.id, subject: trimmed });
     setEditingTitle(false);
   }, [titleValue, meeting.subject, meeting.id, onUpdate]);
+
+  const handleSummarize = useCallback(async () => {
+    setSummarizing(true);
+    try {
+      const res = await fetch(`/api/meetings/${meeting.id}/summarize`, { method: "POST" });
+      const data = await res.json() as { ai_summary?: string; error?: string };
+      if (data.ai_summary) {
+        onUpdate({ id: meeting.id, ai_summary: data.ai_summary });
+      }
+    } finally {
+      setSummarizing(false);
+    }
+  }, [meeting.id, onUpdate]);
 
   const handleLinkCompany = useCallback(async (co: CompanyResult | null) => {
     setLinkedCompany(co);
@@ -704,7 +752,11 @@ export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-5">
           {activeTab === "summary"    && (
-            <SummaryTab meeting={{ ...meeting, subject: titleValue }} />
+            <SummaryTab
+              meeting={{ ...meeting, subject: titleValue }}
+              onSummarize={handleSummarize}
+              summarizing={summarizing}
+            />
           )}
           {activeTab === "transcript" && <TranscriptTab meeting={meeting} />}
           {activeTab === "links"      && (

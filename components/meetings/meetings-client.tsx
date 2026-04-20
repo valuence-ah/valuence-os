@@ -6,7 +6,7 @@ import {
   Search, RefreshCw, ChevronDown, ChevronUp,
   Building2, Calendar, CheckSquare,
   AlertCircle, X, Clock, Archive, ArchiveRestore, Trash2, FileText,
-  Users, ExternalLink, Sparkles, Loader2,
+  Users, ExternalLink,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
@@ -139,17 +139,15 @@ type SortDir = "asc" | "desc";
 interface MeetingTableRowProps {
   meeting: MeetingRow;
   selected: boolean;
-  summarizing: boolean;
   onToggle: (id: string, checked: boolean) => void;
   onResolve: (m: MeetingRow) => void;
   onOpenPanel: (m: MeetingRow) => void;
   onArchive: (id: string) => void;
   onReassign: (id: string) => void;
-  onSummarize: (id: string) => void;
 }
 
 function MeetingTableRow({
-  meeting, selected, summarizing, onToggle, onResolve, onOpenPanel, onArchive, onReassign, onSummarize,
+  meeting, selected, onToggle, onResolve, onOpenPanel, onArchive, onReassign,
 }: MeetingTableRowProps) {
   const cfg = getResConfig(meeting.resolution_status);
   const needsAction = meeting.resolution_status === "unresolved" || meeting.resolution_status === "partial";
@@ -267,28 +265,7 @@ function MeetingTableRow({
       </div>
 
       {/* Action buttons */}
-      <div className="w-36 flex-shrink-0 pr-4 flex items-center justify-end gap-1.5">
-        {/* Claude summarize — only when transcript exists */}
-        {hasTranscript && (
-          <button
-            title={summarizing ? "Summarizing…" : "Summarize with Claude"}
-            disabled={summarizing}
-            onClick={e => { e.stopPropagation(); onSummarize(meeting.id); }}
-            className={cn(
-              "flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md transition-colors whitespace-nowrap",
-              summarizing
-                ? "bg-violet-100 text-violet-400 cursor-not-allowed"
-                : "bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100"
-            )}
-          >
-            {summarizing
-              ? <Loader2 size={9} className="animate-spin" />
-              : <Sparkles size={9} />
-            }
-            {summarizing ? "Summarizing…" : "Summarize"}
-          </button>
-        )}
-
+      <div className="w-24 flex-shrink-0 pr-4 flex items-center justify-end gap-1.5">
         {needsAction && (
           <button
             onClick={e => { e.stopPropagation(); onResolve(meeting); }}
@@ -427,7 +404,6 @@ export function MeetingsClient({
   const [sortKey, setSortKey]                       = useState<SortKey>("date");
   const [sortDir, setSortDir]                       = useState<SortDir>("desc");
   const [selectedIds, setSelectedIds]               = useState<Set<string>>(new Set());
-  const [summarizingIds, setSummarizingIds]         = useState<Set<string>>(new Set());
   const selectAllRef                                = useRef<HTMLInputElement>(null);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
@@ -551,31 +527,6 @@ export function MeetingsClient({
   function handleResolved(meetingId: string) {
     setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, resolution_status: "resolved" } : m));
   }
-
-  const handleSummarize = useCallback(async (id: string) => {
-    setSummarizingIds(prev => new Set(prev).add(id));
-    try {
-      const res = await fetch(`/api/meetings/${id}/summarize`, { method: "POST" });
-      const data = await res.json() as { ai_summary?: string; error?: string };
-      if (!res.ok || data.error) {
-        setStatusToast(data.error ?? "Summarization failed");
-      } else {
-        // Update the meeting in local state so the summary snippet refreshes instantly
-        setMeetings(prev =>
-          prev.map(m => m.id === id ? { ...m, ai_summary: data.ai_summary ?? m.ai_summary } : m)
-        );
-        // Also update the open panel if it's the same meeting
-        setPanelMeeting(prev =>
-          prev && prev.id === id ? { ...prev, ai_summary: data.ai_summary ?? prev.ai_summary } : prev
-        );
-        setStatusToast("Summary updated by Claude ✦");
-      }
-    } catch {
-      setStatusToast("Summarization failed — check your connection");
-    } finally {
-      setSummarizingIds(prev => { const next = new Set(prev); next.delete(id); return next; });
-    }
-  }, []);
 
   const handleArchive = useCallback(async (id: string) => {
     const res = await fetch(`/api/meetings/${id}`, {
@@ -913,7 +864,7 @@ export function MeetingsClient({
           <div className="w-24 flex-shrink-0 pr-4">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Signals</span>
           </div>
-          <div className="w-36 flex-shrink-0 pr-4" />
+          <div className="w-24 flex-shrink-0 pr-4" />
         </div>
       </div>
 
@@ -933,13 +884,11 @@ export function MeetingsClient({
               key={m.id}
               meeting={m}
               selected={selectedIds.has(m.id)}
-              summarizing={summarizingIds.has(m.id)}
               onToggle={handleToggleSelect}
               onResolve={setResolveMeeting}
               onOpenPanel={setPanelMeeting}
               onArchive={handleArchive}
               onReassign={setReassignId}
-              onSummarize={handleSummarize}
             />
           ))
         )}
