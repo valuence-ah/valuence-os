@@ -36,6 +36,34 @@ const PERSONAL_DOMAINS = new Set([
   "msn.com",
 ]);
 
+// ── STEP 0: Peer-contact lookup ────────────────────────────────────────────────
+// Finds an existing contact with the same email domain that is already assigned
+// to a company. When several colleagues share the same domain (e.g. @nabacoinc.com)
+// and at least one is already linked, this is the most reliable signal.
+async function findCompanyByPeerContact(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  domain: string
+): Promise<{ id: string; name: string } | null> {
+  // Find a contact whose email ends with @<domain> and has a company_id
+  const { data: contacts } = await supabase
+    .from("contacts")
+    .select("company_id")
+    .ilike("email", `%@${domain}`)
+    .not("company_id", "is", null)
+    .limit(1);
+
+  const companyId = contacts?.[0]?.company_id as string | null;
+  if (!companyId) return null;
+
+  const { data: company } = await supabase
+    .from("companies")
+    .select("id, name")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  return company ? { id: company.id, name: company.name } : null;
+}
+
 // ── STEP 1: Domain lookup ─────────────────────────────────────────────────────
 // Checks whether any company in the DB has this domain in their website or
 // website_domain field. No name guessing — only domain-based matching.
@@ -97,6 +125,12 @@ export async function POST(req: NextRequest) {
   // Skip personal / freemail domains — no company affiliation possible
   if (PERSONAL_DOMAINS.has(domain)) {
     return NextResponse.json({ match: null, suggestion: null, source: "personal_domain" });
+  }
+
+  // ── STEP 0: Peer-contact lookup (most reliable — same domain already linked) ─
+  const peerMatch = await findCompanyByPeerContact(supabase, domain);
+  if (peerMatch) {
+    return NextResponse.json({ match: peerMatch, suggestion: null, source: "peer_contact" });
   }
 
   // ── STEP 1: Domain lookup ──────────────────────────────────────────────────

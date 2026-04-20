@@ -520,6 +520,10 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [showAddContactForm, setShowAddContactForm] = useState(false);
   const [newContactForm, setNewContactForm] = useState({ first_name: "", last_name: "", email: "", title: "" });
   const [addingContact, setAddingContact] = useState(false);
+  // Auto-suggest for "New Contact" form in manage panel
+  const [panelContactSugg, setPanelContactSugg] = useState<Contact[]>([]);
+  const [showPanelContactSugg, setShowPanelContactSugg] = useState(false);
+  const panelContactTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Add contact inline in add-company modal
   const [addModalContactOpen, setAddModalContactOpen] = useState(false);
@@ -671,6 +675,22 @@ export function PipelineClient({ initialCompanies }: Props) {
     setDocuments(docs ?? []);
     setMemo(memos?.[0] ?? null);
     setLoadingDetail(false);
+
+    // Keep last_contact_date accurate: use the most recent interaction date if it's
+    // newer than what's stored on the company (Fireflies-synced meetings don't always
+    // update the company field).
+    if (ints && ints.length > 0) {
+      const latestDate = ints[0].date as string | null;
+      if (latestDate) {
+        setCompanies(prev => prev.map(c => {
+          if (c.id !== id) return c;
+          if (!c.last_contact_date || latestDate > c.last_contact_date) {
+            return { ...c, last_contact_date: latestDate };
+          }
+          return c;
+        }));
+      }
+    }
 
     // Load company_documents (meeting transcripts)
     supabase
@@ -932,6 +952,27 @@ export function PipelineClient({ initialCompanies }: Props) {
         .limit(8);
       setLinkContactSuggestions((data as Contact[]) ?? []);
     }, 250);
+  }
+
+  // Auto-suggest for the "New Contact" form — searches by name or email as user types
+  function searchPanelContacts(query: string) {
+    if (panelContactTimer.current) clearTimeout(panelContactTimer.current);
+    if (!query.trim() || query.length < 2) {
+      setPanelContactSugg([]);
+      setShowPanelContactSugg(false);
+      return;
+    }
+    panelContactTimer.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from("contacts")
+        .select("id, first_name, last_name, email, title, company_id")
+        .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(6);
+      // Exclude contacts already linked to this company
+      const suggestions = ((data as Contact[]) ?? []).filter(c => c.company_id !== selected?.id);
+      setPanelContactSugg(suggestions);
+      setShowPanelContactSugg(suggestions.length > 0);
+    }, 200);
   }
 
   async function linkContactToCompany(contactId: string) {
@@ -3558,19 +3599,60 @@ export function PipelineClient({ initialCompanies }: Props) {
                     {showAddContactForm ? (
                       <div className="border border-blue-200 rounded-xl bg-blue-50 p-4 space-y-3">
                         <p className="text-xs font-semibold text-slate-700">New Contact</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                            placeholder="First name"
-                            value={newContactForm.first_name}
-                            onChange={e => setNewContactForm(p => ({ ...p, first_name: e.target.value }))}
-                          />
-                          <input
-                            className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                            placeholder="Last name"
-                            value={newContactForm.last_name}
-                            onChange={e => setNewContactForm(p => ({ ...p, last_name: e.target.value }))}
-                          />
+                        {/* Name row with auto-suggest */}
+                        <div className="relative">
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                              placeholder="First name"
+                              autoComplete="off"
+                              value={newContactForm.first_name}
+                              onChange={e => {
+                                setNewContactForm(p => ({ ...p, first_name: e.target.value }));
+                                searchPanelContacts(e.target.value + " " + newContactForm.last_name);
+                              }}
+                              onBlur={() => setTimeout(() => setShowPanelContactSugg(false), 150)}
+                            />
+                            <input
+                              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                              placeholder="Last name"
+                              autoComplete="off"
+                              value={newContactForm.last_name}
+                              onChange={e => {
+                                setNewContactForm(p => ({ ...p, last_name: e.target.value }));
+                                searchPanelContacts(newContactForm.first_name + " " + e.target.value);
+                              }}
+                              onBlur={() => setTimeout(() => setShowPanelContactSugg(false), 150)}
+                            />
+                          </div>
+                          {/* Suggestions dropdown */}
+                          {showPanelContactSugg && panelContactSugg.length > 0 && (
+                            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                              <p className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wide bg-slate-50 border-b border-slate-100">
+                                Existing contacts — click to link
+                              </p>
+                              {panelContactSugg.map(c => (
+                                <button key={c.id} type="button"
+                                  onMouseDown={async () => {
+                                    setShowPanelContactSugg(false);
+                                    setShowAddContactForm(false);
+                                    setNewContactForm({ first_name: "", last_name: "", email: "", title: "" });
+                                    await linkContactToCompany(c.id);
+                                  }}
+                                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 transition-colors text-left">
+                                  <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                                    <User size={12} className="text-violet-600" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-slate-800">{c.first_name} {c.last_name}</p>
+                                    {c.email && <p className="text-xs text-blue-600 truncate">{c.email}</p>}
+                                    {c.title && <p className="text-xs text-slate-400 truncate">{c.title}</p>}
+                                  </div>
+                                  <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded flex-shrink-0">Link</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <input
                           className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -3581,13 +3663,18 @@ export function PipelineClient({ initialCompanies }: Props) {
                         <input
                           className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                           type="email"
+                          autoComplete="off"
                           placeholder="Email"
                           value={newContactForm.email}
-                          onChange={e => setNewContactForm(p => ({ ...p, email: e.target.value }))}
+                          onChange={e => {
+                            setNewContactForm(p => ({ ...p, email: e.target.value }));
+                            searchPanelContacts(e.target.value);
+                          }}
+                          onBlur={() => setTimeout(() => setShowPanelContactSugg(false), 150)}
                         />
                         <div className="flex gap-2">
                           <button
-                            onClick={() => { setShowAddContactForm(false); setNewContactForm({ first_name: "", last_name: "", email: "", title: "" }); }}
+                            onClick={() => { setShowAddContactForm(false); setNewContactForm({ first_name: "", last_name: "", email: "", title: "" }); setShowPanelContactSugg(false); setPanelContactSugg([]); }}
                             className="flex-1 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-white"
                           >Cancel</button>
                           <button

@@ -150,8 +150,8 @@ const DEFAULT_WIDTHS: ColWidths = {
   attendees: 76,
   type: 100,
   date: 108,
-  status: 116,
-  actions: 96,
+  status: 180,
+  actions: 0,
 };
 
 interface MeetingTableRowProps {
@@ -256,21 +256,18 @@ function MeetingTableRow({
         ) : null}
       </div>
 
-      {/* Resolution status */}
-      <div className="flex-shrink-0 pl-3 pr-6" style={{ width: colWidths.status }}>
-        <ResolutionPill status={meeting.resolution_status} />
-      </div>
-
-      {/* Action buttons */}
-      <div className="flex-shrink-0 pr-4 flex items-center justify-end gap-1.5" style={{ width: colWidths.actions }}>
-        {needsAction && (
+      {/* Resolution status — shows Resolve button for unresolved/partial, pill otherwise */}
+      <div className="flex-shrink-0 pl-3 pr-4 flex items-center justify-between gap-2" style={{ width: colWidths.status }}>
+        {needsAction ? (
           <button
             onClick={e => { e.stopPropagation(); onResolve(meeting); }}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors whitespace-nowrap shadow-sm"
+            className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors whitespace-nowrap shadow-sm"
           >
             <AlertCircle size={9} />
             Resolve
           </button>
+        ) : (
+          <ResolutionPill status={meeting.resolution_status} />
         )}
         <button
           title="Archive meeting"
@@ -279,7 +276,7 @@ function MeetingTableRow({
             if (!confirm("Archive this meeting? It will be hidden and won't reappear when synced.")) return;
             onArchive(meeting.id);
           }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-300 hover:text-amber-500"
+          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-300 hover:text-amber-500 flex-shrink-0"
         >
           <Archive size={13} />
         </button>
