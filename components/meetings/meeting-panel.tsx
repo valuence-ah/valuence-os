@@ -7,7 +7,7 @@ import {
   X, FileText, Building2, Users, Search,
   ChevronRight, Clock, Pencil, Plus, Trash2, Sparkles, Loader2,
 } from "lucide-react";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, formatType } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
 import Link from "next/link";
 import { formatMeetingSummary } from "@/lib/format-meeting-summary";
@@ -326,7 +326,7 @@ function TypeBadge({ type }: { type: string | null }) {
   const style = TYPE_STYLES[type] ?? "bg-slate-50 text-slate-600 border-slate-200";
   return (
     <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium", style)}>
-      {type}
+      {formatType(type)}
     </span>
   );
 }

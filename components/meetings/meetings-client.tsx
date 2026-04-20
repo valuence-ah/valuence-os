@@ -4,9 +4,9 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   Search, RefreshCw, ChevronDown, ChevronUp,
-  Building2, Calendar, CheckSquare,
+  Building2, Calendar,
   AlertCircle, X, Clock, Archive, ArchiveRestore, Trash2, FileText,
-  Users, ExternalLink,
+  Users, ExternalLink, CheckSquare,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { Interaction, Company } from "@/lib/types";
@@ -136,9 +136,28 @@ function ResolutionPill({ status }: { status: string | null }) {
 type SortKey = "date" | "subject" | "company" | "status" | "type";
 type SortDir = "asc" | "desc";
 
+type ColWidths = {
+  company: number;
+  attendees: number;
+  type: number;
+  date: number;
+  status: number;
+  actions: number;
+};
+
+const DEFAULT_WIDTHS: ColWidths = {
+  company: 140,
+  attendees: 76,
+  type: 100,
+  date: 108,
+  status: 116,
+  actions: 96,
+};
+
 interface MeetingTableRowProps {
   meeting: MeetingRow;
   selected: boolean;
+  colWidths: ColWidths;
   onToggle: (id: string, checked: boolean) => void;
   onResolve: (m: MeetingRow) => void;
   onOpenPanel: (m: MeetingRow) => void;
@@ -147,12 +166,10 @@ interface MeetingTableRowProps {
 }
 
 function MeetingTableRow({
-  meeting, selected, onToggle, onResolve, onOpenPanel, onArchive, onReassign,
+  meeting, selected, colWidths, onToggle, onResolve, onOpenPanel, onArchive, onReassign,
 }: MeetingTableRowProps) {
   const cfg = getResConfig(meeting.resolution_status);
   const needsAction = meeting.resolution_status === "unresolved" || meeting.resolution_status === "partial";
-  const hasTranscript = !!(meeting.transcript_text || meeting.transcript_url);
-  const actionCount = meeting.action_items?.length ?? 0;
 
   return (
     <div className={cn(
@@ -169,16 +186,13 @@ function MeetingTableRow({
           checked={selected}
           onChange={e => onToggle(meeting.id, e.target.checked)}
           onClick={e => e.stopPropagation()}
-          className="w-3.5 h-3.5 rounded border-slate-300 text-brand-teal cursor-pointer accent-[#0D3D38]"
+          className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-[#0D3D38]"
         />
       </div>
 
       {/* Title + summary snippet */}
       <div className="flex-1 min-w-0 py-2.5 pr-4">
-        <button
-          onClick={() => onOpenPanel(meeting)}
-          className="text-left w-full group/title"
-        >
+        <button onClick={() => onOpenPanel(meeting)} className="text-left w-full group/title">
           <p className="text-xs font-semibold text-slate-800 truncate group-hover/title:text-brand-teal transition-colors">
             {meeting.subject ?? "Untitled Meeting"}
           </p>
@@ -190,17 +204,16 @@ function MeetingTableRow({
         </button>
       </div>
 
-      {/* Company */}
-      <div className="w-36 flex-shrink-0 pr-4">
+      {/* Company — no icon */}
+      <div className="flex-shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.company }}>
         {meeting.company ? (
           <div className="flex items-center gap-1">
             <Link
               href={`/crm/companies/${meeting.company.id}`}
               onClick={e => e.stopPropagation()}
-              className="flex items-center gap-1 text-[11px] font-medium text-brand-teal hover:underline truncate max-w-[100px]"
+              className="text-[11px] font-medium text-brand-teal hover:underline truncate"
             >
-              <Building2 size={10} className="flex-shrink-0" />
-              <span className="truncate">{meeting.company.name}</span>
+              {meeting.company.name}
             </Link>
             <button
               onClick={e => { e.stopPropagation(); onReassign(meeting.id); }}
@@ -213,26 +226,25 @@ function MeetingTableRow({
         ) : (
           <button
             onClick={e => { e.stopPropagation(); onReassign(meeting.id); }}
-            className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-800 font-medium"
+            className="text-[10px] text-amber-600 hover:text-amber-800 font-medium whitespace-nowrap"
           >
-            <Building2 size={9} />
-            <span>Link company</span>
+            Link company
           </button>
         )}
       </div>
 
       {/* Attendees */}
-      <div className="w-20 flex-shrink-0 pr-4">
+      <div className="flex-shrink-0 pr-4" style={{ width: colWidths.attendees }}>
         <AttendeeAvatars attendees={meeting.attendees} />
       </div>
 
       {/* Meeting type */}
-      <div className="w-24 flex-shrink-0 pr-4">
+      <div className="flex-shrink-0 pr-4" style={{ width: colWidths.type }}>
         <MeetingTypeBadge type={meeting.meeting_type} />
       </div>
 
       {/* Date + duration */}
-      <div className="w-28 flex-shrink-0 pr-4">
+      <div className="flex-shrink-0 pr-4" style={{ width: colWidths.date }}>
         <span className="flex items-center gap-1 text-[11px] text-slate-500 whitespace-nowrap">
           <Calendar size={10} className="flex-shrink-0 text-slate-400" />
           {formatDate(meeting.date)}
@@ -245,27 +257,12 @@ function MeetingTableRow({
       </div>
 
       {/* Resolution status */}
-      <div className="w-28 flex-shrink-0 pr-4">
+      <div className="flex-shrink-0 pr-4" style={{ width: colWidths.status }}>
         <ResolutionPill status={meeting.resolution_status} />
       </div>
 
-      {/* Indicators: source, transcript, actions */}
-      <div className="w-24 flex-shrink-0 pr-4 flex items-center gap-1 flex-wrap">
-        <SourceBadge source={meeting.source} />
-        {hasTranscript && (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-50 text-slate-500 border border-slate-200">
-            <FileText size={8} className="mr-0.5" />T
-          </span>
-        )}
-        {actionCount > 0 && (
-          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-700 border border-amber-200">
-            <CheckSquare size={8} />{actionCount}
-          </span>
-        )}
-      </div>
-
       {/* Action buttons */}
-      <div className="w-24 flex-shrink-0 pr-4 flex items-center justify-end gap-1.5">
+      <div className="flex-shrink-0 pr-4 flex items-center justify-end gap-1.5" style={{ width: colWidths.actions }}>
         {needsAction && (
           <button
             onClick={e => { e.stopPropagation(); onResolve(meeting); }}
@@ -404,7 +401,28 @@ export function MeetingsClient({
   const [sortKey, setSortKey]                       = useState<SortKey>("date");
   const [sortDir, setSortDir]                       = useState<SortDir>("desc");
   const [selectedIds, setSelectedIds]               = useState<Set<string>>(new Set());
+  const [colWidths, setColWidths]                   = useState<ColWidths>(DEFAULT_WIDTHS);
   const selectAllRef                                = useRef<HTMLInputElement>(null);
+  const dragRef                                     = useRef<{ col: keyof ColWidths; startX: number; startW: number } | null>(null);
+
+  // Column resize via mouse drag
+  const startResize = useCallback((e: React.MouseEvent, col: keyof ColWidths) => {
+    e.preventDefault();
+    dragRef.current = { col, startX: e.clientX, startW: colWidths[col] };
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      const delta = ev.clientX - dragRef.current.startX;
+      const newW  = Math.max(60, dragRef.current.startW + delta);
+      setColWidths(prev => ({ ...prev, [dragRef.current!.col]: newW }));
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [colWidths]);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
 
@@ -826,7 +844,7 @@ export function MeetingsClient({
       )}
 
       {/* ── Table header ────────────────────────────────────────────────────── */}
-      <div className="bg-slate-50 border-b border-slate-200 flex-shrink-0">
+      <div className="bg-slate-50 border-b border-slate-200 flex-shrink-0 select-none">
         <div className="flex items-center min-h-[34px]">
           {/* Left strip placeholder */}
           <div className="w-[3px] ml-0 mr-5 flex-shrink-0" />
@@ -842,29 +860,34 @@ export function MeetingsClient({
             />
           </div>
 
-          {/* Column headers */}
-          <div className="flex-1 pr-4">
+          {/* Title — flex-1, not resizable */}
+          <div className="flex-1 pr-4 min-w-0">
             <ColHeader label="Title" sortKey="subject" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} />
           </div>
-          <div className="w-36 flex-shrink-0 pr-4">
-            <ColHeader label="Company" sortKey="company" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} />
-          </div>
-          <div className="w-20 flex-shrink-0 pr-4">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">People</span>
-          </div>
-          <div className="w-24 flex-shrink-0 pr-4">
-            <ColHeader label="Type" sortKey="type" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} />
-          </div>
-          <div className="w-28 flex-shrink-0 pr-4">
-            <ColHeader label="Date" sortKey="date" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} />
-          </div>
-          <div className="w-28 flex-shrink-0 pr-4">
-            <ColHeader label="Status" sortKey="status" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} />
-          </div>
-          <div className="w-24 flex-shrink-0 pr-4">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Signals</span>
-          </div>
-          <div className="w-24 flex-shrink-0 pr-4" />
+
+          {/* Resizable columns */}
+          {(["company", "attendees", "type", "date", "status"] as const).map(col => (
+            <div key={col} className="relative flex-shrink-0 pr-4 flex items-center" style={{ width: colWidths[col] }}>
+              <ColHeader
+                label={col === "attendees" ? "People" : col.charAt(0).toUpperCase() + col.slice(1)}
+                sortKey={col === "attendees" ? "subject" : col as SortKey}
+                currentSort={sortKey}
+                currentDir={sortDir}
+                onSort={col === "attendees" ? () => {} : handleSort}
+              />
+              {/* Drag handle */}
+              <div
+                onMouseDown={e => startResize(e, col)}
+                className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize flex items-center justify-center group/drag"
+                title="Drag to resize"
+              >
+                <div className="w-px h-4 bg-slate-200 group-hover/drag:bg-brand-teal transition-colors" />
+              </div>
+            </div>
+          ))}
+
+          {/* Actions — fixed, no resize */}
+          <div className="flex-shrink-0 pr-4" style={{ width: colWidths.actions }} />
         </div>
       </div>
 
@@ -884,6 +907,7 @@ export function MeetingsClient({
               key={m.id}
               meeting={m}
               selected={selectedIds.has(m.id)}
+              colWidths={colWidths}
               onToggle={handleToggleSelect}
               onResolve={setResolveMeeting}
               onOpenPanel={setPanelMeeting}

@@ -115,6 +115,15 @@ export const COMPANY_TYPE_COLORS: Record<string, string> = {
   government: "bg-gray-100 text-gray-700",
 };
 
+// Format a snake_case DB type value into a human-readable label
+// e.g. "ecosystem_partner" → "Ecosystem Partner", "fund_manager" → "Fund Manager"
+export function formatType(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  return raw
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
 // Truncate long strings
 export function truncate(str: string | null | undefined, maxLen = 60): string {
   if (!str) return "";
