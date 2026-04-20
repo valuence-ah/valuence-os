@@ -20,6 +20,7 @@ export async function PATCH(
   const ALLOWED = [
     "name", "type", "website", "location_city", "location_country",
     "description", "linkedin_url", "pitch_deck_url",
+    "investor_type", "strategic_type", "lp_type",
   ];
   const updates: Record<string, unknown> = {};
   for (const key of ALLOWED) {

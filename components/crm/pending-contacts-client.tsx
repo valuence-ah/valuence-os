@@ -550,24 +550,31 @@ function CompanyExpandPanel({ companyId, onClose, createMode, onCreated, initial
     }
     if (!company) return;
     setSaving(true);
+    const resolvedType = editType || company.type;
     const updates: Record<string, unknown> = {
       name: editName.trim() || company.name,
       website: editWebsite.trim() || null,
       description: editDescription.trim() || null,
       location_city: editCity.trim() || null,
       location_country: editCountry.trim() || null,
-      type: editType || company.type,
-      investor_type: (editType || company.type) === "fund" ? (editInvestorType || null) : null,
-      strategic_type: (editType || company.type) === "corporate" ? (editStrategicType || null) : null,
-      lp_type: (editType || company.type) === "lp" ? (editLpType || null) : null,
+      type: resolvedType,
+      investor_type: resolvedType === "fund" ? (editInvestorType || null) : null,
+      strategic_type: resolvedType === "corporate" ? (editStrategicType || null) : null,
+      lp_type: resolvedType === "lp" ? (editLpType || null) : null,
     };
-    const { error } = await supabase.from("companies").update(updates).eq("id", company.id);
+    // Use the API route (admin client) so RLS cannot silently block the update
+    const res = await fetch(`/api/companies/${company.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
     setSaving(false);
-    if (error) {
-      if (error.code === "23505") {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Unknown error" }));
+      if ((err as { error?: string }).error?.includes("duplicate")) {
         setNameError(`A company named "${String(updates.name)}" already exists.`);
       } else {
-        console.error("[save company]", error);
+        console.error("[save company]", err);
       }
       return;
     }
@@ -1314,11 +1321,8 @@ const ContactRow = memo(function ContactRow({
       status:           "active",
     }).eq("id", contact.id);
 
-    // Sync company type: use the type shown in the badge (the company's current
-    // type from mergedCompanies, which was just re-fetched from DB on mount).
-    // Only update if the badge type and the contact-type mapping agree, OR if
-    // the company has no type / type is "other" (catch-all fallback).
-    const companySave = (() => {
+    // Sync company type via API route (admin client bypasses RLS)
+    const companyTypeUpdate = (() => {
       if (!resolvedCompanyId) return null;
       const co = mergedCompanies.find(c => c.id === resolvedCompanyId);
       if (!co) return null;
@@ -1328,17 +1332,24 @@ const ContactRow = memo(function ContactRow({
       // the user sees. Only skip if no meaningful type can be determined.
       const typeToWrite = co.type && co.type !== "other" ? co.type : (mappedType ?? null);
       if (!typeToWrite || typeToWrite === co.type) return null; // already correct
-      return supabase.from("companies").update({ type: typeToWrite }).eq("id", resolvedCompanyId);
+      return fetch(`/api/companies/${resolvedCompanyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: typeToWrite }),
+      });
     })();
 
-    const [{ error: ce }, coResult] = await Promise.all([contactSave, companySave ?? Promise.resolve({ error: null })]);
+    const [{ error: ce }, coRes] = await Promise.all([
+      contactSave,
+      companyTypeUpdate ?? Promise.resolve(new Response(null, { status: 200 })),
+    ]);
     if (ce) {
       console.error("[confirm] contact save error:", ce);
       setBusy(false);
       return; // Don't dismiss — let the user see the row is still there and retry
     }
-    if ((coResult as { error: unknown } | null)?.error) {
-      console.error("[confirm] company save error:", (coResult as { error: unknown }).error);
+    if (coRes && !coRes.ok) {
+      console.error("[confirm] company type update failed:", coRes.status);
     }
     // Only dismiss from the queue after a confirmed successful save
     onConfirmed(contact.id);
