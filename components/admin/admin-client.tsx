@@ -1792,16 +1792,6 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         renderEditCell: renderTextEditor,
       },
       {
-        key: "_contacts",
-        name: "Contacts",
-        width: 180,
-        editable: false,
-        sortable: false,
-        renderCell: ({ row }: { row: CompanyRow }) => (
-          <LinkedContactsCell row={row} contactsRef={contactsRef} setContacts={setContacts} />
-        ),
-      },
-      {
         key: "type",
         name: "Type",
         width: 180,
@@ -1815,6 +1805,16 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
               setCompanies(prev => prev.map(c => c.id === id ? { ...c, type: type as Company["type"] } : c));
             }}
           />
+        ),
+      },
+      {
+        key: "_contacts",
+        name: "Contacts",
+        width: 180,
+        editable: false,
+        sortable: false,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <LinkedContactsCell row={row} contactsRef={contactsRef} setContacts={setContacts} />
         ),
       },
       {
