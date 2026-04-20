@@ -25,12 +25,30 @@ export async function GET(req: Request) {
 
   // Text search mode
   if (!q.trim()) return NextResponse.json([]);
+
+  const words = q.trim().split(/\s+/);
+  let filter: string;
+
+  if (words.length >= 2) {
+    // Multi-word query (e.g. "Kevin Wong") — try first+last in both orderings,
+    // plus a fallback email match for the full string.
+    const w1 = words[0];
+    const w2 = words.slice(1).join(" ");
+    filter =
+      `and(first_name.ilike.%${w1}%,last_name.ilike.%${w2}%),` +
+      `and(first_name.ilike.%${w2}%,last_name.ilike.%${w1}%),` +
+      `email.ilike.%${q}%`;
+  } else {
+    // Single word — match any field
+    filter = `first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`;
+  }
+
   const { data } = await supabase
     .from("contacts")
     .select("id, first_name, last_name, email, company_id")
-    .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
+    .or(filter)
     .order("first_name")
-    .limit(10);
+    .limit(20);
 
   return NextResponse.json(data ?? []);
 }
