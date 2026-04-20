@@ -93,9 +93,9 @@ function makeComboEditor<TRow>(options: string[]) {
   };
 }
 
-// ─── TypeCell: self-contained multi-select that saves directly to Supabase ────
-// Completely bypasses react-data-grid's editor/save mechanism to avoid bugs
-// with onClose(true) + stale closures. Uses a portal dropdown + direct DB save.
+// ─── TypeCell: single-select portal that reads/writes companies.type ──────────
+// The DB column is `type` (singular text). The old multi-select was reading
+// a non-existent `types` array column — fixed to use the real column.
 
 const TYPE_OPTIONS = ["startup","fund","lp","corporate","ecosystem_partner","government","other"];
 const TYPE_LABELS: Record<string, string> = {
@@ -130,35 +130,34 @@ function TypeCell({
   onSaved,
 }: {
   row: CompanyRow;
-  onSaved: (id: string, types: string[]) => void;
+  onSaved: (id: string, type: string) => void;
 }) {
   const supabase = createClient();
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const cellRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  const current: string[] = Array.isArray(row.types) ? row.types : [];
+  // Read from the real singular `type` column
+  const current: string = (row.type ?? "").toLowerCase();
 
   function openDropdown(e: React.MouseEvent) {
     e.stopPropagation();
-    setSelected([...current]);
     if (cellRef.current) {
       setPos(getPortalPos(cellRef.current.getBoundingClientRect(), 300, 220));
     }
     setOpen(true);
   }
 
-  async function toggle(opt: string, e: React.MouseEvent) {
+  async function select(opt: string, e: React.MouseEvent) {
     e.stopPropagation();
-    const next = selected.includes(opt) ? selected.filter(x => x !== opt) : [...selected, opt];
-    setSelected(next);
-    if (!row.id) return;
+    if (!row.id || opt === current) { setOpen(false); return; }
     setSaving(true);
-    await supabase.from("companies").update({ types: next }).eq("id", row.id);
+    setOpen(false);
+    // Write to the real singular `type` column
+    await supabase.from("companies").update({ type: opt }).eq("id", row.id);
     setSaving(false);
-    onSaved(row.id, next);
+    onSaved(row.id, opt);
   }
 
   // Close when clicking outside
@@ -173,26 +172,23 @@ function TypeCell({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  const colorStyle = TYPE_COLORS[current] ?? { bg: "#f1f5f9", color: "#475569" };
+
   return (
     <div
       ref={cellRef}
       onClick={openDropdown}
-      style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer", gap: 3, flexWrap: "wrap" }}
-      title="Click to edit"
+      style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer" }}
+      title="Click to change type"
     >
-      {current.length === 0 ? (
+      {!current ? (
         <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#cbd5e1" }}>
           {saving ? "Saving…" : "Click to set"}
         </span>
       ) : (
-        current.map(v => {
-          const c = TYPE_COLORS[v.toLowerCase()] ?? { bg: "#f1f5f9", color: "#475569" };
-          return (
-            <span key={v} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500, whiteSpace: "nowrap" }}>
-              {TYPE_LABELS[v.toLowerCase()] ?? v}
-            </span>
-          );
-        })
+        <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: colorStyle.bg, color: colorStyle.color, fontWeight: 500, whiteSpace: "nowrap" }}>
+          {saving ? "Saving…" : (TYPE_LABELS[current] ?? current)}
+        </span>
       )}
 
       {open && pos && createPortal(
@@ -202,26 +198,21 @@ function TypeCell({
         >
           <div style={{ padding: "6px 0" }}>
             {TYPE_OPTIONS.map(opt => {
-              const checked = selected.includes(opt);
+              const isSelected = opt === current;
               const c = TYPE_COLORS[opt] ?? { bg: "#f1f5f9", color: "#475569" };
               return (
                 <div
                   key={opt}
-                  onClick={(e) => toggle(opt, e)}
-                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", cursor: "pointer", userSelect: "none", background: checked ? "#f0f9ff" : "transparent" }}
+                  onClick={(e) => select(opt, e)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", cursor: "pointer", userSelect: "none", background: isSelected ? "#f0fdf4" : "transparent" }}
                 >
-                  <div style={{ width: 16, height: 16, flexShrink: 0, borderRadius: 4, border: `2px solid ${checked ? "#3b82f6" : "#d1d5db"}`, background: checked ? "#3b82f6" : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {checked && <svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  <div style={{ width: 16, height: 16, flexShrink: 0, borderRadius: "50%", border: `2px solid ${isSelected ? "#0d9488" : "#d1d5db"}`, background: isSelected ? "#0d9488" : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {isSelected && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><circle cx="4" cy="4" r="2.5" fill="white"/></svg>}
                   </div>
                   <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500 }}>{TYPE_LABELS[opt] ?? opt}</span>
                 </div>
               );
             })}
-          </div>
-          <div style={{ borderTop: "1px solid #f1f5f9", padding: "6px 14px", display: "flex", justifyContent: "flex-end" }}>
-            <div onClick={e => { e.stopPropagation(); setOpen(false); }} style={{ padding: "4px 12px", fontSize: 11, color: "#64748b", background: "#f1f5f9", borderRadius: 6, cursor: "pointer" }}>
-              Done
-            </div>
           </div>
         </div>,
         document.body
@@ -1811,7 +1802,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         ),
       },
       {
-        key: "types",
+        key: "type",
         name: "Type",
         width: 180,
         sortable: true,
@@ -1820,8 +1811,8 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         renderCell: ({ row }: { row: CompanyRow }) => (
           <TypeCell
             row={row}
-            onSaved={(id, types) => {
-              setCompanies(prev => prev.map(c => c.id === id ? { ...c, types } : c));
+            onSaved={(id, type) => {
+              setCompanies(prev => prev.map(c => c.id === id ? { ...c, type: type as Company["type"] } : c));
             }}
           />
         ),
