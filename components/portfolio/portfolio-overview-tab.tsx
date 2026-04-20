@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { RefreshCw, FileText, Plus, X, Check, Pencil, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import type { Company, PortfolioKpi, PortfolioMilestone, PortfolioInitiative, PortfolioIntelligence, Interaction } from "@/lib/types";
+import type { Company, PortfolioKpi, PortfolioMilestone, PortfolioInitiative, PortfolioIntelligence, Interaction, PortfolioInvestment } from "@/lib/types";
 
 function stripCiteTags(text: string): string {
   if (!text) return "";
@@ -19,6 +19,7 @@ interface Props {
   initiatives: PortfolioInitiative[];
   intelligence: PortfolioIntelligence[];
   interactions: Interaction[];
+  investments: PortfolioInvestment[];
   onIntelligenceRefresh: (type: "ma_acquirer" | "pilot_partner") => Promise<void>;
   onDetailRefresh: () => void;
   onCompanyUpdate: (id: string, updates: Partial<Company>) => void;
@@ -227,7 +228,7 @@ function CompanyNewsPanel({ companyId }: { companyId: string }) {
 }
 
 export function PortfolioOverviewTab({
-  company, kpis, milestones, initiatives, intelligence, interactions,
+  company, kpis, milestones, initiatives, intelligence, interactions, investments,
   onIntelligenceRefresh, onDetailRefresh, onCompanyUpdate,
 }: Props) {
   const [refreshing, setRefreshing] = useState<"ma_acquirer" | "pilot_partner" | null>(null);
@@ -663,6 +664,63 @@ export function PortfolioOverviewTab({
         )}
       </div>
       </div>
+
+      {/* ROW 2.5: Valuence investment rounds summary */}
+      {investments.length > 0 && (
+        <div>
+          <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-2">Valuence investment rounds</h3>
+          <div className="flex flex-wrap gap-2">
+            {investments.map(inv => {
+              const isSafe = inv.investment_type === "safe";
+              const bgClass = isSafe ? "bg-violet-50 border-violet-200" : "bg-blue-50 border-blue-200";
+              const badgeClass = isSafe ? "bg-violet-200 text-violet-800" : "bg-blue-200 text-blue-800";
+              const labelColor = isSafe ? "text-violet-500" : "text-blue-500";
+              const valueColor = isSafe ? "text-violet-900" : "text-blue-900";
+              return (
+                <div key={inv.id} className={`flex items-center gap-3 border rounded-lg px-3 py-2 min-w-0 ${bgClass}`}>
+                  {/* Round badge */}
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${badgeClass}`}>
+                    {inv.funding_round ?? (isSafe ? "SAFE" : "Priced Round")}
+                  </span>
+                  {/* Investment type pill */}
+                  <span className={`text-[10px] font-medium ${labelColor}`}>
+                    {isSafe ? "SAFE" : "Priced"}
+                  </span>
+                  {/* Amount */}
+                  {inv.investment_amount !== null && (
+                    <span className={`text-xs font-semibold ${valueColor}`}>
+                      {fmtMoney(inv.investment_amount)}
+                    </span>
+                  )}
+                  {/* SAFE fields */}
+                  {isSafe && inv.valuation_cap !== null && (
+                    <span className={`text-[11px] ${labelColor}`}>
+                      Cap: <span className="font-medium">{fmtMoney(inv.valuation_cap)}</span>
+                    </span>
+                  )}
+                  {isSafe && inv.discount !== null && (
+                    <span className={`text-[11px] ${labelColor}`}>
+                      {inv.discount}% disc.
+                    </span>
+                  )}
+                  {/* Priced round fields */}
+                  {!isSafe && inv.ownership_pct !== null && (
+                    <span className={`text-[11px] ${labelColor}`}>
+                      {inv.ownership_pct}% ownership
+                    </span>
+                  )}
+                  {/* Close date */}
+                  {inv.close_date && (
+                    <span className="text-[10px] text-slate-400">
+                      {new Date(inv.close_date).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ROW 3: Company news (left) + Interaction timeline (right) */}
       <div className="grid grid-cols-2 gap-4">

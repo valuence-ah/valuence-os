@@ -1832,7 +1832,13 @@ export function PipelineClient({ initialCompanies }: Props) {
                 <Field label="Type">
                   <div className="flex flex-wrap gap-1.5 mt-0.5">
                     {TYPE_OPTIONS.map(o => {
-                      const active = (editing ? (editForm.types as string[] ?? []) : (selected.types ?? [])).includes(o.value);
+                      // Fall back to the `type` string column when `types` array is empty
+                      const viewTypes = (selected.types ?? []).length > 0
+                        ? (selected.types ?? [])
+                        : (selected.type ? [selected.type] : []);
+                      const active = editing
+                        ? (editForm.types as string[] ?? []).includes(o.value)
+                        : viewTypes.includes(o.value);
                       return editing ? (
                         <button key={o.value} type="button" onClick={() => toggleType(o.value)}
                           className={cn("px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
@@ -1844,7 +1850,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                         <span key={o.value} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{o.label}</span>
                       ) : null;
                     })}
-                    {!editing && !(selected.types ?? []).length && <span className="text-xs text-slate-300">—</span>}
+                    {!editing && !(selected.types ?? []).length && !selected.type && <span className="text-xs text-slate-300">—</span>}
                   </div>
                 </Field>
 

@@ -381,6 +381,28 @@ export interface PortfolioInitiative {
   updated_at: string;
 }
 
+export interface PortfolioInvestment {
+  id: string;
+  company_id: string;
+  funding_round: string | null;
+  investment_amount: number | null;
+  round_size: number | null;
+  close_date: string | null;
+  investment_type: "safe" | "priced_round" | null;
+  // SAFE fields
+  valuation_cap: number | null;
+  discount: number | null;
+  // Priced Round fields
+  pre_money_valuation: number | null;
+  ownership_pct: number | null;
+  // Memo
+  memo_storage_path: string | null;
+  memo_file_name: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PortfolioReport {
   id: string;
   company_id: string;

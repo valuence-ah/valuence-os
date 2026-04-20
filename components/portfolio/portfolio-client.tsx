@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import type {
   Company, PortfolioKpi, PortfolioMilestone, PortfolioInitiative,
   PortfolioIntelligence, PortfolioReport, PortfolioValueAdd,
-  Interaction, Contact, FeedArticle,
+  Interaction, Contact, FeedArticle, PortfolioInvestment,
 } from "@/lib/types";
 import { PortfolioStatTiles } from "./portfolio-stat-tiles";
 import { PortfolioCompanyList } from "./portfolio-company-list";
@@ -23,6 +23,7 @@ export interface CompanyDetail {
   reports: PortfolioReport[];
   signals: FeedArticle[];
   valueAdd: PortfolioValueAdd[];
+  investments: PortfolioInvestment[];
 }
 
 interface Props {
@@ -42,7 +43,7 @@ export function PortfolioClient({ companies: initial }: Props) {
     const supabase = createClient();
     try {
       const [kpisRes, milestonesRes, initiativesRes, intelligenceRes,
-             interactionsRes, contactsRes, reportsRes, signalsRes, valueAddRes] =
+             interactionsRes, contactsRes, reportsRes, signalsRes, valueAddRes, investmentsRes] =
         await Promise.all([
           supabase.from("portfolio_kpis").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(4),
           supabase.from("portfolio_milestones").select("*").eq("company_id", companyId).order("created_at", { ascending: false }),
@@ -53,6 +54,7 @@ export function PortfolioClient({ companies: initial }: Props) {
           supabase.from("portfolio_reports").select("*").eq("company_id", companyId).order("uploaded_at", { ascending: false }).limit(10),
           supabase.from("feed_articles").select("*").contains("matched_company_ids", [companyId]).order("published_at", { ascending: false }).limit(10),
           supabase.from("portfolio_value_add").select("*").eq("company_id", companyId).order("date", { ascending: false }).limit(20),
+          supabase.from("portfolio_investments").select("*").eq("company_id", companyId).order("close_date", { ascending: false }),
         ]);
 
       if (kpisRes.error) console.error("[portfolio] kpis:", kpisRes.error.message);
@@ -73,6 +75,7 @@ export function PortfolioClient({ companies: initial }: Props) {
         reports:      (reportsRes.data ?? []) as PortfolioReport[],
         signals:      (signalsRes.data ?? []) as FeedArticle[],
         valueAdd:     (valueAddRes.data ?? []) as PortfolioValueAdd[],
+        investments:  (investmentsRes.data ?? []) as PortfolioInvestment[],
       });
     } finally {
       setLoadingDetail(false);
@@ -89,7 +92,7 @@ export function PortfolioClient({ companies: initial }: Props) {
         const { interactions } = JSON.parse(s) as { interactions: Interaction[] };
         setDetail(prev => prev
           ? { ...prev, interactions }
-          : { kpis: [], milestones: [], initiatives: [], intelligence: [], interactions, contacts: [], reports: [], signals: [], valueAdd: [] }
+          : { kpis: [], milestones: [], initiatives: [], intelligence: [], interactions, contacts: [], reports: [], signals: [], valueAdd: [], investments: [] }
         );
       }
     } catch {}

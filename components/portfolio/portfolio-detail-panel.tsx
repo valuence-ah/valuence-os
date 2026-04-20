@@ -10,8 +10,9 @@ import { PortfolioIntelligenceTab } from "./portfolio-intelligence-tab";
 import { PortfolioRelationshipsTab } from "./portfolio-relationships-tab";
 import { PortfolioDocumentsTab } from "./portfolio-documents-tab";
 import { PortfolioReportUpload } from "./portfolio-report-upload";
+import { PortfolioInvestmentsTab } from "./portfolio-investments-tab";
 
-type TabId = "overview" | "intelligence" | "relationships" | "documents";
+type TabId = "overview" | "intelligence" | "relationships" | "documents" | "investments";
 
 interface Props {
   company: Company;
@@ -191,6 +192,7 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
     { id: "intelligence",   label: "Intelligence" },
     { id: "relationships",  label: "Relationships" },
     { id: "documents",      label: "Documents" },
+    { id: "investments",    label: "Valuence Investment" },
   ];
 
   return (
@@ -395,6 +397,7 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
                 initiatives={detail.initiatives}
                 intelligence={detail.intelligence}
                 interactions={detail.interactions}
+                investments={detail.investments}
                 onIntelligenceRefresh={handleIntelRefresh}
                 onDetailRefresh={onDetailRefresh}
                 onCompanyUpdate={onCompanyUpdate}
@@ -424,6 +427,13 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
                 companyId={company.id}
                 reports={detail.reports}
                 onReportReExtracted={onUploadSuccess}
+              />
+            )}
+            {activeTab === "investments" && (
+              <PortfolioInvestmentsTab
+                companyId={company.id}
+                investments={detail.investments}
+                onRefresh={onDetailRefresh}
               />
             )}
           </>
