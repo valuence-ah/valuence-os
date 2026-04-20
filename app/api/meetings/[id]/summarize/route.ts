@@ -1,6 +1,12 @@
 // ─── POST /api/meetings/[id]/summarize ────────────────────────────────────────
-// Calls Claude to produce a VC-focused summary. Falls back to fetching the
-// transcript from Fireflies if it isn't stored locally.
+// Produces a VC-focused Claude summary and writes it back to ai_summary.
+//
+// Content resolution order:
+//  1. transcript_text  (Fireflies meetings — sentences stored on sync)
+//  2. body             (uploaded transcripts — text extracted at upload time)
+//  3. Fireflies API    (fetch live if fireflies_id present but transcript missing)
+//  4. transcript_url   (raw file fetch — works for .txt / .vtt / .srt uploads)
+//  5. ai_summary + summary fallback (summarise from existing notes)
 
 import { NextResponse }        from "next/server";
 import { createClient }        from "@/lib/supabase/server";
@@ -24,10 +30,10 @@ export async function POST(
 
   const supabase = createAdminClient();
 
-  // Fetch meeting row
+  // Fetch meeting — include body (uploaded transcripts store text there)
   const { data: meeting, error: fetchErr } = await supabase
     .from("interactions")
-    .select("id, subject, transcript_text, ai_summary, summary, body, action_items, attendees, date, duration_minutes, company_id, meeting_type, fireflies_id")
+    .select("id, subject, transcript_text, body, ai_summary, summary, action_items, attendees, date, duration_minutes, company_id, meeting_type, fireflies_id, transcript_url, source")
     .eq("id", id)
     .single();
 
@@ -35,43 +41,67 @@ export async function POST(
     return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
   }
 
-  // ── Resolve transcript text ───────────────────────────────────────────────
-  let transcriptText = (meeting.transcript_text as string | null) ?? "";
+  // ── 1. Try transcript_text (Fireflies sentence-by-sentence text) ─────────
+  let content = ((meeting.transcript_text as string | null) ?? "").trim();
 
-  // If transcript isn't stored locally, pull from Fireflies on-demand
-  if (transcriptText.trim().length < 100 && meeting.fireflies_id) {
+  // ── 2. Try body (uploaded transcript text) ────────────────────────────────
+  if (content.length < 100) {
+    const bodyText = ((meeting.body as string | null) ?? "").trim();
+    if (bodyText.length > content.length) content = bodyText;
+  }
+
+  // ── 3. Fetch from Fireflies if fireflies_id present ───────────────────────
+  if (content.length < 100 && meeting.fireflies_id) {
     try {
-      const ffMeeting = await firefliesGetMeeting(meeting.fireflies_id as string);
-      if (ffMeeting.transcript && ffMeeting.transcript.trim().length > 50) {
-        transcriptText = ffMeeting.transcript;
-        // Cache it back so we don't need to re-fetch next time
+      const ff = await firefliesGetMeeting(meeting.fireflies_id as string);
+      if (ff.transcript && ff.transcript.trim().length > 50) {
+        content = ff.transcript.trim();
+        // Cache locally so next call is instant
         await supabase
           .from("interactions")
-          .update({ transcript_text: transcriptText })
+          .update({ transcript_text: content })
           .eq("id", id);
       }
     } catch (err) {
-      console.warn("[summarize] Fireflies fetch failed, continuing with fallback:", err);
+      console.warn("[summarize] Fireflies fetch failed:", err);
     }
   }
 
-  // ── Build the best available content to summarize ─────────────────────────
-  const hasFullTranscript = transcriptText.trim().length > 100;
+  // ── 4. Fetch raw file from transcript_url (.txt / .vtt / .srt) ───────────
+  if (content.length < 100 && meeting.transcript_url) {
+    try {
+      const fileRes = await fetch(meeting.transcript_url as string, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (fileRes.ok) {
+        const ct = fileRes.headers.get("content-type") ?? "";
+        // Only decode plain text — skip PDFs (binary) and images
+        if (ct.includes("text") || ct.includes("vtt") || ct.includes("srt")) {
+          const raw = await fileRes.text();
+          if (raw.trim().length > 100) content = raw.trim();
+        }
+      }
+    } catch (err) {
+      console.warn("[summarize] transcript_url fetch failed:", err);
+    }
+  }
 
-  const fallbackContent = [
-    meeting.ai_summary,
-    meeting.summary,
-    meeting.body,
-    (meeting.action_items as string[] | null)?.join("\n"),
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  // ── 5. Fall back to existing summary/notes ────────────────────────────────
+  if (content.length < 100) {
+    const fallback = [
+      meeting.ai_summary,
+      meeting.summary,
+      (meeting.action_items as string[] | null)?.join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n")
+      .trim();
+    if (fallback.length > content.length) content = fallback;
+  }
 
-  const contentToSummarize = hasFullTranscript ? transcriptText : fallbackContent;
-
-  if (!contentToSummarize || contentToSummarize.trim().length < 30) {
+  if (content.length < 30) {
     return NextResponse.json(
-      { error: "No transcript or summary content available to summarize." },
+      { error: "No readable transcript or summary found for this meeting. Try uploading a .txt or .vtt file instead of an image-based PDF." },
       { status: 400 }
     );
   }
@@ -90,11 +120,12 @@ export async function POST(
   const attendees = (meeting.attendees as Array<{ name?: string; email?: string }> | null) ?? [];
   const attendeeList = attendees.map(a => a.name ?? a.email ?? "Unknown").join(", ");
 
+  const isFullTranscript = content.length > 500;
+
   // ── Prompt ────────────────────────────────────────────────────────────────
-  const contentLabel = hasFullTranscript ? "TRANSCRIPT" : "MEETING NOTES / SUMMARY";
   const prompt = `You are a venture capital analyst at Valuence Ventures, an early-stage deeptech fund (cleantech, techbio, advanced materials, pre-seed & seed).
 
-Summarize the following ${hasFullTranscript ? "meeting transcript" : "meeting notes"} as a concise internal analyst note focused on investment decisions.
+Summarize the following ${isFullTranscript ? "meeting transcript" : "meeting notes"} as a concise internal analyst note.
 
 Meeting details:
 - Title: ${meeting.subject ?? "Untitled"}
@@ -103,16 +134,16 @@ Meeting details:
 - Duration: ${meeting.duration_minutes ? `${meeting.duration_minutes} minutes` : "Unknown"}
 - Attendees: ${attendeeList || "Unknown"}
 
-Write the summary in this structure:
+Write the summary using this structure:
 1. **Overview** (1–2 sentences: what this meeting was about and who attended)
 2. **Key Discussion Points** (3–5 bullet points of the most important topics covered)
-3. **Signals** (notable positives, concerns, or flags for the investment thesis — be specific)
+3. **Signals** (notable positives, concerns, or flags for the investment thesis — be specific and direct)
 4. **Next Steps** (concrete follow-up actions mentioned or implied, with owners if identifiable)
 
-Be direct and analytical. Do not pad. Use plain language. Max 300 words.
+Be analytical. No filler phrases. Max 300 words.
 
-${contentLabel}:
-${contentToSummarize.slice(0, 14000)}`;
+${isFullTranscript ? "TRANSCRIPT" : "MEETING NOTES"}:
+${content.slice(0, 14000)}`;
 
   // ── Call Claude ───────────────────────────────────────────────────────────
   let summaryText: string;
@@ -130,7 +161,7 @@ ${contentToSummarize.slice(0, 14000)}`;
     return NextResponse.json({ error: `Claude error: ${msg}` }, { status: 502 });
   }
 
-  // ── Write back ────────────────────────────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────────────────────────
   const { error: updateErr } = await supabase
     .from("interactions")
     .update({ ai_summary: summaryText, updated_at: new Date().toISOString() })

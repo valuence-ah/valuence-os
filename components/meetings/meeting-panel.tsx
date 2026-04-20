@@ -105,11 +105,12 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function SummaryTab({
-  meeting, onSummarize, summarizing,
+  meeting, onSummarize, summarizing, summarizeError,
 }: {
   meeting: MeetingRow;
   onSummarize: () => void;
   summarizing: boolean;
+  summarizeError: string | null;
 }) {
   const raw = meeting.ai_summary ?? meeting.summary ?? meeting.body;
   const fmt = formatMeetingSummary(raw);
@@ -156,26 +157,33 @@ function SummaryTab({
 
       {/* Summarize with Claude — only when transcript exists */}
       {hasTranscript && (
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            AI Summary
-          </p>
-          <button
-            onClick={onSummarize}
-            disabled={summarizing}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors",
-              summarizing
-                ? "bg-violet-100 text-violet-400 cursor-not-allowed"
-                : "bg-violet-600 hover:bg-violet-700 text-white"
-            )}
-          >
-            {summarizing
-              ? <Loader2 size={11} className="animate-spin" />
-              : <Sparkles size={11} />
-            }
-            {summarizing ? "Summarizing…" : "Summarize with Claude"}
-          </button>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              AI Summary
+            </p>
+            <button
+              onClick={onSummarize}
+              disabled={summarizing}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors",
+                summarizing
+                  ? "bg-violet-100 text-violet-400 cursor-not-allowed"
+                  : "bg-violet-600 hover:bg-violet-700 text-white"
+              )}
+            >
+              {summarizing
+                ? <Loader2 size={11} className="animate-spin" />
+                : <Sparkles size={11} />
+              }
+              {summarizing ? "Summarizing…" : "Summarize with Claude"}
+            </button>
+          </div>
+          {summarizeError && (
+            <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2 leading-relaxed">
+              {summarizeError}
+            </p>
+          )}
         </div>
       )}
 
@@ -598,6 +606,7 @@ function LinksTab({
 export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("summary");
   const [summarizing, setSummarizing] = useState(false);
+  const [summarizeError, setSummarizeError] = useState<string | null>(null);
 
   // Title editing
   const [editingTitle, setEditingTitle] = useState(false);
@@ -645,12 +654,17 @@ export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
 
   const handleSummarize = useCallback(async () => {
     setSummarizing(true);
+    setSummarizeError(null);
     try {
       const res = await fetch(`/api/meetings/${meeting.id}/summarize`, { method: "POST" });
       const data = await res.json() as { ai_summary?: string; error?: string };
-      if (data.ai_summary) {
+      if (!res.ok || data.error) {
+        setSummarizeError(data.error ?? "Summarization failed — please try again.");
+      } else if (data.ai_summary) {
         onUpdate({ id: meeting.id, ai_summary: data.ai_summary });
       }
+    } catch {
+      setSummarizeError("Network error — check your connection and try again.");
     } finally {
       setSummarizing(false);
     }
@@ -756,6 +770,7 @@ export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
               meeting={{ ...meeting, subject: titleValue }}
               onSummarize={handleSummarize}
               summarizing={summarizing}
+              summarizeError={summarizeError}
             />
           )}
           {activeTab === "transcript" && <TranscriptTab meeting={meeting} />}
