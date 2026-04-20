@@ -322,7 +322,10 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [showAddPartner, setShowAddPartner] = useState(false);
   const [addName, setAddName]               = useState("");
   const [addSector, setAddSector]           = useState("");
-  const [addDesc, setAddDesc]               = useState("");
+  const [addType, setAddType]               = useState("ecosystem_partner");
+  const [addWebsite, setAddWebsite]         = useState("");
+  const [addCity, setAddCity]               = useState("");
+  const [addCountry, setAddCountry]         = useState("");
   const [savingPartner, setSavingPartner]   = useState(false);
 
   // Opportunity form
@@ -595,13 +598,17 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     if (!addName.trim()) return;
     setSavingPartner(true);
     const { data: newCo } = await supabase.from("companies").insert({
-      name: addName.trim(),
-      description: addDesc.trim() || null,
-      sectors: addSector.trim() ? [addSector.trim()] : null,
-      types: ["strategic partner"],
+      name:             addName.trim(),
+      type:             addType || "ecosystem_partner",
+      website:          addWebsite.trim() || null,
+      sectors:          addSector.trim() ? [addSector.trim()] : null,
+      location_city:    addCity.trim() || null,
+      location_country: addCountry.trim() || null,
     }).select().single();
     if (newCo) setCompanies(prev => [...prev, newCo as Company].sort((a, b) => a.name.localeCompare(b.name)));
-    setAddName(""); setAddSector(""); setAddDesc(""); setShowAddPartner(false);
+    setAddName(""); setAddSector(""); setAddType("ecosystem_partner");
+    setAddWebsite(""); setAddCity(""); setAddCountry("");
+    setShowAddPartner(false);
     setSavingPartner(false);
   }
 
@@ -1790,37 +1797,73 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
       {/* ── Add Partner Modal ────────────────────────────────────────────────── */}
       {showAddPartner && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-5">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowAddPartner(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <h2 className="text-base font-bold text-slate-800">Add Strategic Partner</h2>
               <button onClick={() => setShowAddPartner(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
             </div>
-            <div className="space-y-3">
+            <div className="px-6 py-4 space-y-4">
+              {/* Company Name */}
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Company Name *</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Company Name *</label>
                 <input value={addName} onChange={e => setAddName(e.target.value)} placeholder="e.g. Mitsubishi Corporation"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
+              {/* Type selection */}
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Sector</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Type</label>
+                <div className="flex gap-2">
+                  {[
+                    { label: "Corporate",    value: "corporate" },
+                    { label: "Ecosystem",    value: "ecosystem_partner" },
+                    { label: "Gov / Academic", value: "government" },
+                  ].map(opt => (
+                    <button key={opt.value} type="button"
+                      onClick={() => setAddType(opt.value)}
+                      className={cn("flex-1 py-2 text-xs font-medium rounded-lg border transition-colors",
+                        addType === opt.value
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600")}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Website */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Website</label>
+                <input value={addWebsite} onChange={e => setAddWebsite(e.target.value)} placeholder="e.g. mitsubishicorp.com"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              {/* Sector */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Sector</label>
                 <input value={addSector} onChange={e => setAddSector(e.target.value)} placeholder="e.g. Energy, Technology"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
-                <textarea value={addDesc} onChange={e => setAddDesc(e.target.value)} placeholder="Brief description…"
-                  rows={3} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 resize-none" />
+              {/* Location */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">City</label>
+                  <input value={addCity} onChange={e => setAddCity(e.target.value)} placeholder="e.g. Tokyo"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Country</label>
+                  <input value={addCountry} onChange={e => setAddCountry(e.target.value)} placeholder="e.g. Japan"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
               </div>
             </div>
-            <div className="flex gap-3 mt-5">
-              <button onClick={savePartner} disabled={!addName.trim() || savingPartner}
-                className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                {savingPartner ? <Loader2 size={14} className="animate-spin" /> : null} Add Partner
-              </button>
+            <div className="flex gap-3 px-6 py-4 border-t border-slate-100">
               <button onClick={() => setShowAddPartner(false)}
                 className="flex-1 py-2 bg-white border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
                 Cancel
+              </button>
+              <button onClick={savePartner} disabled={!addName.trim() || savingPartner}
+                className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                {savingPartner ? <><Loader2 size={14} className="animate-spin" />Adding…</> : "Add Partner"}
               </button>
             </div>
           </div>

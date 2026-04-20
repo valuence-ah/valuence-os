@@ -1189,7 +1189,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                 </div>
                 <div className="flex-1">
                   <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Company Name *</label>
-                  <input type="text" placeholder="e.g. Atinum Investment" value={addLPForm.name}
+                  <input type="text" placeholder="e.g. Valuence Ventures" value={addLPForm.name}
                     onChange={e => setAddLPForm(p => ({ ...p, name: e.target.value }))}
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
@@ -1197,7 +1197,7 @@ export function LpViewClient({ initialCompanies }: Props) {
               {/* Website */}
               <div>
                 <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Website</label>
-                <input type="text" placeholder="e.g. atinum.com" value={addLPForm.website}
+                <input type="text" placeholder="e.g. valuence.vc" value={addLPForm.website}
                   onChange={e => setAddLPForm(p => ({ ...p, website: e.target.value }))}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>

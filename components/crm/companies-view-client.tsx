@@ -407,7 +407,7 @@ const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
       : <span className="text-slate-300 text-xs">—</span>,
   },
   description: {
-    key: "description", label: "Description", group: "core", defaultWidth: 220,
+    key: "description", label: "Description", group: "core", defaultWidth: 400,
     render: c => <DescriptionCell text={c.description} />,
   },
   tags: {
@@ -654,7 +654,8 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
   const [fSector, setFSector]   = useState("");
   const [fStage, setFStage]     = useState("");
   const [fSubType, setFSubType] = useState("");
-  const [fType, setFType]       = useState("");
+  const [fTypes, setFTypes]     = useState<string[]>([]);
+  const [fCountry, setFCountry] = useState("");
 
   const [showModal,     setShowModal]     = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
@@ -673,11 +674,12 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
         (c.location_country ?? "").toLowerCase().includes(q)
       );
     }
-    if (fStatus)  list = list.filter(c => c.deal_status === fStatus);
-    if (fSector)  list = list.filter(c => (c.sectors ?? []).includes(fSector));
-    if (fStage)   list = list.filter(c => c.stage === fStage);
-    if (fSubType) list = list.filter(c => c.type === fSubType);
-    if (fType)    list = list.filter(c => c.type === fType);
+    if (fStatus)        list = list.filter(c => c.deal_status === fStatus);
+    if (fSector)        list = list.filter(c => (c.sectors ?? []).includes(fSector));
+    if (fStage)         list = list.filter(c => c.stage === fStage);
+    if (fSubType)       list = list.filter(c => c.type === fSubType);
+    if (fTypes.length > 0) list = list.filter(c => fTypes.includes(c.type ?? ""));
+    if (fCountry)       list = list.filter(c => (c.location_country ?? "").toLowerCase().includes(fCountry.toLowerCase()));
 
     list.sort((a, b) => {
       let av: string | number = "", bv: string | number = "";
@@ -692,9 +694,16 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
       return 0;
     });
     return list;
-  }, [companies, search, fStatus, fSector, fStage, fSubType, fType, sortKey, sortDir]);
+  }, [companies, search, fStatus, fSector, fStage, fSubType, fTypes, fCountry, sortKey, sortDir]);
 
-  const activeFilters = [fStatus, fSector, fStage, fSubType, fType].filter(Boolean).length;
+  const activeFilters = [fStatus, fSector, fStage, fSubType, ...(fTypes.length > 0 ? ["x"] : []), fCountry].filter(Boolean).length;
+
+  // ── Derived country list for filter dropdown ───────────────────────────────
+  const countryOpts = useMemo(() => {
+    const set = new Set<string>();
+    companies.forEach(c => { if (c.location_country) set.add(c.location_country); });
+    return Array.from(set).sort();
+  }, [companies]);
 
   // ── Sort helpers ───────────────────────────────────────────────────────────
   function handleSort(key: SortKey) {
@@ -801,6 +810,30 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
 
         {/* Row 2: filters + sort + count */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Type multi-select pills — always first */}
+          {cfg.filters.includes("type") && view !== "strategic" && (
+            <div className="flex flex-wrap items-center gap-1">
+              {(view === "other" ? OTHER_TYPE_OPTS : ALL_TYPE_OPTS).map(o => {
+                const on = fTypes.includes(o.v);
+                return (
+                  <button key={o.v} type="button"
+                    onClick={() => setFTypes(prev => on ? prev.filter(x => x !== o.v) : [...prev, o.v])}
+                    className={cn("flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
+                      on ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600")}>
+                    {on && <Check size={9} />}{o.l}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {/* Country filter */}
+          {cfg.filters.includes("type") && countryOpts.length > 0 && (
+            <select value={fCountry} onChange={e => setFCountry(e.target.value)}
+              className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400">
+              <option value="">All Countries</option>
+              {countryOpts.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
           {cfg.filters.includes("deal_status") && (
             <select value={fStatus} onChange={e => setFStatus(e.target.value)}
               className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400">
@@ -829,14 +862,6 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
               {STRATEGIC_TYPE_OPTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
           )}
-          {cfg.filters.includes("type") && view !== "strategic" && (
-            <select value={fType} onChange={e => setFType(e.target.value)}
-              className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400">
-              <option value="">All Types</option>
-              {view === "other" ? OTHER_TYPE_OPTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)
-                : ALL_TYPE_OPTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-            </select>
-          )}
 
           {cfg.filters.length > 0 && <div className="h-4 w-px bg-slate-200 mx-0.5" />}
           <span className="text-xs text-slate-400">Sort:</span>
@@ -854,7 +879,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
           })}
 
           {activeFilters > 0 && (
-            <button onClick={() => { setFStatus(""); setFSector(""); setFStage(""); setFSubType(""); setFType(""); }}
+            <button onClick={() => { setFStatus(""); setFSector(""); setFStage(""); setFSubType(""); setFTypes([]); setFCountry(""); }}
               className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 ml-1 transition-colors">
               <X size={11} /> Clear ({activeFilters})
             </button>

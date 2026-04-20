@@ -3,6 +3,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
@@ -347,6 +348,7 @@ interface Props {
 
 export function FundsViewClient({ initialCompanies }: Props) {
   const supabase = createClient();
+  const router = useRouter();
 
   const [search, setSearch]             = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
@@ -363,15 +365,18 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [fundContacts, setFundContacts] = useState<Record<string, Contact[]>>({});
 
   // Add Fund modal
-  const [showAddFund, setShowAddFund]         = useState(false);
-  const [addFundName, setAddFundName]         = useState("");
-  const [addFundType, setAddFundType]         = useState("");
-  const [addFundCity, setAddFundCity]         = useState("");
-  const [addFundCountry, setAddFundCountry]   = useState("");
-  const [addFundStage, setAddFundStage]       = useState("");
-  const [addFundOwner, setAddFundOwner]       = useState("");
-  const [addFundContactName, setAddFundContactName] = useState("");
-  const [addFundDesc, setAddFundDesc]         = useState("");
+  const [showAddFund, setShowAddFund]                   = useState(false);
+  const [addFundName, setAddFundName]                   = useState("");
+  const [addFundType, setAddFundType]                   = useState("");
+  const [addFundCity, setAddFundCity]                   = useState("");
+  const [addFundCountry, setAddFundCountry]             = useState("");
+  const [addFundStages, setAddFundStages]               = useState<string[]>([]);
+  const [addFundOwner, setAddFundOwner]                 = useState("");
+  const [showAddFundContact, setShowAddFundContact]     = useState(false);
+  const [addFundContactFirst, setAddFundContactFirst]   = useState("");
+  const [addFundContactLast, setAddFundContactLast]     = useState("");
+  const [addFundContactEmail, setAddFundContactEmail]   = useState("");
+  const [savingFund, setSavingFund]                     = useState(false);
 
   // Tracks which fund IDs are currently having descriptions generated
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
@@ -423,6 +428,42 @@ export function FundsViewClient({ initialCompanies }: Props) {
       try { localStorage.setItem("fund_starred_intel", JSON.stringify(updated)); } catch {}
       return updated;
     });
+  }
+
+  // ── Add Fund ─────────────────────────────────────────────────────────────────
+  async function handleAddFund() {
+    if (!addFundName.trim()) return;
+    setSavingFund(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: newCo, error } = await supabase.from("companies").insert({
+        name:             addFundName.trim(),
+        type:             "fund",
+        investor_type:    addFundType || null,
+        location_city:    addFundCity.trim() || null,
+        location_country: addFundCountry.trim() || null,
+        fund_focus:       addFundStages.length > 0 ? addFundStages.join(", ") : null,
+        created_by:       user?.id,
+      }).select().single();
+
+      if (!error && newCo && showAddFundContact && addFundContactFirst.trim()) {
+        await supabase.from("contacts").insert({
+          first_name:  addFundContactFirst.trim(),
+          last_name:   addFundContactLast.trim() || null,
+          email:       addFundContactEmail.trim() || null,
+          company_id:  newCo.id,
+          created_by:  user?.id,
+        });
+      }
+    } catch {}
+    // Reset
+    setAddFundName(""); setAddFundType(""); setAddFundCity(""); setAddFundCountry("");
+    setAddFundStages([]); setAddFundOwner("");
+    setAddFundContactFirst(""); setAddFundContactLast(""); setAddFundContactEmail("");
+    setShowAddFundContact(false);
+    setShowAddFund(false);
+    setSavingFund(false);
+    router.refresh();
   }
 
   async function fetchFundIntelligence() {
@@ -2810,28 +2851,30 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
       {/* ── Add Fund Modal ───────────────────────────────────────────────────── */}
       {showAddFund && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-bold text-slate-800">Add Fund</h2>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowAddFund(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h2 className="text-base font-bold text-slate-800">Add Fund / VC</h2>
               <button onClick={() => setShowAddFund(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
             </div>
-            <div className="space-y-3">
+            <div className="px-6 py-4 space-y-4">
+              {/* Fund Name */}
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Fund Name *</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Fund Name *</label>
                 <input
                   value={addFundName}
                   onChange={e => setAddFundName(e.target.value)}
                   placeholder="e.g. Lowercarbon Capital"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+              {/* Investor Type */}
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Investor Type</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Investor Type</label>
                 <select
                   value={addFundType}
                   onChange={e => setAddFundType(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   <option value="">Select type…</option>
                   {["Venture Capital", "Corporate VC", "Family Office", "Fund of Fund", "Angel", "Accelerator", "Government", "Other"].map(t => (
@@ -2839,88 +2882,68 @@ export function FundsViewClient({ initialCompanies }: Props) {
                   ))}
                 </select>
               </div>
+              {/* City + Country */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">City</label>
-                  <input
-                    value={addFundCity}
-                    onChange={e => setAddFundCity(e.target.value)}
-                    placeholder="e.g. San Francisco"
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
-                  />
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">City</label>
+                  <input value={addFundCity} onChange={e => setAddFundCity(e.target.value)} placeholder="e.g. San Francisco"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Country</label>
-                  <input
-                    value={addFundCountry}
-                    onChange={e => setAddFundCountry(e.target.value)}
-                    placeholder="e.g. USA"
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
-                  />
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Country</label>
+                  <input value={addFundCountry} onChange={e => setAddFundCountry(e.target.value)} placeholder="e.g. USA"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
+              {/* Stage Focus — multi-select checkboxes */}
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Stage Focus</label>
-                <select
-                  value={addFundStage}
-                  onChange={e => setAddFundStage(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
-                >
-                  <option value="">Select stage…</option>
-                  {["Pre-Seed", "Seed", "Series A", "Series B", "Growth", "Multi-Stage"].map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Owner</label>
-                  <input
-                    value={addFundOwner}
-                    onChange={e => setAddFundOwner(e.target.value)}
-                    placeholder="e.g. Andrew"
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Contact</label>
-                  <input
-                    value={addFundContactName}
-                    onChange={e => setAddFundContactName(e.target.value)}
-                    placeholder="Name or email"
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
-                  />
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Stage Focus</label>
+                <div className="flex flex-wrap gap-2">
+                  {["Pre-Seed", "Seed", "Series A", "Series B", "Growth", "Multi-Stage"].map(s => {
+                    const on = addFundStages.includes(s);
+                    return (
+                      <button key={s} type="button"
+                        onClick={() => setAddFundStages(prev => on ? prev.filter(x => x !== s) : [...prev, s])}
+                        className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                          on ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600")}>
+                        {on && <Check size={10} />}{s}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
-                <textarea
-                  value={addFundDesc}
-                  onChange={e => setAddFundDesc(e.target.value)}
-                  placeholder="Brief description…"
-                  rows={3}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 resize-none"
-                />
-              </div>
+              {/* Contact section */}
+              {!showAddFundContact ? (
+                <button type="button" onClick={() => setShowAddFundContact(true)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 border-2 border-dashed border-slate-200 rounded-xl text-xs text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors">
+                  <Plus size={12} /> Add Contact
+                </button>
+              ) : (
+                <div className="border border-blue-200 rounded-xl bg-blue-50 p-3 space-y-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-semibold text-slate-700">Contact Details</p>
+                    <button type="button" onClick={() => { setShowAddFundContact(false); setAddFundContactFirst(""); setAddFundContactLast(""); setAddFundContactEmail(""); }}
+                      className="text-slate-400 hover:text-slate-600"><X size={12} /></button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      placeholder="First name *" value={addFundContactFirst} onChange={e => setAddFundContactFirst(e.target.value)} />
+                    <input className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      placeholder="Last name" value={addFundContactLast} onChange={e => setAddFundContactLast(e.target.value)} />
+                  </div>
+                  <input className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    type="email" placeholder="Email" value={addFundContactEmail} onChange={e => setAddFundContactEmail(e.target.value)} />
+                </div>
+              )}
             </div>
-            <div className="flex gap-3 mt-5">
-              <button
-                onClick={() => {
-                  // Close modal without persisting (hardcoded data)
-                  setAddFundName(""); setAddFundType(""); setAddFundCity(""); setAddFundCountry("");
-                  setAddFundStage(""); setAddFundOwner(""); setAddFundContactName(""); setAddFundDesc("");
-                  setShowAddFund(false);
-                }}
-                disabled={!addFundName.trim()}
-                className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <Check size={14} /> Add Fund
-              </button>
-              <button
-                onClick={() => setShowAddFund(false)}
-                className="flex-1 py-2 bg-white border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
-              >
+            <div className="flex gap-3 px-6 py-4 border-t border-slate-100">
+              <button onClick={() => setShowAddFund(false)}
+                className="flex-1 py-2 bg-white border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
                 Cancel
+              </button>
+              <button onClick={handleAddFund} disabled={!addFundName.trim() || savingFund}
+                className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                {savingFund ? <><Loader2 size={13} className="animate-spin" />Adding…</> : <><Check size={14} /> Add Fund</>}
               </button>
             </div>
           </div>
