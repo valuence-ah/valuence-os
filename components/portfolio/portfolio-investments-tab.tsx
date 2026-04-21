@@ -280,7 +280,7 @@ function GCell({
   className?: string; children?: React.ReactNode;
 }) {
   return (
-    <div className={cn("px-3 py-2.5 border-r border-inherit last:border-r-0 flex flex-col justify-center min-w-0", className)}>
+    <div className={cn("px-3 py-2.5 flex flex-col justify-center min-w-0", className)}>
       {children ?? (
         <>
           <p className={cn("text-[9px] font-semibold uppercase tracking-wide mb-0.5 truncate", labelClass)}>{label}</p>
@@ -387,21 +387,21 @@ function InvestmentTile({
         onClick={() => !editing && setExpanded(p => !p)}
       >
         {/* Type */}
-        <GCell labelClass={lbl} valueClass={val} label="Type" value={isSafe ? "SAFE / CN" : "Priced Round"} className={cn("border-r", isSafe ? "border-violet-200" : "border-blue-200")} />
+        <GCell labelClass={lbl} valueClass={val} label="Type" value={isSafe ? "SAFE / CN" : "Priced Round"} />
         {/* Round */}
-        <GCell labelClass={lbl} valueClass={val} label="Round" value={inv.funding_round ?? "—"} className={cn("border-r", isSafe ? "border-violet-200" : "border-blue-200")} />
+        <GCell labelClass={lbl} valueClass={val} label="Round" value={inv.funding_round ?? "—"} />
         {/* Close Date */}
-        <GCell labelClass={lbl} valueClass={val} label="Close Date" value={fmtDate(inv.close_date)} className={cn("border-r", isSafe ? "border-violet-200" : "border-blue-200")} />
+        <GCell labelClass={lbl} valueClass={val} label="Close Date" value={fmtDate(inv.close_date)} />
         {/* Amount */}
-        <GCell labelClass={lbl} valueClass={val} label="Our Investment" value={fmtMoney(inv.investment_amount)} className={cn("border-r", isSafe ? "border-violet-200" : "border-blue-200")} />
+        <GCell labelClass={lbl} valueClass={val} label="Our Investment" value={fmtMoney(inv.investment_amount)} />
         {/* Round Size */}
-        <GCell labelClass={lbl} valueClass={val} label="Round Size" value={fmtMoney(inv.round_size)} className={cn("border-r", isSafe ? "border-violet-200" : "border-blue-200")} />
+        <GCell labelClass={lbl} valueClass={val} label="Round Size" value={fmtMoney(inv.round_size)} />
         {/* F1 */}
-        <GCell labelClass={lbl} valueClass={val} label={f1Label} value={f1Val} className={cn("border-r", isSafe ? "border-violet-200" : "border-blue-200")} />
+        <GCell labelClass={lbl} valueClass={val} label={f1Label} value={f1Val} />
         {/* F2 */}
-        <GCell labelClass={lbl} valueClass={val} label={f2Label} value={f2Val} className={cn("border-r", isSafe ? "border-violet-200" : "border-blue-200")} />
+        <GCell labelClass={lbl} valueClass={val} label={f2Label} value={f2Val} />
         {/* F3 */}
-        <GCell labelClass={lbl} valueClass={val} label={f3Label} value={f3Val} className={cn("border-r", isSafe ? "border-violet-200" : "border-blue-200")} />
+        <GCell labelClass={lbl} valueClass={val} label={f3Label} value={f3Val} />
 
         {/* Actions */}
         <div

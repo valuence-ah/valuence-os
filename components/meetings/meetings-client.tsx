@@ -154,6 +154,13 @@ const DEFAULT_WIDTHS: ColWidths = {
   actions: 0,
 };
 
+/** Shared grid template used by both the sticky header and every data row.
+ *  Guarantees pixel-perfect column alignment regardless of scrollbar state. */
+function makeGridTemplate(cw: ColWidths): string {
+  // strip(20px) | checkbox(46px) | title(1fr) | company | attendees | type | date | status
+  return `20px 46px 1fr ${cw.company}px ${cw.attendees}px ${cw.type}px ${cw.date}px ${cw.status}px`;
+}
+
 // ── Meeting type dropdown options (alphabetical) ──────────────────────────────
 
 const MEETING_TYPE_OPTIONS = [
@@ -184,16 +191,23 @@ function MeetingTableRow({
   const cfg = getResConfig(meeting.resolution_status);
   const needsAction = meeting.resolution_status === "unresolved" || meeting.resolution_status === "partial";
 
-  return (
-    <div className={cn(
-      "group relative flex items-center border-b border-slate-100 transition-colors min-h-[44px]",
-      selected ? "bg-teal-50/50" : cn("hover:bg-slate-50/70", cfg.rowBg),
-    )}>
-      {/* Status strip */}
-      <div className={cn("absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full flex-shrink-0", cfg.strip)} />
+  const gridTemplate = makeGridTemplate(colWidths);
 
-      {/* Checkbox */}
-      <div className="pl-5 pr-3 flex-shrink-0">
+  return (
+    <div
+      className={cn(
+        "group border-b border-slate-100 transition-colors",
+        selected ? "bg-teal-50/50" : cn("hover:bg-slate-50/70", cfg.rowBg),
+      )}
+      style={{ display: "grid", gridTemplateColumns: gridTemplate, alignItems: "center", minHeight: "44px" }}
+    >
+      {/* 1 — colored strip (absolute within 20px cell) */}
+      <div className="self-stretch relative">
+        <div className={cn("absolute inset-y-2 left-0 w-[3px] rounded-r-full", cfg.strip)} />
+      </div>
+
+      {/* 2 — checkbox */}
+      <div className="pl-5 pr-3 flex items-center">
         <input
           type="checkbox"
           checked={selected}
@@ -203,8 +217,8 @@ function MeetingTableRow({
         />
       </div>
 
-      {/* Title + summary snippet */}
-      <div className="flex-1 min-w-0 py-2.5 pr-4">
+      {/* 3 — title + summary */}
+      <div className="min-w-0 py-2.5 pr-4">
         <button onClick={() => onOpenPanel(meeting)} className="text-left w-full group/title">
           <p className="text-xs font-semibold text-slate-800 truncate group-hover/title:text-brand-teal transition-colors">
             {meeting.subject ?? "Untitled Meeting"}
@@ -217,8 +231,8 @@ function MeetingTableRow({
         </button>
       </div>
 
-      {/* Company — no icon */}
-      <div className="flex-shrink-0 pl-3 pr-6 overflow-hidden" style={{ width: colWidths.company }}>
+      {/* 4 — company */}
+      <div className="pl-3 pr-6 overflow-hidden">
         {meeting.company ? (
           <div className="flex items-center gap-1">
             <Link
@@ -246,13 +260,13 @@ function MeetingTableRow({
         )}
       </div>
 
-      {/* Attendees */}
-      <div className="flex-shrink-0 pl-3 pr-6" style={{ width: colWidths.attendees }}>
+      {/* 5 — attendees */}
+      <div className="pl-3 pr-6">
         <AttendeeAvatars attendees={meeting.attendees} />
       </div>
 
-      {/* Meeting type */}
-      <div className="flex-shrink-0 pl-3 pr-6" style={{ width: colWidths.type }}>
+      {/* 6 — meeting type dropdown */}
+      <div className="pl-3 pr-6">
         <select
           value={meeting.meeting_type ?? ""}
           onChange={e => { e.stopPropagation(); onTypeChange(meeting.id, e.target.value); }}
@@ -266,8 +280,8 @@ function MeetingTableRow({
         </select>
       </div>
 
-      {/* Date + duration */}
-      <div className="flex-shrink-0 pl-3 pr-6" style={{ width: colWidths.date }}>
+      {/* 7 — date + duration */}
+      <div className="pl-3 pr-6 flex flex-col justify-center">
         <span className="flex items-center gap-1 text-[11px] text-slate-500 whitespace-nowrap">
           <Calendar size={10} className="flex-shrink-0 text-slate-400" />
           {formatDate(meeting.date)}
@@ -279,8 +293,8 @@ function MeetingTableRow({
         ) : null}
       </div>
 
-      {/* Resolution status — shows Resolve button for unresolved/partial, pill otherwise */}
-      <div className="flex-shrink-0 pl-3 pr-4 flex items-center justify-between gap-2" style={{ width: colWidths.status }}>
+      {/* 8 — resolution status */}
+      <div className="pl-3 pr-4 flex items-center justify-between gap-2">
         {needsAction ? (
           <button
             onClick={e => { e.stopPropagation(); onResolve(meeting); }}
@@ -913,12 +927,14 @@ export function MeetingsClient({
 
         {/* Sticky header — lives inside the scroll container so widths always match */}
         <div className="sticky top-0 z-20 bg-slate-50 border-b border-slate-200 select-none" style={{ userSelect: isDragging ? "none" : undefined }}>
-          <div className="flex items-center min-h-[34px]">
-            {/* Left strip placeholder — matches row's absolute strip + pl-5 */}
-            <div className="w-0 ml-0 mr-5 flex-shrink-0" />
+          <div
+            style={{ display: "grid", gridTemplateColumns: makeGridTemplate(colWidths), alignItems: "center", minHeight: "34px" }}
+          >
+            {/* 1 — strip placeholder */}
+            <div />
 
-            {/* Select all */}
-            <div className="pr-3 flex-shrink-0">
+            {/* 2 — select all */}
+            <div className="pl-5 pr-3 flex items-center">
               <input
                 ref={selectAllRef}
                 type="checkbox"
@@ -928,14 +944,14 @@ export function MeetingsClient({
               />
             </div>
 
-            {/* Title — flex-1, not resizable */}
-            <div className="flex-1 pr-4 min-w-0">
+            {/* 3 — title header */}
+            <div className="pr-4 min-w-0 flex items-center">
               <ColHeader label="Title" sortKey="subject" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} />
             </div>
 
-            {/* Resizable columns */}
+            {/* 4-8 — resizable column headers */}
             {(["company", "attendees", "type", "date", "status"] as const).map(col => (
-              <div key={col} className="relative flex-shrink-0 flex items-center" style={{ width: colWidths[col] }}>
+              <div key={col} className="relative flex items-center h-full">
                 <div className="pl-3 pr-6 flex items-center min-w-0 flex-1">
                   <ColHeader
                     label={col === "attendees" ? "Participants" : col.charAt(0).toUpperCase() + col.slice(1)}
@@ -945,7 +961,6 @@ export function MeetingsClient({
                     onSort={col === "attendees" ? () => {} : handleSort}
                   />
                 </div>
-                {/* Drag handle */}
                 <div
                   onPointerDown={e => startResize(e, col)}
                   className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize border-r-2 border-slate-200 hover:border-brand-teal active:border-brand-teal transition-colors z-10"
@@ -953,9 +968,6 @@ export function MeetingsClient({
                 />
               </div>
             ))}
-
-            {/* Actions — fixed, no resize */}
-            <div className="flex-shrink-0 pr-4" style={{ width: colWidths.actions }} />
           </div>
         </div>
         {filtered.length === 0 ? (

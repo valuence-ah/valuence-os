@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef } from "react";
-import { ExternalLink, Upload, Check, X, Pencil, GitBranch } from "lucide-react";
+import { ExternalLink, Upload, Check, X, Pencil, GitBranch, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { Company } from "@/lib/types";
@@ -13,7 +13,7 @@ import { PortfolioReportUpload } from "./portfolio-report-upload";
 import { PortfolioInvestmentsTab } from "./portfolio-investments-tab";
 import { PortfolioAssistantTab } from "./portfolio-assistant-tab";
 
-type TabId = "overview" | "intelligence" | "relationships" | "documents" | "investments" | "assistant";
+type TabId = "overview" | "intelligence" | "relationships" | "documents" | "investments";
 
 interface Props {
   company: Company;
@@ -161,6 +161,7 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [showUpload, setShowUpload] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
   const [editingWebsite, setEditingWebsite] = useState(false);
   const [websiteDraft, setWebsiteDraft] = useState(company.website ?? "");
   const [editingRaiseTarget, setEditingRaiseTarget] = useState(false);
@@ -194,7 +195,6 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
     { id: "relationships",  label: "Relationships" },
     { id: "documents",      label: "Documents" },
     { id: "investments",    label: "Valuence Investment" },
-    { id: "assistant",      label: "✦ AI Assistant" },
   ];
 
   return (
@@ -438,16 +438,41 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
                 onRefresh={onDetailRefresh}
               />
             )}
-            {activeTab === "assistant" && (
-              <PortfolioAssistantTab
-                companyId={company.id}
-                companyName={company.name}
-                investments={detail.investments}
-              />
-            )}
           </>
         )}
       </div>
+
+      {/* Floating AI Assistant button */}
+      <button
+        onClick={() => setShowAssistant(v => !v)}
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-full shadow-lg transition-colors"
+      >
+        <Sparkles size={14} />
+        AI Assistant
+      </button>
+
+      {/* Floating AI Assistant panel */}
+      {showAssistant && (
+        <div className="fixed inset-y-0 right-0 z-50 w-[420px] bg-white shadow-2xl border-l border-slate-200 flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <Sparkles size={14} className="text-violet-500" />
+              <span className="text-sm font-semibold text-slate-800">AI Assistant</span>
+              <span className="text-xs text-slate-400">· {company.name}</span>
+            </div>
+            <button onClick={() => setShowAssistant(false)} className="text-slate-400 hover:text-slate-600">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <PortfolioAssistantTab
+              companyId={company.id}
+              companyName={company.name}
+              investments={detail?.investments ?? []}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Upload modal */}
       {showUpload && (
