@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { RefreshCw, FileText, Plus, X, Check, Pencil, Trash2 } from "lucide-react";
+import { RefreshCw, FileText, Plus, X, Check, Pencil, Trash2, ExternalLink, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, PortfolioKpi, PortfolioMilestone, PortfolioInitiative, PortfolioIntelligence, Interaction, PortfolioInvestment } from "@/lib/types";
 
@@ -27,10 +27,23 @@ interface Props {
 
 function fmtMoney(v: number | null): string {
   if (v === null || v === undefined) return "—";
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}k`;
   return `$${v}`;
 }
+
+async function openInvestmentDoc(storagePath: string) {
+  const { createClient } = await import("@/lib/supabase/client");
+  const supabase = createClient();
+  const { data } = await supabase.storage.from("investment-memos").createSignedUrl(storagePath, 3600);
+  if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+}
+
+const BOARD_LABEL: Record<string, string> = {
+  board_seat:     "Board Seat",
+  board_observer: "Board Observer",
+  no:             "No",
+};
 
 
 const MILESTONE_STATUS_DOT: Record<string, string> = {
@@ -132,6 +145,8 @@ export function PortfolioOverviewTab({
   onIntelligenceRefresh, onDetailRefresh, onCompanyUpdate,
 }: Props) {
   const [refreshing, setRefreshing] = useState<"ma_acquirer" | "pilot_partner" | null>(null);
+  const [selectedInvestment, setSelectedInvestment] = useState<PortfolioInvestment | null>(null);
+  const [openingDoc, setOpeningDoc] = useState<string | null>(null); // tracks which doc is opening
 
   // Fundraise tracker editing
   const [editingFt, setEditingFt] = useState(false);
@@ -373,7 +388,7 @@ export function PortfolioOverviewTab({
       {/* ═══ ROW 1: Valuence Investment (left) + Fundraise Tracker (right) ══════ */}
       <div className="grid grid-cols-2 gap-4 items-stretch">
 
-        {/* Left: Valuence Investment — compact 2-row-per-round cards */}
+        {/* Left: Valuence Investment — compact clickable cards */}
         <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col min-h-[110px]">
           <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-2 flex-shrink-0">Valuence Investment</h3>
           {investments.length === 0 ? (
@@ -383,19 +398,22 @@ export function PortfolioOverviewTab({
               {investments.map(inv => {
                 const isSafe = inv.investment_type === "safe";
                 return (
-                  <div key={inv.id} className={`rounded-lg px-2.5 py-2 ${isSafe ? "bg-violet-50" : "bg-blue-50"}`}>
+                  <button
+                    key={inv.id}
+                    onClick={() => setSelectedInvestment(inv)}
+                    className={`w-full text-left rounded-lg px-2.5 py-2 transition-colors ${isSafe ? "bg-violet-50 hover:bg-violet-100" : "bg-blue-50 hover:bg-blue-100"}`}
+                  >
                     {/* Row 1: badge + type + amount + doc indicators */}
                     <div className="flex items-center gap-2">
                       <span className={`text-[9px] font-bold px-1.5 py-px rounded-full whitespace-nowrap flex-shrink-0 ${isSafe ? "bg-violet-200 text-violet-800" : "bg-blue-200 text-blue-800"}`}>
-                        {inv.funding_round ?? (isSafe ? "SAFE" : "Priced")}
+                        {inv.funding_round ?? (isSafe ? "SAFE / CN" : "Priced")}
                       </span>
                       <span className={`text-[9px] font-medium flex-shrink-0 ${isSafe ? "text-violet-500" : "text-blue-500"}`}>
-                        {isSafe ? "SAFE" : "Priced Round"}
+                        {isSafe ? "SAFE / CN" : "Priced Round"}
                       </span>
                       {inv.investment_amount !== null && (
                         <span className="text-xs font-bold text-slate-800 ml-auto">{fmtMoney(inv.investment_amount)}</span>
                       )}
-                      {/* Doc indicator icons */}
                       {inv.memo_file_name && (
                         <span title={`Memo: ${inv.memo_file_name}`}><FileText size={10} className={isSafe ? "text-violet-400" : "text-blue-400"} /></span>
                       )}
@@ -403,17 +421,19 @@ export function PortfolioOverviewTab({
                         <span title={`Sub doc: ${inv.subscription_doc_file_name}`}><FileText size={10} className="text-slate-400" /></span>
                       )}
                     </div>
-                    {/* Row 2: SAFE/priced details + date */}
+                    {/* Row 2: terms + date */}
                     <div className={`flex items-center gap-2 mt-0.5 text-[10px] ${isSafe ? "text-violet-500" : "text-blue-500"}`}>
                       {isSafe ? (
                         <>
                           {inv.valuation_cap !== null && <span>Cap: {fmtMoney(inv.valuation_cap)}</span>}
                           {inv.discount !== null && <span>{inv.discount}% disc.</span>}
+                          {inv.interest_rate !== null && <span>{inv.interest_rate}% int.</span>}
                         </>
                       ) : (
                         <>
                           {inv.pre_money_valuation !== null && <span>Pre: {fmtMoney(inv.pre_money_valuation)}</span>}
                           {inv.ownership_pct !== null && <span>{inv.ownership_pct}% own.</span>}
+                          {inv.esop !== null && <span>ESOP {inv.esop}%</span>}
                         </>
                       )}
                       {inv.close_date && (
@@ -422,7 +442,7 @@ export function PortfolioOverviewTab({
                         </span>
                       )}
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -895,6 +915,116 @@ export function PortfolioOverviewTab({
           </div>
         </div>
       )}
+
+      {/* ── Investment detail modal ── */}
+      {selectedInvestment && (() => {
+        const inv = selectedInvestment;
+        const isSafe = inv.investment_type === "safe";
+        const accentBg  = isSafe ? "bg-violet-50"  : "bg-blue-50";
+        const accentText = isSafe ? "text-violet-700" : "text-blue-700";
+        const accentBorder = isSafe ? "border-violet-200" : "border-blue-200";
+
+        const fields: { label: string; value: string }[] = [
+          { label: "Close Date",        value: inv.close_date ? new Date(inv.close_date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—" },
+          { label: "Investment Amount", value: fmtMoney(inv.investment_amount) },
+          { label: "Round Size",        value: fmtMoney(inv.round_size) },
+          { label: "Funding Round",     value: inv.funding_round ?? "—" },
+          { label: "Investment Type",   value: isSafe ? "SAFE / Convertible Note" : "Priced Round" },
+          { label: "Board",             value: inv.board_representation ? (BOARD_LABEL[inv.board_representation] ?? "—") : "—" },
+          ...(isSafe ? [
+            { label: "Valuation Cap",   value: fmtMoney(inv.valuation_cap) },
+            { label: "Discount",        value: inv.discount !== null ? `${inv.discount}%` : "—" },
+            { label: "Interest Rate",   value: inv.interest_rate !== null ? `${inv.interest_rate}%` : "—" },
+          ] : [
+            { label: "Pre-Money Val.",  value: fmtMoney(inv.pre_money_valuation) },
+            { label: "Ownership",       value: inv.ownership_pct !== null ? `${inv.ownership_pct}%` : "—" },
+            { label: "ESOP",            value: inv.esop !== null ? `${inv.esop}%` : "—" },
+          ]),
+        ];
+
+        return (
+          <div
+            className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center p-4"
+            onClick={e => { if (e.target === e.currentTarget) setSelectedInvestment(null); }}
+          >
+            <div className="bg-white rounded-2xl w-[520px] max-h-[85vh] overflow-y-auto shadow-2xl">
+              {/* Header */}
+              <div className={`sticky top-0 ${accentBg} border-b ${accentBorder} px-6 py-4 flex items-start justify-between rounded-t-2xl`}>
+                <div>
+                  <p className={`text-sm font-bold ${accentText}`}>
+                    {inv.funding_round ?? (isSafe ? "SAFE / Convertible Note" : "Priced Round")}
+                  </p>
+                  <p className={`text-xs mt-0.5 ${accentText} opacity-70`}>
+                    {isSafe ? "SAFE / Convertible Note" : "Priced Round"}
+                    {inv.close_date && ` · ${new Date(inv.close_date).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`}
+                  </p>
+                </div>
+                <button onClick={() => setSelectedInvestment(null)} className="text-slate-400 hover:text-slate-600 mt-0.5">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="px-6 py-5 space-y-5">
+                {/* Fields grid */}
+                <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+                  {fields.map(({ label, value }) => (
+                    <div key={label}>
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
+                      <p className="text-sm font-semibold text-slate-800">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Notes */}
+                {inv.notes && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Notes</p>
+                    <p className="text-xs text-slate-600 leading-relaxed">{inv.notes}</p>
+                  </div>
+                )}
+
+                {/* Documents */}
+                {(inv.memo_storage_path || inv.subscription_doc_storage_path) && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Documents</p>
+                    <div className="flex gap-3">
+                      {inv.memo_storage_path && (
+                        <button
+                          onClick={async () => {
+                            setOpeningDoc("memo");
+                            await openInvestmentDoc(inv.memo_storage_path!);
+                            setOpeningDoc(null);
+                          }}
+                          className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors"
+                        >
+                          <FileText size={14} className="text-blue-600 flex-shrink-0" />
+                          <span className="text-xs text-blue-700 font-medium truncate flex-1 text-left">{inv.memo_file_name ?? "Investment Memo"}</span>
+                          {openingDoc === "memo" ? <Loader2 size={12} className="animate-spin text-blue-400 flex-shrink-0" /> : <ExternalLink size={12} className="text-blue-400 flex-shrink-0" />}
+                        </button>
+                      )}
+                      {inv.subscription_doc_storage_path && (
+                        <button
+                          onClick={async () => {
+                            setOpeningDoc("subdoc");
+                            await openInvestmentDoc(inv.subscription_doc_storage_path!);
+                            setOpeningDoc(null);
+                          }}
+                          className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-colors"
+                        >
+                          <FileText size={14} className="text-violet-600 flex-shrink-0" />
+                          <span className="text-xs text-violet-700 font-medium truncate flex-1 text-left">{inv.subscription_doc_file_name ?? "Subscription Doc"}</span>
+                          {openingDoc === "subdoc" ? <Loader2 size={12} className="animate-spin text-violet-400 flex-shrink-0" /> : <ExternalLink size={12} className="text-violet-400 flex-shrink-0" />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Individual interaction detail modal — z-[60] floats above slide-out */}
       {selectedInteraction && (

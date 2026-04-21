@@ -389,12 +389,15 @@ export interface PortfolioInvestment {
   round_size: number | null;
   close_date: string | null;
   investment_type: "safe" | "priced_round" | null;
-  // SAFE fields
+  board_representation: "board_seat" | "board_observer" | "no" | null;
+  // SAFE / Convertible Note fields
   valuation_cap: number | null;
   discount: number | null;
+  interest_rate: number | null;
   // Priced Round fields
   pre_money_valuation: number | null;
   ownership_pct: number | null;
+  esop: number | null;
   // Documents
   memo_storage_path: string | null;
   memo_file_name: string | null;
