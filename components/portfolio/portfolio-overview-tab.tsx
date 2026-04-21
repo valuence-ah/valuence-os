@@ -406,22 +406,58 @@ export function PortfolioOverviewTab({
                     onClick={() => setSelectedInvestment(inv)}
                     className={`w-full text-left rounded-lg px-2.5 py-2 transition-colors ${isSafe ? "bg-violet-50 hover:bg-violet-100" : "bg-blue-50 hover:bg-blue-100"}`}
                   >
-                    {/* Row 1: Date · Round | Investment ($) | Type | doc indicators */}
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      {closeDate && (
-                        <span className="text-[10px] text-slate-500 font-medium flex-shrink-0">{closeDate}</span>
-                      )}
-                      {closeDate && <span className="text-slate-300 text-[10px] flex-shrink-0">·</span>}
-                      <span className={`text-[9px] font-bold px-1.5 py-px rounded-full whitespace-nowrap flex-shrink-0 ${isSafe ? "bg-violet-200 text-violet-800" : "bg-blue-200 text-blue-800"}`}>
-                        {inv.funding_round ?? (isSafe ? "SAFE / CN" : "Priced")}
-                      </span>
-                      {inv.investment_amount !== null && (
-                        <span className="text-xs font-bold text-slate-800 flex-shrink-0">{fmtMoney(inv.investment_amount)}</span>
-                      )}
-                      <span className={`text-[9px] font-medium flex-shrink-0 ${isSafe ? "text-violet-500" : "text-blue-500"}`}>
-                        {isSafe ? "SAFE / CN" : "Priced"}
-                      </span>
-                      <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
+                    {/* Single grid row — 8 data cells + 1 docs cell, all equal width */}
+                    <div
+                      className="w-full items-start"
+                      style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.1fr 1fr 1.1fr 1fr 1fr 36px" }}
+                    >
+                      {/* Date */}
+                      <div className="min-w-0 pr-1">
+                        <p className={`text-[8px] font-semibold uppercase tracking-wide mb-0.5 ${isSafe ? "text-violet-400" : "text-blue-400"}`}>Date</p>
+                        <p className="text-[11px] font-semibold text-slate-800 truncate">{closeDate ?? "—"}</p>
+                      </div>
+                      {/* Round */}
+                      <div className="min-w-0 pr-1">
+                        <p className={`text-[8px] font-semibold uppercase tracking-wide mb-0.5 ${isSafe ? "text-violet-400" : "text-blue-400"}`}>Round</p>
+                        <p className="text-[11px] font-semibold text-slate-800 truncate">{inv.funding_round ?? "—"}</p>
+                      </div>
+                      {/* Investment */}
+                      <div className="min-w-0 pr-1">
+                        <p className={`text-[8px] font-semibold uppercase tracking-wide mb-0.5 ${isSafe ? "text-violet-400" : "text-blue-400"}`}>Investment</p>
+                        <p className="text-[11px] font-semibold text-slate-800 truncate">{fmtMoney(inv.investment_amount)}</p>
+                      </div>
+                      {/* Type */}
+                      <div className="min-w-0 pr-1">
+                        <p className={`text-[8px] font-semibold uppercase tracking-wide mb-0.5 ${isSafe ? "text-violet-400" : "text-blue-400"}`}>Type</p>
+                        <p className="text-[11px] font-semibold text-slate-800 truncate">{isSafe ? "SAFE / CN" : "Priced"}</p>
+                      </div>
+                      {/* F1: Val. Cap / Pre-Money */}
+                      <div className="min-w-0 pr-1">
+                        <p className={`text-[8px] font-semibold uppercase tracking-wide mb-0.5 ${isSafe ? "text-violet-400" : "text-blue-400"}`}>{isSafe ? "Val. Cap" : "Pre-Money"}</p>
+                        <p className="text-[11px] font-semibold text-slate-800 truncate">
+                          {isSafe ? fmtMoney(inv.valuation_cap) : fmtMoney(inv.pre_money_valuation)}
+                        </p>
+                      </div>
+                      {/* F2: Discount / Ownership */}
+                      <div className="min-w-0 pr-1">
+                        <p className={`text-[8px] font-semibold uppercase tracking-wide mb-0.5 ${isSafe ? "text-violet-400" : "text-blue-400"}`}>{isSafe ? "Discount" : "Ownership"}</p>
+                        <p className="text-[11px] font-semibold text-slate-800 truncate">
+                          {isSafe
+                            ? (inv.discount !== null ? `${inv.discount}%` : "—")
+                            : (inv.ownership_pct !== null ? `${inv.ownership_pct}%` : "—")}
+                        </p>
+                      </div>
+                      {/* F3: Interest / Price per Share */}
+                      <div className="min-w-0 pr-1">
+                        <p className={`text-[8px] font-semibold uppercase tracking-wide mb-0.5 ${isSafe ? "text-violet-400" : "text-blue-400"}`}>{isSafe ? "Interest" : "Price/Share"}</p>
+                        <p className="text-[11px] font-semibold text-slate-800 truncate">
+                          {isSafe
+                            ? (inv.interest_rate !== null ? `${inv.interest_rate}%` : "—")
+                            : (inv.price_per_share !== null ? `$${inv.price_per_share?.toFixed(4)}` : "—")}
+                        </p>
+                      </div>
+                      {/* Doc icons */}
+                      <div className="flex flex-col items-end justify-center gap-0.5 pt-2">
                         {inv.memo_file_name && (
                           <span title={`Memo: ${inv.memo_file_name}`}><FileText size={10} className={isSafe ? "text-violet-400" : "text-blue-400"} /></span>
                         )}
@@ -429,22 +465,6 @@ export function PortfolioOverviewTab({
                           <span title={`Sub doc: ${inv.subscription_doc_file_name}`}><FileText size={10} className="text-slate-400" /></span>
                         )}
                       </div>
-                    </div>
-                    {/* Row 2: type-specific terms */}
-                    <div className={`flex items-center gap-2 mt-0.5 text-[10px] ${isSafe ? "text-violet-500" : "text-blue-500"}`}>
-                      {isSafe ? (
-                        <>
-                          {inv.valuation_cap !== null && <span>Cap: {fmtMoney(inv.valuation_cap)}</span>}
-                          {inv.discount !== null && <span>{inv.discount}% disc.</span>}
-                          {inv.interest_rate !== null && <span>{inv.interest_rate}% int.</span>}
-                        </>
-                      ) : (
-                        <>
-                          {inv.pre_money_valuation !== null && <span>Pre: {fmtMoney(inv.pre_money_valuation)}</span>}
-                          {inv.ownership_pct !== null && <span>{inv.ownership_pct}% own.</span>}
-                          {inv.price_per_share !== null && <span>${inv.price_per_share?.toFixed(4)}/sh</span>}
-                        </>
-                      )}
                     </div>
                   </button>
                 );
