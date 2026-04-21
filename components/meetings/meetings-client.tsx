@@ -908,57 +908,56 @@ export function MeetingsClient({
         </div>
       )}
 
-      {/* ── Table header ────────────────────────────────────────────────────── */}
-      <div className="bg-slate-50 border-b border-slate-200 flex-shrink-0 select-none" style={{ userSelect: isDragging ? "none" : undefined }}>
-        <div className="flex items-center min-h-[34px]">
-          {/* Left strip placeholder — matches row's absolute strip (0px flow) + pl-5 (20px) */}
-          <div className="w-0 ml-0 mr-5 flex-shrink-0" />
+      {/* ── Table body (header is sticky inside so they share the same scroll width) ── */}
+      <div className="flex-1 overflow-y-auto min-h-0 bg-white">
 
-          {/* Select all */}
-          <div className="pr-3 flex-shrink-0">
-            <input
-              ref={selectAllRef}
-              type="checkbox"
-              checked={allVisibleSelected}
-              onChange={e => handleSelectAll(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-[#0D3D38]"
-            />
-          </div>
+        {/* Sticky header — lives inside the scroll container so widths always match */}
+        <div className="sticky top-0 z-20 bg-slate-50 border-b border-slate-200 select-none" style={{ userSelect: isDragging ? "none" : undefined }}>
+          <div className="flex items-center min-h-[34px]">
+            {/* Left strip placeholder — matches row's absolute strip + pl-5 */}
+            <div className="w-0 ml-0 mr-5 flex-shrink-0" />
 
-          {/* Title — flex-1, not resizable */}
-          <div className="flex-1 pr-4 min-w-0">
-            <ColHeader label="Title" sortKey="subject" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} />
-          </div>
-
-          {/* Resizable columns */}
-          {(["company", "attendees", "type", "date", "status"] as const).map(col => (
-            <div key={col} className="relative flex-shrink-0 flex items-center" style={{ width: colWidths[col] }}>
-              {/* Content with breathing room on both sides */}
-              <div className="pl-3 pr-6 flex items-center min-w-0 flex-1">
-                <ColHeader
-                  label={col === "attendees" ? "Participants" : col.charAt(0).toUpperCase() + col.slice(1)}
-                  sortKey={col === "attendees" ? "subject" : col as SortKey}
-                  currentSort={sortKey}
-                  currentDir={sortDir}
-                  onSort={col === "attendees" ? () => {} : handleSort}
-                />
-              </div>
-              {/* Drag handle — sits flush at the far right edge */}
-              <div
-                onPointerDown={e => startResize(e, col)}
-                className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize border-r-2 border-slate-200 hover:border-brand-teal active:border-brand-teal transition-colors z-10"
-                title="Drag to resize"
+            {/* Select all */}
+            <div className="pr-3 flex-shrink-0">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={e => handleSelectAll(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-[#0D3D38]"
               />
             </div>
-          ))}
 
-          {/* Actions — fixed, no resize */}
-          <div className="flex-shrink-0 pr-4" style={{ width: colWidths.actions }} />
+            {/* Title — flex-1, not resizable */}
+            <div className="flex-1 pr-4 min-w-0">
+              <ColHeader label="Title" sortKey="subject" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} />
+            </div>
+
+            {/* Resizable columns */}
+            {(["company", "attendees", "type", "date", "status"] as const).map(col => (
+              <div key={col} className="relative flex-shrink-0 flex items-center" style={{ width: colWidths[col] }}>
+                <div className="pl-3 pr-6 flex items-center min-w-0 flex-1">
+                  <ColHeader
+                    label={col === "attendees" ? "Participants" : col.charAt(0).toUpperCase() + col.slice(1)}
+                    sortKey={col === "attendees" ? "subject" : col as SortKey}
+                    currentSort={sortKey}
+                    currentDir={sortDir}
+                    onSort={col === "attendees" ? () => {} : handleSort}
+                  />
+                </div>
+                {/* Drag handle */}
+                <div
+                  onPointerDown={e => startResize(e, col)}
+                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize border-r-2 border-slate-200 hover:border-brand-teal active:border-brand-teal transition-colors z-10"
+                  title="Drag to resize"
+                />
+              </div>
+            ))}
+
+            {/* Actions — fixed, no resize */}
+            <div className="flex-shrink-0 pr-4" style={{ width: colWidths.actions }} />
+          </div>
         </div>
-      </div>
-
-      {/* ── Table body ──────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto min-h-0 bg-white">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
             <Users size={32} className="mb-3 opacity-30" />
