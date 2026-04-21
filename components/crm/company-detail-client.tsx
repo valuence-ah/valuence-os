@@ -19,7 +19,7 @@ import {
   Globe, Linkedin, ExternalLink, MapPin,
   Phone, Mail, Plus, ChevronDown, FileText, Mic, CheckSquare,
   Sparkles, Loader2, AlertCircle, Calendar, Link as LinkIcon,
-  Edit2, Folder, X, Upload, ImageIcon, CheckCircle, XCircle,
+  Edit2, Folder, X, Upload, ImageIcon, CheckCircle, XCircle, Trash2, Merge, Search,
 } from "lucide-react";
 import Link from "next/link";
 import type { IcMemo } from "@/lib/types";
@@ -1103,6 +1103,18 @@ export function CompanyDetailClient({
   const [exaActionLoading, setExaActionLoading] = useState(false);
   const [logoStatus, setLogoStatus] = useState<"idle" | "running" | "found" | "not_found">("idle");
 
+  // ── Merge state ───────────────────────────────────────────────────────────
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeSearch, setMergeSearch]       = useState("");
+  const [mergeCandidates, setMergeCandidates] = useState<{ id: string; name: string; type: string }[]>([]);
+  const [mergeTargetId, setMergeTargetId]   = useState<string | null>(null);
+  const [mergeSaving, setMergeSaving]       = useState(false);
+  const mergeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Delete state ──────────────────────────────────────────────────────────
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting]                   = useState(false);
+
   const [showTypePicker, setShowTypePicker] = useState(false);
   const typePickerRef = useRef<HTMLDivElement>(null);
 
@@ -1113,6 +1125,7 @@ export function CompanyDetailClient({
     { value: "corporate",        label: "Corporate" },
     { value: "ecosystem_partner",label: "Ecosystem Partner" },
     { value: "government",       label: "Government" },
+    { value: "other",            label: "Other" },
   ];
 
   async function updateType(newType: CompanyType) {
@@ -1236,6 +1249,43 @@ export function CompanyDetailClient({
       if (data.success && data.logo_url) { setLogoStatus("found"); router.refresh(); }
       else setLogoStatus("not_found");
     } catch { setLogoStatus("not_found"); }
+  }
+
+  // ── Merge search ──────────────────────────────────────────────────────────
+  function handleMergeSearchChange(q: string) {
+    setMergeSearch(q);
+    setMergeTargetId(null);
+    if (mergeTimer.current) clearTimeout(mergeTimer.current);
+    if (!q.trim()) { setMergeCandidates([]); return; }
+    mergeTimer.current = setTimeout(async () => {
+      const { data } = await supabase.from("companies").select("id, name, type")
+        .ilike("name", `%${q}%`).neq("id", company.id).limit(8);
+      setMergeCandidates((data ?? []) as { id: string; name: string; type: string }[]);
+    }, 300);
+  }
+
+  async function executeMerge() {
+    if (!mergeTargetId) return;
+    setMergeSaving(true);
+    // Move all related records to target company
+    await Promise.all([
+      supabase.from("contacts").update({ company_id: mergeTargetId }).eq("company_id", company.id),
+      supabase.from("interactions").update({ company_id: mergeTargetId }).eq("company_id", company.id),
+      supabase.from("deals").update({ company_id: mergeTargetId }).eq("company_id", company.id),
+      supabase.from("documents").update({ company_id: mergeTargetId }).eq("company_id", company.id),
+      supabase.from("ic_memos").update({ company_id: mergeTargetId }).eq("company_id", company.id),
+    ]);
+    // Delete the source (current) company
+    await supabase.from("companies").delete().eq("id", company.id);
+    // Navigate to the target company
+    router.push(`/crm/companies/${mergeTargetId}`);
+  }
+
+  // ── Delete company ────────────────────────────────────────────────────────
+  async function executeDelete() {
+    setDeleting(true);
+    await supabase.from("companies").delete().eq("id", company.id);
+    router.push("/crm/companies");
   }
 
   // ── 4-cell stat bar (always 4 cells, last = Last Contact) ─────────────────
@@ -1397,8 +1447,8 @@ export function CompanyDetailClient({
             </div>
           </div>
 
-          {/* Links + Edit */}
-          <div className="flex gap-2 flex-shrink-0 items-start">
+          {/* Links + Edit + Logo + Merge + Delete */}
+          <div className="flex gap-2 flex-shrink-0 items-start flex-wrap">
             {company.website && (
               <a href={company.website} target="_blank" rel="noopener noreferrer"
                 className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-blue-600 transition-colors" title="Website">
@@ -1417,11 +1467,37 @@ export function CompanyDetailClient({
                 <ExternalLink size={16} />
               </a>
             )}
+            {/* Logo button */}
+            <button
+              onClick={findLogo}
+              disabled={logoStatus === "running"}
+              title="Find & save company logo via logo.dev"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-medium transition-colors disabled:opacity-50"
+            >
+              {logoStatus === "running" ? <><Loader2 size={13} className="animate-spin" /> Finding…</>
+              : logoStatus === "found"   ? <><CheckCircle size={13} className="text-green-500" /> Logo found</>
+              : logoStatus === "not_found" ? <><XCircle size={13} className="text-red-400" /> Not found</>
+              : <><ImageIcon size={13} /> Logo</>}
+            </button>
             <button
               onClick={() => setShowEditModal(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-blue-600 text-xs font-medium transition-colors"
             >
               <Edit2 size={13} /> Edit
+            </button>
+            <button
+              onClick={() => setShowMergeModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-violet-600 text-xs font-medium transition-colors"
+              title="Merge this company into another"
+            >
+              <Merge size={13} /> Merge
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-100 text-red-500 hover:bg-red-50 text-xs font-medium transition-colors"
+              title="Delete this company"
+            >
+              <Trash2 size={13} /> Delete
             </button>
           </div>
         </div>
@@ -2134,6 +2210,95 @@ export function CompanyDetailClient({
           onSave={updated => setCompany(updated)}
           onClose={() => setShowEditModal(false)}
         />
+      )}
+
+      {/* ── Merge Modal ── */}
+      {showMergeModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Merge company</h2>
+                <p className="text-xs text-slate-500 mt-0.5">All contacts, interactions, deals & documents will move to the target. This company will be deleted.</p>
+              </div>
+              <button onClick={() => { setShowMergeModal(false); setMergeSearch(""); setMergeCandidates([]); setMergeTargetId(null); }} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Merging: <span className="text-slate-900 normal-case font-bold">{company.name}</span> →</p>
+              {/* Search */}
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  autoFocus
+                  className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400"
+                  placeholder="Search target company…"
+                  value={mergeSearch}
+                  onChange={e => handleMergeSearchChange(e.target.value)}
+                />
+              </div>
+              {/* Candidates */}
+              {mergeCandidates.length > 0 && (
+                <div className="border border-slate-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                  {mergeCandidates.map(c => (
+                    <button key={c.id} onClick={() => { setMergeTargetId(c.id); setMergeSearch(c.name); setMergeCandidates([]); }}
+                      className={cn("w-full text-left px-3 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0 flex items-center justify-between",
+                        mergeTargetId === c.id ? "bg-violet-50" : "")}>
+                      <span className="font-medium text-slate-800">{c.name}</span>
+                      <span className="text-xs text-slate-400 capitalize">{c.type?.replace(/_/g, " ")}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {mergeTargetId && (
+                <div className="bg-violet-50 border border-violet-200 rounded-lg px-3 py-2.5 text-xs text-violet-800">
+                  <strong>Target:</strong> {mergeSearch} — all data from <strong>{company.name}</strong> will be moved here and <strong>{company.name}</strong> will be permanently deleted.
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t border-slate-100">
+              <button onClick={() => { setShowMergeModal(false); setMergeSearch(""); setMergeCandidates([]); setMergeTargetId(null); }}
+                className="flex-1 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancel
+              </button>
+              <button onClick={executeMerge} disabled={!mergeTargetId || mergeSaving}
+                className="flex-1 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2">
+                {mergeSaving ? <><Loader2 size={13} className="animate-spin" /> Merging…</> : <><Merge size={13} /> Merge & Delete</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm ── */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="px-6 py-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <Trash2 size={18} className="text-red-600" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900">Delete company?</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">This will permanently delete <strong>{company.name}</strong> and cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+                ⚠ Contacts, interactions, and documents linked to this company will be orphaned. Use <strong>Merge</strong> instead if you want to preserve them.
+              </p>
+            </div>
+            <div className="flex gap-3 px-6 pb-5">
+              <button onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancel
+              </button>
+              <button onClick={executeDelete} disabled={deleting}
+                className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-40 transition-colors flex items-center justify-center gap-2">
+                {deleting ? <><Loader2 size={13} className="animate-spin" /> Deleting…</> : <><Trash2 size={13} /> Delete</>}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

@@ -44,20 +44,31 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
     company = data;
   } else {
     // ── Step 2: slug lookup ─────────────────────────────────────────────────
-    // Decode slug to a search term, find matching companies, then pick the one
-    // whose own slug equals what was requested (handles name collisions).
-    const searchTerm = maybeSlug.replace(/-/g, " ");
-    const { data: candidates } = await supabase
-      .from("companies")
-      .select("*")
-      .ilike("name", `%${searchTerm}%`)
-      .limit(10) as unknown as { data: Company[] | null };
+    // Strategy A: hyphens → spaces  ("impact-cooling" → "impact cooling")
+    // Strategy B: hyphens → SQL wildcard ("a-star" → "a%star") so names with
+    //   special characters like A*STAR also resolve correctly.
+    const searchTermSpaces = maybeSlug.replace(/-/g, " ");
+    const searchTermWild   = maybeSlug.replace(/-/g, "%");
 
-    if (candidates?.length) {
-      // Prefer exact slug match; fall back to first result
-      company =
-        candidates.find(c => toSlug(c.name) === maybeSlug) ??
-        candidates[0];
+    const { data: spaceCands } = await supabase
+      .from("companies").select("*")
+      .ilike("name", `%${searchTermSpaces}%`)
+      .limit(20) as unknown as { data: Company[] | null };
+
+    let candidates: Company[] = spaceCands ?? [];
+
+    // Only run wildcard query if strategy A didn't produce an exact slug match
+    if (!candidates.find(c => toSlug(c.name) === maybeSlug)) {
+      const { data: wildCands } = await supabase
+        .from("companies").select("*")
+        .ilike("name", searchTermWild)
+        .limit(20) as unknown as { data: Company[] | null };
+      const existingIds = new Set(candidates.map(c => c.id));
+      candidates = [...candidates, ...(wildCands ?? []).filter(c => !existingIds.has(c.id))];
+    }
+
+    if (candidates.length) {
+      company = candidates.find(c => toSlug(c.name) === maybeSlug) ?? candidates[0];
     }
   }
 

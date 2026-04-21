@@ -12,7 +12,7 @@ import type { Company, CompanyType } from "@/lib/types";
 import { cn, formatCurrency, formatDate, truncate } from "@/lib/utils";
 import {
   Plus, Search, ExternalLink, ChevronUp, ChevronDown,
-  ArrowUpDown, X, Settings2, RotateCcw, Check,
+  ArrowUpDown, X, Settings2, RotateCcw, Check, Trash2,
 } from "lucide-react";
 
 export type CrmView = "pipeline" | "lps" | "funds" | "strategic" | "other" | "all";
@@ -708,6 +708,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
   const [showCustomize, setShowCustomize] = useState(false);
   const [saving,        setSaving]        = useState(false);
   const [form, setForm] = useState<Partial<Company>>({ type: cfg.defaultType, sectors: [] });
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // ── Filtered + sorted data ─────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -803,6 +804,13 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
     await supabase.from("companies")
       .update({ type: primaryType, types: newTypes })
       .eq("id", companyId);
+  }
+
+  // ── Delete company ─────────────────────────────────────────────────────────
+  async function handleDelete(companyId: string) {
+    await supabase.from("companies").delete().eq("id", companyId);
+    setCompanies(prev => prev.filter(c => c.id !== companyId));
+    setConfirmDeleteId(null);
   }
 
   // ── Customize: toggle a column ─────────────────────────────────────────────
@@ -1013,7 +1021,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                     </th>
                   );
                 })}
-                <th className="w-8 min-w-8" />
+                <th className="w-24 min-w-24" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1081,14 +1089,36 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                     );
                   })}
 
-                  {/* ── External link ── */}
-                  <td className="px-3 py-0 w-8 align-middle" onClick={e => e.stopPropagation()}>
-                    {c.website && (
-                      <a href={c.website} target="_blank" rel="noopener noreferrer"
-                        className="text-slate-300 hover:text-blue-500 transition-colors">
-                        <ExternalLink size={14} />
-                      </a>
-                    )}
+                  {/* ── External link + Delete ── */}
+                  <td className="px-3 py-0 align-middle" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-2">
+                      {c.website && (
+                        <a href={c.website} target="_blank" rel="noopener noreferrer"
+                          className="text-slate-300 hover:text-blue-500 transition-colors" title="Website">
+                          <ExternalLink size={14} />
+                        </a>
+                      )}
+                      {confirmDeleteId === c.id ? (
+                        <span className="flex items-center gap-1">
+                          <button
+                            onMouseDown={e => { e.stopPropagation(); handleDelete(c.id); }}
+                            className="text-[10px] text-red-600 font-semibold hover:underline whitespace-nowrap"
+                          >Yes, delete</button>
+                          <button
+                            onMouseDown={e => { e.stopPropagation(); setConfirmDeleteId(null); }}
+                            className="text-[10px] text-slate-400 hover:underline"
+                          >Cancel</button>
+                        </span>
+                      ) : (
+                        <button
+                          onMouseDown={e => { e.stopPropagation(); setConfirmDeleteId(c.id); }}
+                          className="text-slate-200 hover:text-red-400 transition-colors"
+                          title="Delete company"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
