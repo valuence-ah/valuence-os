@@ -359,7 +359,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
   const [investorTypeMap, setInvestorTypeMap] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId]     = useState<string | null>(null);
-  const [showChangeType, setShowChangeType] = useState(false);
+  const [changeTypePos, setChangeTypePos] = useState<{ top: number; right: number } | null>(null);
 
   // Panel animation
   const [visible, setVisible] = useState(false);
@@ -796,7 +796,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
       setEditingFundField(null);
       setSelectedContact(null);
       setShowAddOverlap(false);
-      setShowChangeType(false);
+      setChangeTypePos(null);
 
       // Pre-load cached intelligence so it shows immediately when tab opens
       if (!fundIntelMap[selectedId]) {
@@ -942,9 +942,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
     setCompanies(prev => prev.map(c =>
       c.id === selectedId ? { ...c, type: newType as Company["type"], types: [newType] } : c
     ));
-    setShowChangeType(false);
+    setChangeTypePos(null);
     await supabase.from("companies").update({ type: newType, types: [newType] }).eq("id", selectedId);
   }
+
 
   function setFundFieldOverride(field: keyof FundData, value: string) {
     if (!selectedId) return;
@@ -1532,34 +1533,18 @@ export function FundsViewClient({ initialCompanies }: Props) {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0 ml-2 mt-0.5 relative">
-                    {/* Change Type */}
+                  <div className="flex items-center gap-1 flex-shrink-0 ml-2 mt-0.5">
+                    {/* Change Type — fixed so it escapes overflow-y: auto */}
                     <button
-                      onClick={() => setShowChangeType(v => !v)}
+                      onClick={e => {
+                        const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                        setChangeTypePos(changeTypePos ? null : { top: r.bottom + 4, right: window.innerWidth - r.right });
+                      }}
                       className="text-[10px] text-slate-400 hover:text-blue-600 transition-colors px-1.5 py-0.5 rounded hover:bg-blue-50 border border-transparent hover:border-blue-100 whitespace-nowrap"
                       title="Change company type"
                     >Change Type</button>
-                    {showChangeType && (
-                      <div className="absolute right-6 top-5 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]">
-                        {[
-                          { value: "startup",          label: "Startup" },
-                          { value: "lp",               label: "LP" },
-                          { value: "fund",             label: "Fund / VC" },
-                          { value: "ecosystem_partner",label: "Ecosystem Partner" },
-                          { value: "corporate",        label: "Corporate" },
-                          { value: "government",       label: "Gov / Academic" },
-                          { value: "other",            label: "Other" },
-                        ].map(opt => (
-                          <button
-                            key={opt.value}
-                            onClick={() => handleChangeType(opt.value)}
-                            className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                          >{opt.label}</button>
-                        ))}
-                      </div>
-                    )}
                     <button
-                      onClick={() => { setSelectedId(null); setShowChangeType(false); }}
+                      onClick={() => { setSelectedId(null); setChangeTypePos(null); }}
                       className="text-slate-400 hover:text-slate-600 transition-colors"
                     >
                       <X size={16} />
@@ -2994,6 +2979,32 @@ export function FundsViewClient({ initialCompanies }: Props) {
         </div>
       )}
 
+      {/* Change Type dropdown — fixed so it escapes overflow containers */}
+      {changeTypePos && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setChangeTypePos(null)} />
+          <div
+            className="fixed z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]"
+            style={{ top: changeTypePos.top, right: changeTypePos.right }}
+          >
+            {[
+              { value: "startup",           label: "Startup" },
+              { value: "lp",               label: "LP" },
+              { value: "fund",             label: "Fund / VC" },
+              { value: "ecosystem_partner",label: "Ecosystem Partner" },
+              { value: "corporate",        label: "Corporate" },
+              { value: "government",       label: "Gov / Academic" },
+              { value: "other",            label: "Other" },
+            ].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => handleChangeType(opt.value)}
+                className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+              >{opt.label}</button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

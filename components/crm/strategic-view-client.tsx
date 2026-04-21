@@ -312,7 +312,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   // Remove company confirm
   const [confirmRemoveCompanyId, setConfirmRemoveCompanyId] = useState<string | null>(null);
   // Change type
-  const [showChangeType, setShowChangeType] = useState(false);
+  const [changeTypePos, setChangeTypePos] = useState<{ top: number; right: number } | null>(null);
 
   // localStorage ext map
   const [extMap, setExtMap] = useState<Record<string, StrategicExt>>({});
@@ -537,7 +537,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     setCompanies(prev => prev.map(c =>
       c.id === selectedId ? { ...c, type: newType as Company["type"], types: [newType] } : c
     ));
-    setShowChangeType(false);
+    setChangeTypePos(null);
     await supabase.from("companies").update({ type: newType, types: [newType] }).eq("id", selectedId);
   }
 
@@ -603,7 +603,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     setShowOppForm(false);
     setShowIntelForm(false);
     setShowTaskForm(false);
-    setShowChangeType(false);
+    setChangeTypePos(null);
     loadDetail(id);
   }
 
@@ -1132,32 +1132,16 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-1 flex-shrink-0 relative">
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <button
-                  onClick={() => setShowChangeType(v => !v)}
+                  onClick={e => {
+                    const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                    setChangeTypePos(changeTypePos ? null : { top: r.bottom + 4, right: window.innerWidth - r.right });
+                  }}
                   className="text-[10px] text-slate-400 hover:text-blue-600 transition-colors px-1.5 py-0.5 rounded hover:bg-blue-50 border border-transparent hover:border-blue-100 whitespace-nowrap"
                   title="Change company type"
                 >Change Type</button>
-                {showChangeType && (
-                  <div className="absolute right-7 top-5 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]">
-                    {[
-                      { value: "startup",           label: "Startup" },
-                      { value: "lp",                label: "LP" },
-                      { value: "fund",              label: "Fund / VC" },
-                      { value: "ecosystem_partner", label: "Ecosystem Partner" },
-                      { value: "corporate",         label: "Corporate" },
-                      { value: "government",        label: "Gov / Academic" },
-                      { value: "other",             label: "Other" },
-                    ].map(opt => (
-                      <button
-                        key={opt.value}
-                        onClick={() => handleChangeType(opt.value)}
-                        className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                      >{opt.label}</button>
-                    ))}
-                  </div>
-                )}
-                <button onClick={() => { setSelectedId(null); setShowChangeType(false); }} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400">
+                <button onClick={() => { setSelectedId(null); setChangeTypePos(null); }} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400">
                   <X size={14} />
                 </button>
               </div>
@@ -1916,6 +1900,33 @@ export function StrategicViewClient({ initialCompanies }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Change Type dropdown — fixed so it escapes overflow containers */}
+      {changeTypePos && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setChangeTypePos(null)} />
+          <div
+            className="fixed z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]"
+            style={{ top: changeTypePos.top, right: changeTypePos.right }}
+          >
+            {[
+              { value: "startup",           label: "Startup" },
+              { value: "lp",               label: "LP" },
+              { value: "fund",             label: "Fund / VC" },
+              { value: "ecosystem_partner",label: "Ecosystem Partner" },
+              { value: "corporate",        label: "Corporate" },
+              { value: "government",       label: "Gov / Academic" },
+              { value: "other",            label: "Other" },
+            ].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => handleChangeType(opt.value)}
+                className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+              >{opt.label}</button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
