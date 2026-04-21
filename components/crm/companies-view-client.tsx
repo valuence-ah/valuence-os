@@ -12,7 +12,7 @@ import type { Company, CompanyType } from "@/lib/types";
 import { cn, formatCurrency, formatDate, truncate } from "@/lib/utils";
 import {
   Plus, Search, ExternalLink, ChevronUp, ChevronDown,
-  ArrowUpDown, X, Settings2, RotateCcw, Check, Trash2, PencilLine,
+  ArrowUpDown, X, Settings2, RotateCcw, Check, Trash2, Sparkles, Loader2,
 } from "lucide-react";
 
 export type CrmView = "pipeline" | "lps" | "funds" | "strategic" | "other" | "all";
@@ -97,15 +97,46 @@ function ContactAvatars({ contacts }: { contacts: { first_name: string | null; l
 }
 
 // ── Description Cell ──────────────────────────────────────────────────────────
-function DescriptionCell({ text }: { text: string | null }) {
-  if (!text) return (
-    <span className="flex items-center gap-1 text-slate-300 hover:text-blue-400 transition-colors cursor-pointer" title="Click row to add description">
-      <PencilLine size={11} />
-      <span className="text-xs">Add description</span>
-    </span>
-  );
+function DescriptionCell({ company, onUpdate }: { company: Company; onUpdate: (desc: string) => void }) {
+  const [generating, setGenerating] = useState(false);
+
+  async function handleGenerate(e: React.MouseEvent) {
+    e.stopPropagation();
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/companies/generate-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: company.id }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      const json = await res.json();
+      if (json.description) onUpdate(json.description);
+    } catch {
+      // silently fail — user can try again
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  if (!company.description) {
+    return (
+      <button
+        onClick={handleGenerate}
+        disabled={generating}
+        className="flex items-center gap-1 text-amber-400 hover:text-amber-500 transition-colors disabled:opacity-50"
+        title="Auto-generate description"
+      >
+        {generating
+          ? <Loader2 size={12} className="animate-spin" />
+          : <Sparkles size={12} />
+        }
+        <span className="text-xs">{generating ? "Generating…" : "Generate"}</span>
+      </button>
+    );
+  }
   return (
-    <p className="text-xs text-slate-500 leading-snug line-clamp-2 w-full">{text}</p>
+    <p className="text-xs text-slate-500 leading-snug line-clamp-2 w-full">{company.description}</p>
   );
 }
 
@@ -811,6 +842,15 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
       .eq("id", companyId);
   }
 
+  // ── Update description (from AI generate) ────────────────────────────────
+  function handleDescriptionUpdate(companyId: string, description: string) {
+    setCompanies(prev => prev.map(c =>
+      c.id === companyId ? { ...c, description } : c
+    ));
+    // Persist to DB (fire-and-forget — already saved by the API route)
+    supabase.from("companies").update({ description }).eq("id", companyId);
+  }
+
   // ── Delete company ─────────────────────────────────────────────────────────
   async function handleDelete(companyId: string) {
     await supabase.from("companies").delete().eq("id", companyId);
@@ -1064,6 +1104,19 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                         <td key={key} className="px-4 py-0 overflow-hidden align-middle" style={{ width: w }}
                           onClick={e => e.stopPropagation()}>
                           <ContactAvatars contacts={contacts} />
+                        </td>
+                      );
+                    }
+
+                    // Description — AI-generate sparkle button when empty
+                    if (key === "description") {
+                      return (
+                        <td key={key} className="px-4 py-0 overflow-hidden align-middle" style={{ width: w }}
+                          onClick={e => e.stopPropagation()}>
+                          <DescriptionCell
+                            company={c}
+                            onUpdate={desc => handleDescriptionUpdate(c.id, desc)}
+                          />
                         </td>
                       );
                     }
