@@ -971,7 +971,7 @@ export function PortfolioOverviewTab({
             className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center p-4"
             onClick={e => { if (e.target === e.currentTarget) setSelectedInvestment(null); }}
           >
-            <div className="bg-white rounded-2xl w-[520px] max-h-[85vh] overflow-y-auto overflow-x-hidden shadow-2xl">
+            <div className="bg-white rounded-2xl w-[620px] max-h-[85vh] overflow-y-auto overflow-x-hidden shadow-2xl">
               {/* Header */}
               <div className={`sticky top-0 ${accentBg} border-b ${accentBorder} px-6 py-4 flex items-start justify-between rounded-t-2xl`}>
                 <div>
@@ -1008,42 +1008,58 @@ export function PortfolioOverviewTab({
                   </div>
                 )}
 
-                {/* Documents */}
-                {(inv.memo_storage_path || inv.subscription_doc_storage_path) && (
-                  <div>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Documents</p>
-                    <div className="flex gap-3">
-                      {inv.memo_storage_path && (
-                        <button
-                          onClick={async () => {
-                            setOpeningDoc("memo");
-                            await openInvestmentDoc(inv.memo_storage_path!);
-                            setOpeningDoc(null);
-                          }}
-                          className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors"
-                        >
-                          <FileText size={14} className="text-blue-600 flex-shrink-0" />
-                          <span className="text-xs text-blue-700 font-medium truncate flex-1 text-left">{inv.memo_file_name ?? "Investment Memo"}</span>
-                          {openingDoc === "memo" ? <Loader2 size={12} className="animate-spin text-blue-400 flex-shrink-0" /> : <ExternalLink size={12} className="text-blue-400 flex-shrink-0" />}
-                        </button>
-                      )}
-                      {inv.subscription_doc_storage_path && (
-                        <button
-                          onClick={async () => {
-                            setOpeningDoc("subdoc");
-                            await openInvestmentDoc(inv.subscription_doc_storage_path!);
-                            setOpeningDoc(null);
-                          }}
-                          className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-colors"
-                        >
-                          <FileText size={14} className="text-violet-600 flex-shrink-0" />
-                          <span className="text-xs text-violet-700 font-medium truncate flex-1 text-left">{inv.subscription_doc_file_name ?? "Subscription Doc"}</span>
-                          {openingDoc === "subdoc" ? <Loader2 size={12} className="animate-spin text-violet-400 flex-shrink-0" /> : <ExternalLink size={12} className="text-violet-400 flex-shrink-0" />}
-                        </button>
-                      )}
-                    </div>
+                {/* Documents — always show both slots, equal width, N/A if missing */}
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Documents</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Investment Memo */}
+                    {inv.memo_storage_path ? (
+                      <button
+                        onClick={async () => {
+                          setOpeningDoc("memo");
+                          await openInvestmentDoc(inv.memo_storage_path!);
+                          setOpeningDoc(null);
+                        }}
+                        className="flex items-center gap-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors min-w-0"
+                      >
+                        <FileText size={14} className="text-blue-600 flex-shrink-0" />
+                        <span className="text-xs text-blue-700 font-medium truncate flex-1 text-left">{inv.memo_file_name ?? "Investment Memo"}</span>
+                        {openingDoc === "memo" ? <Loader2 size={12} className="animate-spin text-blue-400 flex-shrink-0" /> : <ExternalLink size={12} className="text-blue-400 flex-shrink-0" />}
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 border border-slate-200 border-dashed rounded-xl min-w-0">
+                        <FileText size={14} className="text-slate-300 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] text-slate-400 font-medium">Investment Memo</p>
+                          <p className="text-xs font-semibold text-slate-400">N/A</p>
+                        </div>
+                      </div>
+                    )}
+                    {/* Subscription Document */}
+                    {inv.subscription_doc_storage_path ? (
+                      <button
+                        onClick={async () => {
+                          setOpeningDoc("subdoc");
+                          await openInvestmentDoc(inv.subscription_doc_storage_path!);
+                          setOpeningDoc(null);
+                        }}
+                        className="flex items-center gap-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-colors min-w-0"
+                      >
+                        <FileText size={14} className="text-violet-600 flex-shrink-0" />
+                        <span className="text-xs text-violet-700 font-medium truncate flex-1 text-left">{inv.subscription_doc_file_name ?? "Subscription Doc"}</span>
+                        {openingDoc === "subdoc" ? <Loader2 size={12} className="animate-spin text-violet-400 flex-shrink-0" /> : <ExternalLink size={12} className="text-violet-400 flex-shrink-0" />}
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 border border-slate-200 border-dashed rounded-xl min-w-0">
+                        <FileText size={14} className="text-slate-300 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] text-slate-400 font-medium">Subscription Doc</p>
+                          <p className="text-xs font-semibold text-slate-400">N/A</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
