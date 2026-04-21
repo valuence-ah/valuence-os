@@ -5,6 +5,7 @@
 // localStorage per view so each view has an independent configuration.
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, CompanyType } from "@/lib/types";
@@ -95,99 +96,120 @@ function ContactAvatars({ contacts }: { contacts: { first_name: string | null; l
   );
 }
 
-// ── Description Cell (expandable popover) ─────────────────────────────────────
+// ── Description Cell ──────────────────────────────────────────────────────────
 function DescriptionCell({ text }: { text: string | null }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
   if (!text) return <span className="text-slate-300 text-xs">—</span>;
-  const isLong = text.length > 80;
-  const preview = isLong ? text.slice(0, 80).trimEnd() + "…" : text;
-
   return (
-    <div className="relative" ref={ref}>
-      <p className="text-xs text-slate-500 leading-snug line-clamp-2">{preview}</p>
-      {isLong && (
-        <button
-          onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
-          className="text-[10px] text-blue-500 hover:text-blue-700 font-medium mt-0.5 block"
-        >
-          {open ? "less ↑" : "more ↓"}
-        </button>
-      )}
-      {open && (
-        <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-3 w-64 max-h-40 overflow-y-auto">
-          <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{text}</p>
-        </div>
-      )}
-    </div>
+    <p className="text-xs text-slate-500 leading-snug line-clamp-2 w-full">{text}</p>
   );
 }
 
 // ── Inline Type Picker ─────────────────────────────────────────────────────────
 const TYPE_EDIT_OPTIONS: CompanyType[] = [
-  "startup", "lp", "fund", "ecosystem_partner", "corporate", "government",
+  "startup", "lp", "fund", "ecosystem_partner", "corporate", "government", "other",
 ];
 const TYPE_BADGE: Record<string, string> = {
-  startup:           "bg-blue-50 text-blue-700 border border-blue-100",
-  lp:                "bg-purple-50 text-purple-700 border border-purple-100",
-  "limited partner": "bg-purple-50 text-purple-700 border border-purple-100",
-  fund:              "bg-indigo-50 text-indigo-700 border border-indigo-100",
-  investor:          "bg-indigo-50 text-indigo-700 border border-indigo-100",
-  "strategic partner": "bg-teal-50 text-teal-700 border border-teal-100",
-  ecosystem_partner: "bg-teal-50 text-teal-700 border border-teal-100",
-  corporate:         "bg-orange-50 text-orange-700 border border-orange-100",
-  government:        "bg-slate-100 text-slate-600 border border-slate-200",
-  other:             "bg-gray-50 text-gray-600 border border-gray-200",
+  startup:              "bg-blue-50 text-blue-700 border border-blue-100",
+  lp:                   "bg-purple-50 text-purple-700 border border-purple-100",
+  "limited partner":    "bg-purple-50 text-purple-700 border border-purple-100",
+  fund:                 "bg-indigo-50 text-indigo-700 border border-indigo-100",
+  investor:             "bg-indigo-50 text-indigo-700 border border-indigo-100",
+  "fund vc":            "bg-indigo-50 text-indigo-700 border border-indigo-100",
+  "strategic partner":  "bg-teal-50 text-teal-700 border border-teal-100",
+  ecosystem_partner:    "bg-teal-50 text-teal-700 border border-teal-100",
+  "eco partner":        "bg-teal-50 text-teal-700 border border-teal-100",
+  "eco_partner":        "bg-teal-50 text-teal-700 border border-teal-100",
+  ecosystem:            "bg-teal-50 text-teal-700 border border-teal-100",
+  corporate:            "bg-orange-50 text-orange-700 border border-orange-100",
+  government:           "bg-slate-100 text-slate-600 border border-slate-200",
+  "government/academic":"bg-slate-100 text-slate-600 border border-slate-200",
+  "gov/academic":       "bg-slate-100 text-slate-600 border border-slate-200",
+  other:                "bg-gray-50 text-gray-600 border border-gray-200",
 };
 const TYPE_LABEL: Record<string, string> = {
-  startup:            "Startup",
-  lp:                 "LP",
-  "limited partner":  "LP",
-  fund:               "Fund",
-  investor:           "Fund",
-  "strategic partner":"Ecosystem Partner",
-  ecosystem_partner:  "Ecosystem Partner",
-  corporate:          "Corporate",
-  government:         "Government",
-  other:              "Other",
+  startup:              "Startup",
+  lp:                   "LP",
+  "limited partner":    "LP",
+  fund:                 "Fund / VC",
+  investor:             "Fund / VC",
+  "fund vc":            "Fund / VC",
+  "fund/vc":            "Fund / VC",
+  "strategic partner":  "Ecosystem",
+  ecosystem_partner:    "Ecosystem",
+  "eco partner":        "Ecosystem",
+  "eco_partner":        "Ecosystem",
+  ecosystem:            "Ecosystem",
+  corporate:            "Corporate",
+  government:           "Gov / Academic",
+  "government/academic":"Gov / Academic",
+  "gov/academic":       "Gov / Academic",
+  other:                "Other",
 };
 
-function InlineTypePicker({ company, onUpdate }: { company: Company; onUpdate: (t: CompanyType) => void }) {
+function InlineTypePicker({ company, onUpdate }: { company: Company; onUpdate: (types: CompanyType[]) => void }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [selected, setSelected] = useState<CompanyType[]>([]);
+  const selectedRef = useRef<CompanyType[]>([]);
   const ref = useRef<HTMLDivElement>(null);
+
+  // Keep ref in sync with state so the close handler always has the latest selection
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
+
+  function commit() {
+    const sel = selectedRef.current;
+    if (sel.length > 0) onUpdate(sel);
+    setOpen(false);
+  }
 
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) commit();
     }
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") commit(); }
     document.addEventListener("mousedown", handler);
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", handler);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleOpen(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (open) { commit(); return; }
+    // Initialise selection from current company state
+    const current = (company.types && company.types.length > 0)
+      ? (company.types as CompanyType[])
+      : company.type ? [company.type as CompanyType] : [];
+    setSelected(current);
+    selectedRef.current = current;
+
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      const menuH = TYPE_EDIT_OPTIONS.length * 40 + 64;
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const top = spaceBelow >= menuH ? rect.bottom + 4 : Math.max(8, rect.top - menuH - 4);
+      setPos({ top, left: rect.left });
+    }
+    setOpen(true);
+  }
+
+  function toggleType(t: CompanyType) {
+    setSelected(prev =>
+      prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]
+    );
+  }
 
   const typeList = (company.types && company.types.length > 0) ? company.types : [company.type];
 
   return (
-    <div className="relative" ref={ref}>
+    <div ref={ref}>
       <div
         className="flex flex-wrap gap-1 cursor-pointer group"
         title="Click to change type"
-        onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+        onClick={handleOpen}
       >
         {typeList.map(t => {
           const tl = (t ?? "").toLowerCase();
@@ -201,21 +223,46 @@ function InlineTypePicker({ company, onUpdate }: { company: Company; onUpdate: (
           );
         })}
       </div>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 min-w-[170px] overflow-hidden">
-          {TYPE_EDIT_OPTIONS.map(t => (
+      {open && pos && createPortal(
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 99999, minWidth: 190 }}
+          className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 pt-2.5 pb-1">Select types</p>
+          {TYPE_EDIT_OPTIONS.map(t => {
+            const isChecked = selected.includes(t);
+            return (
+              <button
+                key={t}
+                onClick={e => { e.stopPropagation(); toggleType(t); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 text-left"
+              >
+                <div className={cn(
+                  "w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors",
+                  isChecked ? "bg-blue-600 border-blue-600" : "border-slate-300 bg-white"
+                )}>
+                  {isChecked && <Check size={10} className="text-white" />}
+                </div>
+                <span className={cn(
+                  "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium",
+                  TYPE_BADGE[t] ?? "bg-slate-50 text-slate-600"
+                )}>
+                  {TYPE_LABEL[t] ?? t}
+                </span>
+              </button>
+            );
+          })}
+          <div className="border-t border-slate-100 px-3 py-2">
             <button
-              key={t}
-              onClick={e => { e.stopPropagation(); onUpdate(t); setOpen(false); }}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-slate-50 text-left"
+              onClick={e => { e.stopPropagation(); commit(); }}
+              className="w-full text-center text-xs font-semibold text-blue-600 hover:text-blue-800 py-1 rounded hover:bg-blue-50 transition-colors"
             >
-              <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium flex-1", TYPE_BADGE[t] ?? "bg-slate-50 text-slate-600")}>
-                {TYPE_LABEL[t] ?? t}
-              </span>
-              {typeList.includes(t) && <Check size={11} className="text-blue-600 flex-shrink-0" />}
+              Done
             </button>
-          ))}
-        </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -335,7 +382,7 @@ const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
     key: "location", label: "Location", group: "core", defaultWidth: 150,
     render: c => (c.location_city || c.location_country) ? (
       <div>
-        {c.location_city && <div className="text-sm text-slate-700 leading-snug">{c.location_city}</div>}
+        {c.location_city && <div className="text-xs text-slate-600 leading-snug">{c.location_city}</div>}
         {c.location_country && <div className="text-xs text-slate-400 leading-snug">{c.location_country}</div>}
       </div>
     ) : <span className="text-slate-300 text-xs">—</span>,
@@ -344,13 +391,13 @@ const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
   location_city: {
     key: "location_city", label: "City", group: "core", defaultWidth: 120,
     render: c => c.location_city
-      ? <span className="text-sm text-slate-700">{c.location_city}</span>
+      ? <span className="text-xs text-slate-600">{c.location_city}</span>
       : <span className="text-slate-300 text-xs">—</span>,
   },
   location_country: {
     key: "location_country", label: "Country", group: "core", defaultWidth: 110,
     render: c => c.location_country
-      ? <span className="text-sm text-slate-700">{c.location_country}</span>
+      ? <span className="text-xs text-slate-600">{c.location_country}</span>
       : <span className="text-slate-300 text-xs">—</span>,
   },
   last_contact_date: {
@@ -745,10 +792,17 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
     }
   }
 
-  // ── Inline type update ─────────────────────────────────────────────────────
-  async function handleTypeUpdate(companyId: string, newType: CompanyType) {
-    setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, type: newType } : c));
-    await supabase.from("companies").update({ type: newType }).eq("id", companyId);
+  // ── Inline type update (multi-select) ─────────────────────────────────────
+  async function handleTypeUpdate(companyId: string, newTypes: CompanyType[]) {
+    const primaryType = newTypes[0] ?? "other";
+    // Optimistic update
+    setCompanies(prev => prev.map(c =>
+      c.id === companyId ? { ...c, type: primaryType, types: newTypes } : c
+    ));
+    // Persist to DB — type = first selection, types = full array
+    await supabase.from("companies")
+      .update({ type: primaryType, types: newTypes })
+      .eq("id", companyId);
   }
 
   // ── Customize: toggle a column ─────────────────────────────────────────────
@@ -913,7 +967,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
               <tr>
                 {/* ── Company name column — also resizable ── */}
                 <th
-                  className="relative group/th px-4 py-3 text-left whitespace-nowrap select-none"
+                  className="relative group/th px-4 py-1.5 text-left whitespace-nowrap select-none"
                   style={{ width: nameColW, minWidth: 60 }}
                 >
                   <button onClick={() => handleSort("name")} className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wide hover:text-slate-800 transition-colors">
@@ -938,7 +992,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                   return (
                     <th
                       key={key}
-                      className="relative group/th px-4 py-3 text-left whitespace-nowrap select-none"
+                      className="relative group/th px-4 py-1.5 text-left whitespace-nowrap select-none"
                       style={{ width: w, minWidth: 60 }}
                     >
                       {def.sortKey ? (
@@ -971,11 +1025,11 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                 </tr>
               ) : filtered.map(c => (
                 <tr key={c.id}
-                  className="hover:bg-slate-50 cursor-pointer transition-colors"
+                  className="hover:bg-slate-50 cursor-pointer transition-colors h-14"
                   onClick={() => router.push(`/crm/companies/${toSlug(c.name)}`)}>
 
                   {/* ── Company name cell with logo ── */}
-                  <td className="px-4 py-3 overflow-hidden" style={{ width: nameColW }}>
+                  <td className="px-4 py-0 overflow-hidden align-middle" style={{ width: nameColW }}>
                     <div className="flex items-center gap-2.5 min-w-0">
                       <CompanyLogo company={c} />
                       <div className="min-w-0">
@@ -994,7 +1048,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                     if (key === "contacts") {
                       const contacts = contactDetailsMap[c.id] ?? (contactCountMap[c.id] ? Array(contactCountMap[c.id]).fill({ first_name: "?", last_name: null }) : []);
                       return (
-                        <td key={key} className="px-4 py-3 overflow-hidden" style={{ width: w }}
+                        <td key={key} className="px-4 py-0 overflow-hidden align-middle" style={{ width: w }}
                           onClick={e => e.stopPropagation()}>
                           <ContactAvatars contacts={contacts} />
                         </td>
@@ -1004,11 +1058,11 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                     // Type — inline editable picker
                     if (key === "type") {
                       return (
-                        <td key={key} className="px-4 py-3 overflow-hidden" style={{ width: w }}
+                        <td key={key} className="px-4 py-0 overflow-hidden align-middle" style={{ width: w }}
                           onClick={e => e.stopPropagation()}>
                           <InlineTypePicker
                             company={c}
-                            onUpdate={newType => handleTypeUpdate(c.id, newType)}
+                            onUpdate={newTypes => handleTypeUpdate(c.id, newTypes)}
                           />
                         </td>
                       );
@@ -1018,7 +1072,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                     return (
                       <td
                         key={key}
-                        className="px-4 py-3 overflow-hidden"
+                        className="px-4 py-0 overflow-hidden align-middle"
                         style={{ width: w }}
                         onClick={key === "website" || key === "linkedin_url" ? e => e.stopPropagation() : undefined}
                       >
@@ -1028,7 +1082,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                   })}
 
                   {/* ── External link ── */}
-                  <td className="px-3 py-3 w-8" onClick={e => e.stopPropagation()}>
+                  <td className="px-3 py-0 w-8 align-middle" onClick={e => e.stopPropagation()}>
                     {c.website && (
                       <a href={c.website} target="_blank" rel="noopener noreferrer"
                         className="text-slate-300 hover:text-blue-500 transition-colors">
