@@ -19,7 +19,7 @@ import {
   Globe, Linkedin, ExternalLink, MapPin,
   Phone, Mail, Plus, ChevronDown, FileText, Mic, CheckSquare,
   Sparkles, Loader2, AlertCircle, Calendar, Link as LinkIcon,
-  Edit2, Folder, X, Upload, ImageIcon, CheckCircle, XCircle, Trash2, Merge, Search,
+  Edit2, Folder, X, Upload, ImageIcon, Trash2, Merge, Search,
 } from "lucide-react";
 import Link from "next/link";
 import type { IcMemo } from "@/lib/types";
@@ -1101,7 +1101,10 @@ export function CompanyDetailClient({
   // ── Action strip state ────────────────────────────────────────────────────
   const [memoGenerating, setMemoGenerating] = useState(false);
   const [exaActionLoading, setExaActionLoading] = useState(false);
-  const [logoStatus, setLogoStatus] = useState<"idle" | "running" | "found" | "not_found">("idle");
+  const [showLogoPicker, setShowLogoPicker] = useState(false);
+  const [logoUrlInput, setLogoUrlInput]     = useState("");
+  const [logoFinding, setLogoFinding]       = useState(false);
+  const [logoMsg, setLogoMsg]               = useState<string | null>(null);
 
   // ── Merge state ───────────────────────────────────────────────────────────
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -1237,18 +1240,37 @@ export function CompanyDetailClient({
     } catch { /* ignore */ } finally { setExaActionLoading(false); }
   }
 
-  async function findLogo() {
-    setLogoStatus("running");
+  async function handleManualLogo() {
+    if (!logoUrlInput.trim()) return;
+    const url = logoUrlInput.trim();
+    await supabase.from("companies").update({ logo_url: url }).eq("id", company.id);
+    setCompany(c => ({ ...c, logo_url: url }));
+    setShowLogoPicker(false);
+    setLogoUrlInput("");
+    setLogoMsg(null);
+  }
+
+  async function handleAutoFindLogo() {
+    setLogoFinding(true);
+    setLogoMsg(null);
     try {
-      const res = await fetch("/api/logo-finder/run", {
+      const res  = await fetch("/api/logo-finder/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ companyId: company.id }),
       });
       const data = await res.json();
-      if (data.success && data.logo_url) { setLogoStatus("found"); router.refresh(); }
-      else setLogoStatus("not_found");
-    } catch { setLogoStatus("not_found"); }
+      if (data.success && data.logo_url) {
+        setCompany(c => ({ ...c, logo_url: data.logo_url }));
+        setShowLogoPicker(false);
+        setLogoMsg(null);
+      } else {
+        setLogoMsg("Logo not found — try entering a URL manually.");
+      }
+    } catch {
+      setLogoMsg("Error finding logo.");
+    }
+    setLogoFinding(false);
   }
 
   // ── Merge search ──────────────────────────────────────────────────────────
@@ -1467,18 +1489,47 @@ export function CompanyDetailClient({
                 <ExternalLink size={16} />
               </a>
             )}
-            {/* Logo button */}
-            <button
-              onClick={findLogo}
-              disabled={logoStatus === "running"}
-              title="Find & save company logo via logo.dev"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-medium transition-colors disabled:opacity-50"
-            >
-              {logoStatus === "running" ? <><Loader2 size={13} className="animate-spin" /> Finding…</>
-              : logoStatus === "found"   ? <><CheckCircle size={13} className="text-green-500" /> Logo found</>
-              : logoStatus === "not_found" ? <><XCircle size={13} className="text-red-400" /> Not found</>
-              : <><ImageIcon size={13} /> Logo</>}
-            </button>
+            {/* Logo button + popup — identical to pipeline */}
+            <div className="relative">
+              <button
+                onClick={() => { setShowLogoPicker(p => !p); setLogoMsg(null); setLogoUrlInput(""); }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-medium transition-colors"
+                title="Set company logo"
+              >
+                <ImageIcon size={13} /> Logo
+              </button>
+              {showLogoPicker && (
+                <div className="absolute right-0 top-9 z-30 w-72 bg-white border border-slate-200 rounded-xl shadow-lg p-4 space-y-3">
+                  <p className="text-xs font-semibold text-slate-700">Update Logo</p>
+                  <div className="flex gap-2">
+                    <input
+                      autoFocus
+                      className="flex-1 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      placeholder="Paste logo URL…"
+                      value={logoUrlInput}
+                      onChange={e => setLogoUrlInput(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && handleManualLogo()}
+                    />
+                    <button
+                      onClick={handleManualLogo}
+                      disabled={!logoUrlInput.trim()}
+                      className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-40"
+                    >
+                      Save
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleAutoFindLogo}
+                    disabled={logoFinding}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-100 disabled:opacity-50 transition-colors"
+                  >
+                    {logoFinding ? <><Loader2 size={12} className="animate-spin" /> Finding…</> : <><Sparkles size={12} /> Auto-find logo</>}
+                  </button>
+                  {logoMsg && <p className="text-xs text-slate-500">{logoMsg}</p>}
+                  <button onClick={() => setShowLogoPicker(false)} className="text-xs text-slate-400 hover:text-slate-600 w-full text-center">Cancel</button>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => setShowEditModal(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-blue-600 text-xs font-medium transition-colors"
