@@ -487,6 +487,7 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [companies, setCompanies]         = useState<Company[]>(initialCompanies);
   const [confirmRemoveCompanyId, setConfirmRemoveCompanyId] = useState<string | null>(null);
   const [selectedId, setSelectedId]       = useState<string | null>(null);
+  const [showChangeType, setShowChangeType] = useState(false);
   const [search, setSearch]               = useState("");
   const [activeFilter, setActiveFilter]   = useState<FilterId>("all");
   const [viewMode, setViewMode]           = useState<"table" | "kanban" | "map">("table");
@@ -791,6 +792,7 @@ export function LpViewClient({ initialCompanies }: Props) {
     const co = companies.find(c => c.id === id);
     if (!co) return;
     setSelectedId(id);
+    setShowChangeType(false);
     setEditStage(co.lp_stage ?? "");
     setEditGoal(co.commitment_goal != null ? String(co.commitment_goal) : "");
     setEditLpType(co.lp_type ?? "");
@@ -815,6 +817,16 @@ export function LpViewClient({ initialCompanies }: Props) {
   }
 
   const selected = companies.find(c => c.id === selectedId) ?? null;
+
+  // Change company type
+  async function handleChangeType(newType: string) {
+    if (!selectedId) return;
+    setCompanies(prev => prev.map(c =>
+      c.id === selectedId ? { ...c, type: newType as Company["type"], types: [newType] } : c
+    ));
+    setShowChangeType(false);
+    await supabase.from("companies").update({ type: newType, types: [newType] }).eq("id", selectedId);
+  }
 
   // Save — pure optimistic, no full-row re-fetch (prevents race condition overwriting other fields)
   async function saveField(id: string, patch: Partial<Company>) {
@@ -1671,7 +1683,33 @@ export function LpViewClient({ initialCompanies }: Props) {
                   </div>
                 </div>
               </div>
-              <button onClick={() => setSelectedId(null)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 flex-shrink-0"><X size={14} /></button>
+              <div className="flex items-center gap-1 flex-shrink-0 relative">
+                <button
+                  onClick={() => setShowChangeType(v => !v)}
+                  className="text-[10px] text-slate-400 hover:text-blue-600 transition-colors px-1.5 py-0.5 rounded hover:bg-blue-50 border border-transparent hover:border-blue-100 whitespace-nowrap"
+                  title="Change company type"
+                >Change Type</button>
+                {showChangeType && (
+                  <div className="absolute right-7 top-5 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]">
+                    {[
+                      { value: "startup",           label: "Startup" },
+                      { value: "lp",                label: "LP" },
+                      { value: "fund",              label: "Fund / VC" },
+                      { value: "ecosystem_partner", label: "Ecosystem Partner" },
+                      { value: "corporate",         label: "Corporate" },
+                      { value: "government",        label: "Gov / Academic" },
+                      { value: "other",             label: "Other" },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => handleChangeType(opt.value)}
+                        className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                      >{opt.label}</button>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => { setSelectedId(null); setShowChangeType(false); }} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400"><X size={14} /></button>
+              </div>
             </div>
 
             {/* Action buttons */}

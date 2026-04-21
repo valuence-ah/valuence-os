@@ -359,7 +359,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
   const [investorTypeMap, setInvestorTypeMap] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId]     = useState<string | null>(null);
-  const [confirmRemoveFund, setConfirmRemoveFund] = useState(false);
+  const [showChangeType, setShowChangeType] = useState(false);
 
   // Panel animation
   const [visible, setVisible] = useState(false);
@@ -796,7 +796,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
       setEditingFundField(null);
       setSelectedContact(null);
       setShowAddOverlap(false);
-      setConfirmRemoveFund(false);
+      setShowChangeType(false);
 
       // Pre-load cached intelligence so it shows immediately when tab opens
       if (!fundIntelMap[selectedId]) {
@@ -937,12 +937,13 @@ export function FundsViewClient({ initialCompanies }: Props) {
     ? { ...baseSelected, ...(fundOverrides[selectedId!] ?? {}) }
     : null;
 
-  async function handleDeleteFund() {
+  async function handleChangeType(newType: string) {
     if (!selectedId) return;
-    await supabase.from("companies").delete().eq("id", selectedId);
-    setCompanies(prev => prev.filter(c => c.id !== selectedId));
-    setSelectedId(null);
-    setConfirmRemoveFund(false);
+    setCompanies(prev => prev.map(c =>
+      c.id === selectedId ? { ...c, type: newType as Company["type"], types: [newType] } : c
+    ));
+    setShowChangeType(false);
+    await supabase.from("companies").update({ type: newType, types: [newType] }).eq("id", selectedId);
   }
 
   function setFundFieldOverride(field: keyof FundData, value: string) {
@@ -1531,28 +1532,34 @@ export function FundsViewClient({ initialCompanies }: Props) {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0 ml-2 mt-0.5">
-                    {/* Remove company */}
-                    {confirmRemoveFund ? (
-                      <span className="flex items-center gap-1.5">
-                        <button
-                          onClick={handleDeleteFund}
-                          className="text-[10px] text-red-600 font-semibold hover:underline whitespace-nowrap"
-                        >Yes, remove</button>
-                        <button
-                          onClick={() => setConfirmRemoveFund(false)}
-                          className="text-[10px] text-slate-400 hover:underline"
-                        >Cancel</button>
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => setConfirmRemoveFund(true)}
-                        className="text-[10px] text-slate-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded hover:bg-red-50 border border-transparent hover:border-red-100"
-                        title="Remove this company"
-                      >Remove</button>
+                  <div className="flex items-center gap-1 flex-shrink-0 ml-2 mt-0.5 relative">
+                    {/* Change Type */}
+                    <button
+                      onClick={() => setShowChangeType(v => !v)}
+                      className="text-[10px] text-slate-400 hover:text-blue-600 transition-colors px-1.5 py-0.5 rounded hover:bg-blue-50 border border-transparent hover:border-blue-100 whitespace-nowrap"
+                      title="Change company type"
+                    >Change Type</button>
+                    {showChangeType && (
+                      <div className="absolute right-6 top-5 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]">
+                        {[
+                          { value: "startup",          label: "Startup" },
+                          { value: "lp",               label: "LP" },
+                          { value: "fund",             label: "Fund / VC" },
+                          { value: "ecosystem_partner",label: "Ecosystem Partner" },
+                          { value: "corporate",        label: "Corporate" },
+                          { value: "government",       label: "Gov / Academic" },
+                          { value: "other",            label: "Other" },
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            onClick={() => handleChangeType(opt.value)}
+                            className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                          >{opt.label}</button>
+                        ))}
+                      </div>
                     )}
                     <button
-                      onClick={() => { setSelectedId(null); setConfirmRemoveFund(false); }}
+                      onClick={() => { setSelectedId(null); setShowChangeType(false); }}
                       className="text-slate-400 hover:text-slate-600 transition-colors"
                     >
                       <X size={16} />

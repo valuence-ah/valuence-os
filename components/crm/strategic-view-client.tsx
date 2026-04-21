@@ -311,6 +311,8 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [panelTab, setPanelTab] = useState<"overview" | "opportunities" | "intelligence">("overview");
   // Remove company confirm
   const [confirmRemoveCompanyId, setConfirmRemoveCompanyId] = useState<string | null>(null);
+  // Change type
+  const [showChangeType, setShowChangeType] = useState(false);
 
   // localStorage ext map
   const [extMap, setExtMap] = useState<Record<string, StrategicExt>>({});
@@ -529,6 +531,16 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     return healthToSignal(getHealth(co));
   }
 
+  // Change company type
+  async function handleChangeType(newType: string) {
+    if (!selectedId) return;
+    setCompanies(prev => prev.map(c =>
+      c.id === selectedId ? { ...c, type: newType as Company["type"], types: [newType] } : c
+    ));
+    setShowChangeType(false);
+    await supabase.from("companies").update({ type: newType, types: [newType] }).eq("id", selectedId);
+  }
+
   // Save company field to Supabase (optimistic update)
   async function saveCompanyField(id: string, patch: Partial<Company>) {
     const prev = companies.find(c => c.id === id);
@@ -591,6 +603,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     setShowOppForm(false);
     setShowIntelForm(false);
     setShowTaskForm(false);
+    setShowChangeType(false);
     loadDetail(id);
   }
 
@@ -1119,9 +1132,35 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                   </div>
                 </div>
               </div>
-              <button onClick={() => setSelectedId(null)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 flex-shrink-0">
-                <X size={14} />
-              </button>
+              <div className="flex items-center gap-1 flex-shrink-0 relative">
+                <button
+                  onClick={() => setShowChangeType(v => !v)}
+                  className="text-[10px] text-slate-400 hover:text-blue-600 transition-colors px-1.5 py-0.5 rounded hover:bg-blue-50 border border-transparent hover:border-blue-100 whitespace-nowrap"
+                  title="Change company type"
+                >Change Type</button>
+                {showChangeType && (
+                  <div className="absolute right-7 top-5 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]">
+                    {[
+                      { value: "startup",           label: "Startup" },
+                      { value: "lp",                label: "LP" },
+                      { value: "fund",              label: "Fund / VC" },
+                      { value: "ecosystem_partner", label: "Ecosystem Partner" },
+                      { value: "corporate",         label: "Corporate" },
+                      { value: "government",        label: "Gov / Academic" },
+                      { value: "other",             label: "Other" },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => handleChangeType(opt.value)}
+                        className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                      >{opt.label}</button>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => { setSelectedId(null); setShowChangeType(false); }} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400">
+                  <X size={14} />
+                </button>
+              </div>
             </div>
 
             {/* Tabs */}
