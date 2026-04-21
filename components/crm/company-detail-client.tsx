@@ -1407,6 +1407,17 @@ export function CompanyDetailClient({
   return (
     <div className="flex-1 overflow-auto p-6 space-y-4">
 
+      {/* ── Back button ── */}
+      <button
+        onClick={() => router.push("/crm/companies")}
+        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-700 transition-colors mb-1 group"
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="group-hover:-translate-x-0.5 transition-transform">
+          <path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        Back to Companies
+      </button>
+
       {/* ── Header card ── */}
       <div className="card p-5">
         <div className="flex items-start gap-4">

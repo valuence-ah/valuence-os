@@ -12,7 +12,7 @@ import type { Company, CompanyType } from "@/lib/types";
 import { cn, formatCurrency, formatDate, truncate } from "@/lib/utils";
 import {
   Plus, Search, ExternalLink, ChevronUp, ChevronDown,
-  ArrowUpDown, X, Settings2, RotateCcw, Check, Trash2,
+  ArrowUpDown, X, Settings2, RotateCcw, Check, Trash2, PencilLine,
 } from "lucide-react";
 
 export type CrmView = "pipeline" | "lps" | "funds" | "strategic" | "other" | "all";
@@ -98,7 +98,12 @@ function ContactAvatars({ contacts }: { contacts: { first_name: string | null; l
 
 // ── Description Cell ──────────────────────────────────────────────────────────
 function DescriptionCell({ text }: { text: string | null }) {
-  if (!text) return <span className="text-slate-300 text-xs">—</span>;
+  if (!text) return (
+    <span className="flex items-center gap-1 text-slate-300 hover:text-blue-400 transition-colors cursor-pointer" title="Click row to add description">
+      <PencilLine size={11} />
+      <span className="text-xs">Add description</span>
+    </span>
+  );
   return (
     <p className="text-xs text-slate-500 leading-snug line-clamp-2 w-full">{text}</p>
   );
@@ -762,10 +767,10 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
   // Company name column width
   const nameColW = colWidths["__name__"] ?? 240;
 
-  // Total table width (sum of all column widths + 32px action column)
+  // Total table width (sum of all column widths + 144px action column)
   const totalTableWidth = nameColW
     + visibleCols.reduce((s, k) => s + (colWidths[k] ?? ALL_COLUMN_DEFS[k]?.defaultWidth ?? 120), 0)
-    + 32;
+    + 144;
 
   // ── Form helpers ───────────────────────────────────────────────────────────
   function setField(k: keyof Company, v: unknown) { setForm(p => ({ ...p, [k]: v })); }
@@ -1021,7 +1026,7 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
                     </th>
                   );
                 })}
-                <th className="w-24 min-w-24" />
+                <th className="w-36 min-w-36" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
