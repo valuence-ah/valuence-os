@@ -25,7 +25,7 @@ const BOARD_REP_OPTIONS = [
 
 // ── Fixed grid column definition ─────────────────────────────────────────────
 // Type | Round | Close Date | Amount | Round Size | F1 | F2 | F3 | Actions
-const GRID_COLS = "100px 90px 108px 108px 108px 108px 90px 108px 110px";
+const GRID_COLS = "1.1fr 1fr 1.1fr 1.2fr 1.1fr 1.1fr 1fr 1.1fr 100px";
 
 function fmtMoney(v: number | null | undefined): string {
   if (v === null || v === undefined) return "—";
