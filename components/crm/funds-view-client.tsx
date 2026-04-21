@@ -15,12 +15,14 @@ import {
   Loader2, Link2, Star, User, Pencil, RefreshCw, Calendar, FileText, Phone, Mail, Paperclip,
 } from "lucide-react";
 
-// ── Logo component — tries logo.dev from website domain, falls back to initials ─
-function FundLogoImg({ name, website, size = "sm" }: { name: string; website?: string | null; size?: "sm" | "md" }) {
+// ── Logo component — tries stored logo_url first, then logo.dev, then initials ──
+function FundLogoImg({ name, website, logoUrl, size = "sm" }: { name: string; website?: string | null; logoUrl?: string | null; size?: "sm" | "md" }) {
   const [err, setErr] = useState(false);
-  const sz = size === "sm" ? "w-7 h-7 text-[9px]" : "w-9 h-9 text-xs";
+  const sz = size === "sm" ? "w-7 h-7 text-[9px]" : "w-10 h-10 text-xs";
   const domain = website ? website.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] : null;
-  const src = domain ? `https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128` : null;
+  const autoSrc = domain ? `https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128` : null;
+  // Prefer explicitly stored logo, fall back to logo.dev auto-detect
+  const src = logoUrl || autoSrc;
   const initials = name.split(/\s+/).map(w => w[0] ?? "").join("").slice(0, 2).toUpperCase();
   if (src && !err) {
     return (
@@ -73,6 +75,7 @@ interface FundData {
   strategic: boolean;
   sector: string;
   website: string;
+  logo_url: string | null;
   investorType: string;
 }
 
@@ -132,6 +135,7 @@ function companyToFundData(c: Company): FundData {
     strategic: false,
     sector: (c.sectors?.[0] as string | undefined) ?? "",
     website: c.website ?? "",
+    logo_url: c.logo_url ?? null,
     investorType: (c as unknown as Record<string, string>).investor_type ?? "",
   };
 }
@@ -350,10 +354,12 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const supabase = createClient();
   const router = useRouter();
 
+  const [companies, setCompanies]        = useState<Company[]>(initialCompanies);
   const [search, setSearch]             = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
   const [investorTypeMap, setInvestorTypeMap] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId]     = useState<string | null>(null);
+  const [confirmRemoveFund, setConfirmRemoveFund] = useState(false);
 
   // Panel animation
   const [visible, setVisible] = useState(false);
@@ -700,12 +706,12 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
   // Map DB companies → FundData, applying any user overrides from localStorage
   const fundList = useMemo<FundData[]>(
-    () => initialCompanies.map(c => ({
+    () => companies.map(c => ({
       ...companyToFundData(c),
       ...(fundExtMap[c.id] ?? {}),
       ...(investorTypeMap[c.id] !== undefined ? { investorType: investorTypeMap[c.id] } : {}),
     })),
-    [initialCompanies, fundExtMap, investorTypeMap]
+    [companies, fundExtMap, investorTypeMap]
   );
 
   // Ref so the selectedId useEffect always reads the latest fundList (avoids stale closure)
@@ -790,6 +796,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
       setEditingFundField(null);
       setSelectedContact(null);
       setShowAddOverlap(false);
+      setConfirmRemoveFund(false);
 
       // Pre-load cached intelligence so it shows immediately when tab opens
       if (!fundIntelMap[selectedId]) {
@@ -929,6 +936,14 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const selected = baseSelected
     ? { ...baseSelected, ...(fundOverrides[selectedId!] ?? {}) }
     : null;
+
+  async function handleDeleteFund() {
+    if (!selectedId) return;
+    await supabase.from("companies").delete().eq("id", selectedId);
+    setCompanies(prev => prev.filter(c => c.id !== selectedId));
+    setSelectedId(null);
+    setConfirmRemoveFund(false);
+  }
 
   function setFundFieldOverride(field: keyof FundData, value: string) {
     if (!selectedId) return;
@@ -1502,25 +1517,47 @@ export function FundsViewClient({ initialCompanies }: Props) {
               <div className="px-4 pt-4 pb-3 border-b border-slate-100 flex-shrink-0">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className={cn(
-                        "w-10 h-10 rounded-lg bg-gradient-to-br flex items-center justify-center flex-shrink-0",
-                        hashColor(selected.co)
-                      )}
-                    >
-                      <span className="text-white font-bold text-xs">{selected.initials}</span>
-                    </div>
+                    <FundLogoImg
+                      name={selected.co}
+                      website={selected.website}
+                      logoUrl={selected.logo_url}
+                      size="md"
+                    />
                     <div className="min-w-0">
                       <p className="text-base font-semibold text-slate-800 truncate">{selected.co}</p>
-                      <p className="text-xs text-slate-500">{INVESTOR_TYPE_LABELS[selected.type] ?? selected.type} · {selected.loc}</p>
+                      <p className="text-xs text-slate-500">
+                        {INVESTOR_TYPE_LABELS[selected.type] ?? selected.type}
+                        {selected.loc ? ` · ${selected.loc}` : ""}
+                      </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setSelectedId(null)}
-                    className="text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0 ml-2 mt-0.5"
-                  >
-                    <X size={16} />
-                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0 ml-2 mt-0.5">
+                    {/* Remove company */}
+                    {confirmRemoveFund ? (
+                      <span className="flex items-center gap-1.5">
+                        <button
+                          onClick={handleDeleteFund}
+                          className="text-[10px] text-red-600 font-semibold hover:underline whitespace-nowrap"
+                        >Yes, remove</button>
+                        <button
+                          onClick={() => setConfirmRemoveFund(false)}
+                          className="text-[10px] text-slate-400 hover:underline"
+                        >Cancel</button>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmRemoveFund(true)}
+                        className="text-[10px] text-slate-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded hover:bg-red-50 border border-transparent hover:border-red-100"
+                        title="Remove this company"
+                      >Remove</button>
+                    )}
+                    <button
+                      onClick={() => { setSelectedId(null); setConfirmRemoveFund(false); }}
+                      className="text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Badges */}
