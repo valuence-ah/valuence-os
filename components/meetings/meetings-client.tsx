@@ -154,6 +154,18 @@ const DEFAULT_WIDTHS: ColWidths = {
   actions: 0,
 };
 
+// ── Meeting type dropdown options (alphabetical) ──────────────────────────────
+
+const MEETING_TYPE_OPTIONS = [
+  { value: "due_diligence",        label: "Due Diligence" },
+  { value: "ecosystem",            label: "Ecosystem" },
+  { value: "fundraising",          label: "Fundraising" },
+  { value: "other",                label: "Other" },
+  { value: "portfolio_management", label: "Portfolio Management" },
+  { value: "relationship_management", label: "Relationship Management" },
+  { value: "sourcing",             label: "Sourcing" },
+] as const;
+
 interface MeetingTableRowProps {
   meeting: MeetingRow;
   selected: boolean;
@@ -163,10 +175,11 @@ interface MeetingTableRowProps {
   onOpenPanel: (m: MeetingRow) => void;
   onArchive: (id: string) => void;
   onReassign: (id: string) => void;
+  onTypeChange: (id: string, newType: string) => void;
 }
 
 function MeetingTableRow({
-  meeting, selected, colWidths, onToggle, onResolve, onOpenPanel, onArchive, onReassign,
+  meeting, selected, colWidths, onToggle, onResolve, onOpenPanel, onArchive, onReassign, onTypeChange,
 }: MeetingTableRowProps) {
   const cfg = getResConfig(meeting.resolution_status);
   const needsAction = meeting.resolution_status === "unresolved" || meeting.resolution_status === "partial";
@@ -240,7 +253,17 @@ function MeetingTableRow({
 
       {/* Meeting type */}
       <div className="flex-shrink-0 pl-3 pr-6" style={{ width: colWidths.type }}>
-        <MeetingTypeBadge type={meeting.meeting_type} />
+        <select
+          value={meeting.meeting_type ?? ""}
+          onChange={e => { e.stopPropagation(); onTypeChange(meeting.id, e.target.value); }}
+          onClick={e => e.stopPropagation()}
+          className="w-full text-[10px] border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-teal/30 focus:border-brand-teal cursor-pointer hover:border-slate-300 transition-colors"
+        >
+          <option value="">— type —</option>
+          {MEETING_TYPE_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
       </div>
 
       {/* Date + duration */}
@@ -646,6 +669,17 @@ export function MeetingsClient({
     setPanelMeeting(prev => prev && prev.id === patch.id ? { ...prev, ...patch } : prev);
   }
 
+  const handleTypeChange = useCallback(async (meetingId: string, newType: string) => {
+    const res = await fetch(`/api/meetings/${meetingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ meeting_type: newType }),
+    });
+    if (!res.ok) { setStatusToast("Failed to update meeting type"); return; }
+    setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, meeting_type: newType } : m));
+    setPanelMeeting(prev => prev?.id === meetingId ? { ...prev, meeting_type: newType } : prev);
+  }, []);
+
   const handleReassign = useCallback(async (meetingId: string, company: CompanyStub) => {
     const res = await fetch(`/api/meetings/${meetingId}`, {
       method: "PATCH",
@@ -877,8 +911,8 @@ export function MeetingsClient({
       {/* ── Table header ────────────────────────────────────────────────────── */}
       <div className="bg-slate-50 border-b border-slate-200 flex-shrink-0 select-none" style={{ userSelect: isDragging ? "none" : undefined }}>
         <div className="flex items-center min-h-[34px]">
-          {/* Left strip placeholder */}
-          <div className="w-[3px] ml-0 mr-5 flex-shrink-0" />
+          {/* Left strip placeholder — matches row's absolute strip (0px flow) + pl-5 (20px) */}
+          <div className="w-0 ml-0 mr-5 flex-shrink-0" />
 
           {/* Select all */}
           <div className="pr-3 flex-shrink-0">
@@ -902,7 +936,7 @@ export function MeetingsClient({
               {/* Content with breathing room on both sides */}
               <div className="pl-3 pr-6 flex items-center min-w-0 flex-1">
                 <ColHeader
-                  label={col === "attendees" ? "People" : col.charAt(0).toUpperCase() + col.slice(1)}
+                  label={col === "attendees" ? "Participants" : col.charAt(0).toUpperCase() + col.slice(1)}
                   sortKey={col === "attendees" ? "subject" : col as SortKey}
                   currentSort={sortKey}
                   currentDir={sortDir}
@@ -945,6 +979,7 @@ export function MeetingsClient({
               onOpenPanel={setPanelMeeting}
               onArchive={handleArchive}
               onReassign={setReassignId}
+              onTypeChange={handleTypeChange}
             />
           ))
         )}

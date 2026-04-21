@@ -2308,10 +2308,10 @@ export function PipelineClient({ initialCompanies }: Props) {
                           <div className={cn("w-8 h-8 rounded-full border flex items-center justify-center flex-shrink-0 bg-white z-10", kindColor[ev.kind] ?? "bg-slate-50 border-slate-200")}>
                             {kindIcon[ev.kind] ?? <FileText size={13} className="text-slate-400" />}
                           </div>
-                          {/* Card */}
+                          {/* Card — fixed height to match Contact tiles */}
                           <div
                             className={cn(
-                              "flex-1 border rounded-xl px-4 py-3 min-w-0 cursor-pointer transition-colors hover:ring-1 hover:ring-slate-300",
+                              "flex-1 border rounded-xl px-4 py-3 min-w-0 cursor-pointer transition-colors hover:ring-1 hover:ring-slate-300 min-h-[62px] overflow-hidden",
                               kindColor[ev.kind] ?? "bg-slate-50 border-slate-200",
                               ev.kind === "meeting" && "hover:bg-indigo-50 hover:border-indigo-200"
                             )}
@@ -2544,27 +2544,32 @@ export function PipelineClient({ initialCompanies }: Props) {
                           try {
                             const { generateMeetingPDF } = await import("@/lib/generate-meeting-pdf");
                             const blob = await generateMeetingPDF({ ...m, company: selected as unknown as Company | undefined });
-                            const reader = new FileReader();
-                            reader.onload = async () => {
-                              const base64 = (reader.result as string).split(",")[1];
-                              const res = await fetch(`/api/meetings/${m.id}/export-pdf`, {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ company_id: selected.id, pdf_base64: base64 }),
-                              });
-                              if (res.ok) {
-                                setExportSuccess(m.id);
-                                // Refresh company documents list
-                                const { data } = await supabase
-                                  .from("company_documents" as "documents")
-                                  .select("id, meeting_id, file_name, storage_path, uploaded_at, fireflies_url")
-                                  .eq("company_id", selected.id)
-                                  .eq("document_type", "meeting_transcript")
-                                  .order("uploaded_at", { ascending: false });
-                                setCompanyDocuments((data ?? []) as unknown as typeof companyDocuments);
-                              }
-                            };
-                            reader.readAsDataURL(blob);
+                            // Convert blob to base64 using a Promise wrapper so we can await it
+                            const base64 = await new Promise<string>((resolve, reject) => {
+                              const reader = new FileReader();
+                              reader.onload = () => resolve((reader.result as string).split(",")[1]);
+                              reader.onerror = reject;
+                              reader.readAsDataURL(blob);
+                            });
+                            const res = await fetch(`/api/meetings/${m.id}/export-pdf`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ company_id: selected.id, pdf_base64: base64 }),
+                            });
+                            if (res.ok) {
+                              setExportSuccess(m.id);
+                              // Refresh company documents list
+                              const { data } = await supabase
+                                .from("company_documents" as "documents")
+                                .select("id, meeting_id, file_name, storage_path, uploaded_at, fireflies_url")
+                                .eq("company_id", selected.id)
+                                .eq("document_type", "meeting_transcript")
+                                .order("uploaded_at", { ascending: false });
+                              setCompanyDocuments((data ?? []) as unknown as typeof companyDocuments);
+                            } else {
+                              const errData = await res.json().catch(() => ({})) as { error?: string };
+                              console.error("PDF export API error:", errData);
+                            }
                           } catch (err) {
                             console.error("PDF export failed:", err);
                           } finally {
