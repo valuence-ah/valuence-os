@@ -416,17 +416,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     };
   }
 
-  // Re-fetch on mount
-  useEffect(() => {
-    supabase
-      .from("companies")
-      .select("*")
-      .contains("types", ["strategic partner"])
-      .order("name", { ascending: true })
-      .limit(10000)
-      .then(({ data }) => { if (data) setCompanies(data as Company[]); });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // initialCompanies is pre-filtered server-side (force-dynamic page) — no client refetch needed.
 
   // Load localStorage
   useEffect(() => {
