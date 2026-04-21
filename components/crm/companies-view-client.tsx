@@ -491,7 +491,7 @@ const ALL_COLUMN_DEFS: Record<ColumnKey, ColumnDef> = {
   },
   description: {
     key: "description", label: "Description", group: "core", defaultWidth: 400,
-    render: c => <DescriptionCell text={c.description} />,
+    render: c => <DescriptionCell company={c} onUpdate={() => {}} />,
   },
   tags: {
     key: "tags", label: "Tags", group: "extra", defaultWidth: 150,
