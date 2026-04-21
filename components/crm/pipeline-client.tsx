@@ -2144,7 +2144,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                       const { data } = await supabase.from("interactions").select("type, date").contains("contact_ids", [c.id]).order("date", { ascending: false });
                       setContactInteractions(data ?? []);
                     }}
-                    className="w-full flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-lg hover:bg-blue-50 transition-colors text-left"
+                    className="w-full flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-lg hover:bg-blue-50 transition-colors text-left h-[60px] overflow-hidden"
                   >
                     <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
                       <User size={12} className="text-violet-600" />
@@ -2311,7 +2311,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                           {/* Card — fixed height to match Contact tiles */}
                           <div
                             className={cn(
-                              "flex-1 border rounded-xl px-4 py-3 min-w-0 cursor-pointer transition-colors hover:ring-1 hover:ring-slate-300 min-h-[62px] overflow-hidden",
+                              "flex-1 border rounded-xl px-3 py-2 min-w-0 cursor-pointer transition-colors hover:ring-1 hover:ring-slate-300 h-[60px] overflow-hidden",
                               kindColor[ev.kind] ?? "bg-slate-50 border-slate-200",
                               ev.kind === "meeting" && "hover:bg-indigo-50 hover:border-indigo-200"
                             )}
@@ -2544,7 +2544,24 @@ export function PipelineClient({ initialCompanies }: Props) {
                           try {
                             const { generateMeetingPDF } = await import("@/lib/generate-meeting-pdf");
                             const blob = await generateMeetingPDF({ ...m, company: selected as unknown as Company | undefined });
-                            // Convert blob to base64 using a Promise wrapper so we can await it
+
+                            // ── Trigger immediate browser download ──────────
+                            const downloadUrl = URL.createObjectURL(blob);
+                            const safeTitle = (m.subject ?? "Meeting")
+                              .replace(/[^a-zA-Z0-9\s-]/g, "").trim()
+                              .replace(/\s+/g, "-").slice(0, 60) || "Meeting";
+                            const dateStr = m.date
+                              ? new Date(m.date).toISOString().slice(0, 10)
+                              : new Date().toISOString().slice(0, 10);
+                            const anchor = document.createElement("a");
+                            anchor.href = downloadUrl;
+                            anchor.download = `${safeTitle}-${dateStr}.pdf`;
+                            document.body.appendChild(anchor);
+                            anchor.click();
+                            document.body.removeChild(anchor);
+                            URL.revokeObjectURL(downloadUrl);
+
+                            // ── Also upload to Supabase storage ─────────────
                             const base64 = await new Promise<string>((resolve, reject) => {
                               const reader = new FileReader();
                               reader.onload = () => resolve((reader.result as string).split(",")[1]);
