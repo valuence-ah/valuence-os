@@ -494,7 +494,26 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [interactions, setInteractions]   = useState<Interaction[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
-  // initialCompanies is pre-filtered server-side (force-dynamic page) — no client refetch needed.
+  // Re-fetch on mount using correct client-side type filtering (bypasses Next.js Router Cache).
+  // Must mirror the same LP_TYPES Set used in app/(dashboard)/crm/lps/page.tsx.
+  useEffect(() => {
+    const LP_TYPES = new Set(["lp", "limited partner", "limited_partner"]);
+    supabase
+      .from("companies")
+      .select("*")
+      .order("name", { ascending: true })
+      .limit(10000)
+      .then(({ data }) => {
+        if (!data) return;
+        const lps = (data as Company[]).filter(c => {
+          const t = (c.type ?? "").toLowerCase().trim();
+          if (LP_TYPES.has(t)) return true;
+          return (c.types ?? []).some((v: string) => LP_TYPES.has((v ?? "").toLowerCase().trim()));
+        });
+        setCompanies(lps);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Panel edit state
   const [editStage, setEditStage]     = useState("");

@@ -17,6 +17,17 @@ import {
 import { PdfCover } from "@/components/ui/pdf-cover";
 import { formatMeetingSummary } from "@/lib/format-meeting-summary";
 
+// ── Contact title options ─────────────────────────────────────────────────────
+const CONTACT_TITLE_OPTIONS = [
+  "Founder / CEO", "Co-Founder / CTO", "Co-Founder / COO", "Co-Founder / CFO",
+  "CEO", "CTO", "COO", "CFO", "President",
+  "General Partner", "Managing Partner", "Partner", "Venture Partner",
+  "Principal", "Associate", "Analyst",
+  "Managing Director", "Director", "VP", "Head of Investments",
+  "Investment Manager", "Portfolio Manager", "Investor Relations",
+  "Head of Business Development", "Advisor", "Other",
+];
+
 // ── Strategic partnerships (portco ↔ strategic) ───────────────────────────────
 const PARTNER_STATUS_COLORS: Record<string, string> = {
   "Active pilot":  "bg-emerald-100 text-emerald-700",
@@ -130,13 +141,14 @@ const SUB_SECTOR_OPTIONS = [
   "Food / Ag", "Organomics", "Regenerative / Longevity", "SynBio", "Water / Waste",
 ];
 
-// Values match Excel "Type" column
 const TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: "startup",          label: "Startup" },
-  { value: "limited partner",  label: "Limited Partner" },
-  { value: "investor",         label: "Investor" },
-  { value: "strategic partner",label: "Strategic Partner" },
-  { value: "other",            label: "Other" },
+  { value: "startup",           label: "Startup" },
+  { value: "fund",              label: "Fund / VC" },
+  { value: "lp",                label: "LP" },
+  { value: "corporate",         label: "Corporate" },
+  { value: "ecosystem_partner", label: "Ecosystem" },
+  { value: "government",        label: "Gov / Academic" },
+  { value: "other",             label: "Other" },
 ];
 
 // ── Logo / Avatar ─────────────────────────────────────────────────────────────
@@ -537,6 +549,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [driveChanging, setDriveChanging]     = useState(false);
   const [driveLinking, setDriveLinking]       = useState(false);
   const [driveSyncing, setDriveSyncing]       = useState(false);
+  const [driveSyncStep, setDriveSyncStep]     = useState<"idle" | "syncing" | "extracting">("idle");
   type DriveSyncResult = { saved?: number; synced?: number; skipped: number; total: number; not_ingestible?: number; files_found?: number; files: { name: string; status: string; chars?: number }[]; error?: string; share_with?: string; setup_required?: boolean };
   const [driveSyncResult, setDriveSyncResult] = useState<DriveSyncResult | null>(null);
   const [driveReextracting, setDriveReextracting] = useState(false);
@@ -726,6 +739,11 @@ export function PipelineClient({ initialCompanies }: Props) {
 
   useEffect(() => {
     if (selectedId) {
+      // ── Clear previous company's data immediately to prevent bleed-through ──
+      setContacts([]);
+      setDocuments([]);
+      setMemo(null);
+      setInteractions([]);
       setEmailEvents([]);
       setDriveInput("");
       setDriveChanging(false);
@@ -1579,223 +1597,225 @@ export function PipelineClient({ initialCompanies }: Props) {
           </div>
         </div>
       ) : selected ? (
-        <div ref={rightPanelRef} className={pipelineView === "board" ? "w-[520px] flex-shrink-0 border-l border-slate-200 overflow-y-auto bg-white" : "flex-1 overflow-y-auto bg-white"}>
+        <div ref={rightPanelRef} className={pipelineView === "board" ? "w-[680px] flex-shrink-0 border-l border-slate-200 overflow-y-auto bg-white" : "flex-1 overflow-y-auto bg-white"}>
 
           {/* ── Company Header ── */}
-          <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between">
+          <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-8 py-3 flex flex-col gap-1.5">
+            {/* Row 1: logo + name */}
             <div className="flex items-center gap-4">
               <CompanyLogo company={selected} />
-              <div>
-                <h1 className="text-base font-bold text-slate-900">{selected.name}</h1>
-                <div className="flex items-center gap-1.5 mt-0.5">
-
-                  {/* ── Priority badge ── */}
-                  <div className="relative inline-flex items-center" onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}>
-                    <button
-                      onClick={() => { setShowPriorityPicker(p => !p); setShowStagePicker(false); setShowStatusPicker(false); }}
-                      className={cn(
-                        "inline-flex items-center h-5 px-2.5 rounded-full text-xs font-medium leading-none transition-colors",
-                        selected.priority ? PRIORITY_COLORS[selected.priority] : "bg-slate-100 text-slate-400"
-                      )}
-                    >
-                      {selected.priority ? `${selected.priority} Priority` : "Set Priority"}
-                    </button>
-                    {showPriorityPicker && (
-                      <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[140px]">
-                        {(["High", "Medium", "Low"] as const).map(p => (
-                          <button
-                            key={p}
-                            onClick={async () => {
-                              await supabase.from("companies").update({ priority: p }).eq("id", selected.id);
-                              setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, priority: p } : c));
-                              setShowPriorityPicker(false);
-                            }}
-                            className={cn(
-                              "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors flex items-center gap-2",
-                              selected.priority === p ? "font-medium" : "text-slate-700"
-                            )}
-                          >
-                            <span className={cn("w-2 h-2 rounded-full", p === "High" ? "bg-emerald-400" : p === "Medium" ? "bg-orange-400" : "bg-slate-300")} />
-                            {p}
-                          </button>
-                        ))}
-                        {selected.priority && (
-                          <button
-                            onClick={async () => {
-                              await supabase.from("companies").update({ priority: null }).eq("id", selected.id);
-                              setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, priority: null } : c));
-                              setShowPriorityPicker(false);
-                            }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-50 border-t border-slate-100 mt-1 transition-colors"
-                          >
-                            Clear
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ── Stage badge ── */}
-                  <div className="relative inline-flex items-center" onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}>
-                    <button
-                      onClick={() => { setShowStagePicker(p => !p); setShowPriorityPicker(false); setShowStatusPicker(false); }}
-                      className="inline-flex items-center h-5 px-2.5 rounded-full text-xs font-medium leading-none bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors capitalize"
-                    >
-                      {selected.stage ? selected.stage.replace(/_/g, " ") : "No Stage"}
-                    </button>
-                    {showStagePicker && (
-                      <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[150px]">
-                        {STAGE_OPTIONS.map(s => (
-                          <button
-                            key={s}
-                            onClick={async () => {
-                              await supabase.from("companies").update({ stage: s }).eq("id", selected.id);
-                              setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, stage: s } : c));
-                              setShowStagePicker(false);
-                            }}
-                            className={cn(
-                              "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 capitalize transition-colors",
-                              selected.stage === s ? "text-blue-600 font-medium" : "text-slate-700"
-                            )}
-                          >
-                            {s.replace(/_/g, " ")}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ── Status badge ── */}
-                  <div className="relative inline-flex items-center" onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}>
-                    <button
-                      onClick={() => { setShowStatusPicker(p => !p); setShowPriorityPicker(false); setShowStagePicker(false); }}
-                      className={cn("inline-flex items-center h-5 px-2.5 rounded-full text-xs font-medium leading-none transition-colors hover:opacity-80",
-                        selected.deal_status ? STATUS_COLORS[selected.deal_status] : "bg-slate-100 text-slate-500"
-                      )}
-                    >
-                      {selected.deal_status ? STATUS_LABELS[selected.deal_status] : "No Status"}
-                    </button>
-                    {showStatusPicker && (
-                      <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[150px]">
-                        {Object.entries(STATUS_LABELS).map(([val, label]) => (
-                          <button
-                            key={val}
-                            onClick={async () => {
-                              await supabase.from("companies").update({ deal_status: val }).eq("id", selected.id);
-                              setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, deal_status: val as DealStatus } : c));
-                              setShowStatusPicker(false);
-                            }}
-                            className={cn(
-                              "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors",
-                              selected.deal_status === val ? "text-blue-600 font-medium" : "text-slate-700"
-                            )}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-              </div>
+              <h1 className="text-base font-bold text-slate-900">{selected.name}</h1>
             </div>
-            <div className="flex items-center gap-2">
-              {selected.website && (
-                <a
-                  href={selected.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-                >
-                  Go to Website <ExternalLink size={12} />
-                </a>
-              )}
+            {/* Row 2: badges left + action buttons right */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5">
 
-              {/* ── Logo button ── */}
-              <div className="relative">
-                <button
-                  onClick={() => { setShowLogoPicker(p => !p); setLogoMsg(null); setLogoUrlInput(""); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-                  title="Set company logo"
-                >
-                  <ImageIcon size={12} /> Logo
-                </button>
-                {showLogoPicker && (
-                  <div className="absolute right-0 top-9 z-30 w-72 bg-white border border-slate-200 rounded-xl shadow-lg p-4 space-y-3">
-                    <p className="text-xs font-semibold text-slate-700">Update Logo</p>
-                    <div className="flex gap-2">
-                      <input
-                        className="flex-1 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                        placeholder="Paste logo URL…"
-                        value={logoUrlInput}
-                        onChange={e => setLogoUrlInput(e.target.value)}
-                        onKeyDown={e => e.key === "Enter" && handleManualLogo()}
-                      />
+                {/* ── Priority badge ── */}
+                <div className="relative inline-flex items-center" onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}>
+                  <button
+                    onClick={() => { setShowPriorityPicker(p => !p); setShowStagePicker(false); setShowStatusPicker(false); }}
+                    className={cn(
+                      "inline-flex items-center h-5 px-2.5 rounded-full text-xs font-medium leading-none transition-colors",
+                      selected.priority ? PRIORITY_COLORS[selected.priority] : "bg-slate-100 text-slate-400"
+                    )}
+                  >
+                    {selected.priority ? `${selected.priority} Priority` : "Set Priority"}
+                  </button>
+                  {showPriorityPicker && (
+                    <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[140px]">
+                      {(["High", "Medium", "Low"] as const).map(p => (
+                        <button
+                          key={p}
+                          onClick={async () => {
+                            await supabase.from("companies").update({ priority: p }).eq("id", selected.id);
+                            setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, priority: p } : c));
+                            setShowPriorityPicker(false);
+                          }}
+                          className={cn(
+                            "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors flex items-center gap-2",
+                            selected.priority === p ? "font-medium" : "text-slate-700"
+                          )}
+                        >
+                          <span className={cn("w-2 h-2 rounded-full", p === "High" ? "bg-emerald-400" : p === "Medium" ? "bg-orange-400" : "bg-slate-300")} />
+                          {p}
+                        </button>
+                      ))}
+                      {selected.priority && (
+                        <button
+                          onClick={async () => {
+                            await supabase.from("companies").update({ priority: null }).eq("id", selected.id);
+                            setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, priority: null } : c));
+                            setShowPriorityPicker(false);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-50 border-t border-slate-100 mt-1 transition-colors"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Stage badge ── */}
+                <div className="relative inline-flex items-center" onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}>
+                  <button
+                    onClick={() => { setShowStagePicker(p => !p); setShowPriorityPicker(false); setShowStatusPicker(false); }}
+                    className="inline-flex items-center h-5 px-2.5 rounded-full text-xs font-medium leading-none bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors capitalize"
+                  >
+                    {selected.stage ? selected.stage.replace(/_/g, " ") : "No Stage"}
+                  </button>
+                  {showStagePicker && (
+                    <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[150px]">
+                      {STAGE_OPTIONS.map(s => (
+                        <button
+                          key={s}
+                          onClick={async () => {
+                            await supabase.from("companies").update({ stage: s }).eq("id", selected.id);
+                            setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, stage: s } : c));
+                            setShowStagePicker(false);
+                          }}
+                          className={cn(
+                            "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 capitalize transition-colors",
+                            selected.stage === s ? "text-blue-600 font-medium" : "text-slate-700"
+                          )}
+                        >
+                          {s.replace(/_/g, " ")}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Status badge ── */}
+                <div className="relative inline-flex items-center" onMouseDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}>
+                  <button
+                    onClick={() => { setShowStatusPicker(p => !p); setShowPriorityPicker(false); setShowStagePicker(false); }}
+                    className={cn("inline-flex items-center h-5 px-2.5 rounded-full text-xs font-medium leading-none transition-colors hover:opacity-80",
+                      selected.deal_status ? STATUS_COLORS[selected.deal_status] : "bg-slate-100 text-slate-500"
+                    )}
+                  >
+                    {selected.deal_status ? STATUS_LABELS[selected.deal_status] : "No Status"}
+                  </button>
+                  {showStatusPicker && (
+                    <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[150px]">
+                      {Object.entries(STATUS_LABELS).map(([val, label]) => (
+                        <button
+                          key={val}
+                          onClick={async () => {
+                            await supabase.from("companies").update({ deal_status: val }).eq("id", selected.id);
+                            setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, deal_status: val as DealStatus } : c));
+                            setShowStatusPicker(false);
+                          }}
+                          className={cn(
+                            "w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors",
+                            selected.deal_status === val ? "text-blue-600 font-medium" : "text-slate-700"
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {selected.website && (
+                  <a
+                    href={selected.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Go to Website <ExternalLink size={12} />
+                  </a>
+                )}
+
+                {/* ── Logo button ── */}
+                <div className="relative">
+                  <button
+                    onClick={() => { setShowLogoPicker(p => !p); setLogoMsg(null); setLogoUrlInput(""); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                    title="Set company logo"
+                  >
+                    <ImageIcon size={12} /> Logo
+                  </button>
+                  {showLogoPicker && (
+                    <div className="absolute right-0 top-9 z-30 w-72 bg-white border border-slate-200 rounded-xl shadow-lg p-4 space-y-3">
+                      <p className="text-xs font-semibold text-slate-700">Update Logo</p>
+                      <div className="flex gap-2">
+                        <input
+                          className="flex-1 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                          placeholder="Paste logo URL…"
+                          value={logoUrlInput}
+                          onChange={e => setLogoUrlInput(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && handleManualLogo()}
+                        />
+                        <button
+                          onClick={handleManualLogo}
+                          disabled={!logoUrlInput.trim()}
+                          className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-40"
+                        >
+                          Save
+                        </button>
+                      </div>
                       <button
-                        onClick={handleManualLogo}
-                        disabled={!logoUrlInput.trim()}
-                        className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-40"
+                        onClick={handleAutoFindLogo}
+                        disabled={logoFinding}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-100 disabled:opacity-50 transition-colors"
                       >
-                        Save
+                        {logoFinding ? <><Loader2 size={12} className="animate-spin" /> Finding…</> : <><Sparkles size={12} /> Auto-find logo</>}
+                      </button>
+                      {logoMsg && <p className="text-xs text-slate-500">{logoMsg}</p>}
+                      <button onClick={() => setShowLogoPicker(false)} className="text-xs text-slate-400 hover:text-slate-600 w-full text-center">Cancel</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Delete button ── */}
+                {!editing && (
+                  confirmDelete ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-red-500">Delete this company?</span>
+                      <button
+                        onClick={() => setConfirmDelete(false)}
+                        className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50"
+                      >No</button>
+                      <button
+                        onClick={handleDeleteCompany}
+                        disabled={deleting}
+                        className="px-2.5 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {deleting ? <><Loader2 size={11} className="animate-spin" /> Deleting…</> : "Yes, delete"}
                       </button>
                     </div>
+                  ) : (
                     <button
-                      onClick={handleAutoFindLogo}
-                      disabled={logoFinding}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-100 disabled:opacity-50 transition-colors"
+                      onClick={() => setConfirmDelete(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-red-200 rounded-lg text-red-400 hover:bg-red-50 hover:border-red-300 transition-colors"
                     >
-                      {logoFinding ? <><Loader2 size={12} className="animate-spin" /> Finding…</> : <><Sparkles size={12} /> Auto-find logo</>}
+                      <X size={12} /> Delete
                     </button>
-                    {logoMsg && <p className="text-xs text-slate-500">{logoMsg}</p>}
-                    <button onClick={() => setShowLogoPicker(false)} className="text-xs text-slate-400 hover:text-slate-600 w-full text-center">Cancel</button>
-                  </div>
+                  )
                 )}
-              </div>
 
-              {/* ── Delete button ── */}
-              {!editing && (
-                confirmDelete ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-red-500">Delete this company?</span>
-                    <button
-                      onClick={() => setConfirmDelete(false)}
-                      className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50"
-                    >No</button>
-                    <button
-                      onClick={handleDeleteCompany}
-                      disabled={deleting}
-                      className="px-2.5 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-1"
-                    >
-                      {deleting ? <><Loader2 size={11} className="animate-spin" /> Deleting…</> : "Yes, delete"}
+                {editing ? (
+                  <div className="flex items-center gap-2">
+                    {autoSaving && (
+                      <span className="flex items-center gap-1 text-xs text-slate-400">
+                        <Loader2 size={10} className="animate-spin" /> Saving…
+                      </span>
+                    )}
+                    <button onClick={cancelEdit} className="flex items-center gap-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50">
+                      <X size={12} /> Done
                     </button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setConfirmDelete(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-red-200 rounded-lg text-red-400 hover:bg-red-50 hover:border-red-300 transition-colors"
-                  >
-                    <X size={12} /> Delete
+                  <button onClick={startEdit} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                    <Pencil size={12} /> Edit
                   </button>
-                )
-              )}
-
-              {editing ? (
-                <div className="flex items-center gap-2">
-                  {autoSaving && (
-                    <span className="flex items-center gap-1 text-xs text-slate-400">
-                      <Loader2 size={10} className="animate-spin" /> Saving…
-                    </span>
-                  )}
-                  <button onClick={cancelEdit} className="flex items-center gap-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50">
-                    <X size={12} /> Done
-                  </button>
-                </div>
-              ) : (
-                <button onClick={startEdit} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
-                  <Pencil size={12} /> Edit
-                </button>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
@@ -2084,11 +2104,13 @@ export function PipelineClient({ initialCompanies }: Props) {
               </p>
             </section>
 
-            {/* ── Row A: Contacts (50%) | Interaction Timeline (50%) ── */}
-            <div className="grid grid-cols-2 gap-x-6">
+            {/* ── Row A: Contacts | Interaction Timeline ── */}
+            <div className={pipelineView === "board" ? "flex flex-col gap-y-8" : "grid grid-cols-2 gap-6"}>
 
+              {/* Section: Contacts */}
+              <section>
               {/* Header: Contacts */}
-              <div className="flex items-center justify-between pb-3">
+              <div className="h-9 flex items-center justify-between mb-3">
                 <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Contacts</h2>
                 <button
                   onClick={() => { setContactPanelMode("manage"); if (contacts.length > 0) { setContactPanel(contacts[0]); } else { setContactPanel({ id: "__manage__", first_name: "", last_name: "", email: null, phone: null, linkedin_url: null, title: null, company_id: selected?.id ?? null, type: "other", relationship_strength: null, is_primary_contact: false, last_contact_date: null, location_city: null, location_country: null, notes: null, tags: null, emails: null, status: "active", created_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as Contact); } setContactEditing(false); setConfirmRemove(false); setShowAddContactForm(false); }}
@@ -2098,31 +2120,21 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </button>
               </div>
 
-              {/* Header: Interaction Timeline */}
-              <div className="flex items-center justify-between pb-3">
-                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Interaction Timeline</h2>
-                <button
-                  onClick={() => setAddingNote(p => !p)}
-                  className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 flex items-center gap-1"
-                >
-                  <Plus size={11} /> Add Event
-                </button>
-              </div>
-
-              {/* Content: Contacts list */}
-              <div className="h-[200px] overflow-y-auto space-y-2 pr-1">
+              {/* Content: Contacts list — sorted by last contact date desc */}
+              <div className="h-[220px] overflow-y-auto space-y-2 pr-1 bg-slate-50 rounded-xl p-3">
                 {loadingDetail ? (
                   <div className="h-12 bg-slate-50 rounded-lg animate-pulse" />
                 ) : contacts.length === 0 ? (
                   <div className="text-xs text-slate-300 italic pt-2">No contacts linked yet</div>
-                ) : (contactOrder.length > 0
-                    ? [...contacts].sort((a, b) => {
-                        const ai = contactOrder.indexOf(a.id);
-                        const bi = contactOrder.indexOf(b.id);
-                        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-                      })
-                    : contacts
-                  ).map((c, idx, arr) => (
+                ) : [...contacts]
+                    .sort((a, b) => {
+                      // Primary sort: last_contact_date desc (null → bottom)
+                      if (!a.last_contact_date && !b.last_contact_date) return 0;
+                      if (!a.last_contact_date) return 1;
+                      if (!b.last_contact_date) return -1;
+                      return new Date(b.last_contact_date).getTime() - new Date(a.last_contact_date).getTime();
+                    })
+                    .map((c, idx, arr) => (
                   <div
                     key={c.id}
                     draggable
@@ -2150,22 +2162,19 @@ export function PipelineClient({ initialCompanies }: Props) {
                       <User size={12} className="text-violet-600" />
                     </div>
                     <div className="flex-1 min-w-0">
+                      {/* Row 1: Name */}
                       <div className="flex items-center gap-1 min-w-0">
                         <p className="text-xs font-semibold text-slate-800 truncate">{c.first_name} {c.last_name}</p>
                         {c.is_primary_contact && <span className="text-[10px] text-blue-600 bg-blue-50 px-1 rounded flex-shrink-0">★</span>}
                       </div>
-                      <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <p className="text-[11px] text-slate-400 truncate">{c.title ?? c.type ?? "—"}</p>
-                        {c.last_contact_date && (
-                          <span className="text-[10px] text-slate-400 flex-shrink-0">{formatDate(c.last_contact_date)}</span>
-                        )}
-                      </div>
-                      {(c.location_city || c.location_country) && (
-                        <p className="text-[10px] text-slate-400 flex items-center gap-0.5 mt-0.5">
-                          <MapPin size={9} className="flex-shrink-0" />
-                          {[c.location_city, c.location_country].filter(Boolean).join(", ")}
-                        </p>
-                      )}
+                      {/* Row 2: Title · Location · Last contact */}
+                      <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                        {[
+                          c.title ?? c.type ?? null,
+                          [c.location_city, c.location_country].filter(Boolean).join(", ") || null,
+                          c.last_contact_date ? formatDate(c.last_contact_date) : null,
+                        ].filter(Boolean).join(" · ")}
+                      </p>
                     </div>
                     <div className="flex gap-1.5 text-slate-400 flex-shrink-0" onClick={e => e.stopPropagation()}>
                       {c.email && <a href={`mailto:${c.email}`} className="hover:text-blue-600"><Mail size={12} /></a>}
@@ -2175,9 +2184,23 @@ export function PipelineClient({ initialCompanies }: Props) {
                   </div>
                 ))}
               </div>
+              </section>
+
+              {/* Section: Interaction Timeline */}
+              <section>
+              {/* Header: Interaction Timeline */}
+              <div className="h-9 flex items-center justify-between mb-3">
+                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Interaction Timeline</h2>
+                <button
+                  onClick={() => setAddingNote(p => !p)}
+                  className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 flex items-center gap-1"
+                >
+                  <Plus size={11} /> Add Event
+                </button>
+              </div>
 
               {/* Content: Timeline (event form + scroll area) */}
-              <div>
+              <div className="h-[220px] overflow-y-auto bg-slate-50 rounded-xl p-3">
               {/* Add event form */}
               {addingNote && (
                 <div ref={addEventFormRef} className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
@@ -2384,8 +2407,9 @@ export function PipelineClient({ initialCompanies }: Props) {
                 );
               })()}
               </div>{/* end timeline content */}
+              </section>
 
-            </div>{/* end 2-col contacts/timeline grid */}
+            </div>{/* end contacts/timeline sections */}
 
             {/* ── Meeting Summary Modal ── */}
             {selectedTimelineMeeting && (() => {
@@ -2614,11 +2638,13 @@ export function PipelineClient({ initialCompanies }: Props) {
               );
             })()}
 
-            {/* ── Row B: Strategic Partnerships (50%) | Portfolio Intelligence (50%) ── */}
-            <div className="grid grid-cols-2 gap-x-6">
+            {/* ── Row B: Strategic Partnerships | Portfolio Intelligence ── */}
+            <div className={pipelineView === "board" ? "flex flex-col gap-y-8" : "grid grid-cols-2 gap-6"}>
 
+              {/* Section: Strategic Partnerships */}
+              <section>
               {/* Header: Strategic Partnerships */}
-              <div className="flex items-center justify-between pb-3">
+              <div className="h-9 flex items-center justify-between mb-3">
                 <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Strategic Partnerships</h2>
                 <button onClick={() => setShowAddPartnership(v => !v)}
                   className="text-xs text-blue-600 hover:underline flex items-center gap-1">
@@ -2626,27 +2652,8 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </button>
               </div>
 
-              {/* Header: Company Intelligence */}
-              <div className="flex items-center justify-between pb-3">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Company Intelligence</h2>
-                  {intelCachedAt && !loadingIntelligence && (
-                    <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(intelCachedAt).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
-                  )}
-                </div>
-                <button
-                  onClick={fetchIntelligence}
-                  disabled={loadingIntelligence}
-                  className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
-                >
-                  {loadingIntelligence
-                    ? <><Loader2 size={10} className="animate-spin" /> {intelligenceStatus}</>
-                    : <><Sparkles size={10} /> Refresh</>}
-                </button>
-              </div>
-
               {/* Content: Strategic Partnerships */}
-              <div className="h-[200px] overflow-y-auto pr-1">
+              <div className="h-[220px] overflow-y-auto pr-1 bg-slate-50 rounded-xl p-3">
                 {showAddPartnership && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
                     <div className="flex gap-2">
@@ -2663,7 +2670,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                               <button key={c.id} onMouseDown={() => { setNewPartnerName(c.name); setPartnerSearch(c.name); setSelectedPartnerId(c.id); setShowPartnerDropdown(false); }}
                                 className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 flex items-center justify-between gap-2">
                                 <span className="font-medium text-slate-700">{c.name}</span>
-                                <span className="text-[10px] text-slate-400">{(c.types ?? []).includes("strategic partner") ? "Strategic" : (c.types ?? []).includes("limited partner") ? "LP" : "Investor"}</span>
+                                <span className="text-[10px] text-slate-400">{(c.types ?? []).includes("corporate") ? "Corporate" : (c.types ?? []).includes("lp") || (c.types ?? []).includes("limited partner") ? "LP" : "Fund / VC"}</span>
                               </button>
                             ))}
                             {partnerSearch && partnerCompanies.filter(c => c.name.toLowerCase().includes(partnerSearch.toLowerCase())).length === 0 && (
@@ -2747,9 +2754,31 @@ export function PipelineClient({ initialCompanies }: Props) {
                   ))}
                 </div>
               </div>{/* end strategic partnerships content */}
+              </section>
+
+              {/* Section: Company Intelligence */}
+              <section>
+              {/* Header: Company Intelligence */}
+              <div className="h-9 flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Company Intelligence</h2>
+                  {intelCachedAt && !loadingIntelligence && (
+                    <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(intelCachedAt).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
+                  )}
+                </div>
+                <button
+                  onClick={fetchIntelligence}
+                  disabled={loadingIntelligence}
+                  className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
+                >
+                  {loadingIntelligence
+                    ? <><Loader2 size={10} className="animate-spin" /> {intelligenceStatus}</>
+                    : <><Sparkles size={10} /> Refresh</>}
+                </button>
+              </div>
 
               {/* Content: Portfolio Intelligence */}
-              <div className="h-[200px] overflow-y-auto pr-1">
+              <div className="h-[220px] overflow-y-auto pr-1 bg-slate-50 rounded-xl p-3">
                 {loadingIntelligence ? (
                   <div className="space-y-2">
                     {[1,2,3].map(i => <div key={i} className="h-10 bg-slate-50 rounded-lg animate-pulse" />)}
@@ -2785,114 +2814,14 @@ export function PipelineClient({ initialCompanies }: Props) {
                   </div>
                 )}
               </div>{/* end portfolio intelligence content */}
+              </section>
 
-            </div>{/* end 2-col strategic/intelligence grid */}
-
-            {/* ── Meeting Transcripts ── */}
-            <section>
-              <details className="group">
-                <summary className="flex items-center justify-between cursor-pointer list-none pb-3">
-                  <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] flex items-center gap-1.5">
-                    Meeting Transcripts
-                    {companyDocuments.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full font-medium">
-                        {companyDocuments.length}
-                      </span>
-                    )}
-                  </h2>
-                  <ChevronRight size={13} className="text-slate-400 group-open:rotate-90 transition-transform" />
-                </summary>
-                <div className="space-y-1.5 pb-2">
-                  {companyDocuments.length === 0 ? (
-                    <p className="text-xs text-slate-300 italic">No meeting transcripts saved yet. Export a PDF from the interaction timeline.</p>
-                  ) : (
-                    companyDocuments.map(doc => (
-                      <div key={doc.id} className="flex items-center gap-2.5 px-3 py-2.5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white transition-colors">
-                        <FileText size={13} className="text-teal-500 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-slate-800 truncate">{doc.file_name}</p>
-                          <p className="text-[10px] text-slate-400">
-                            {new Date(doc.uploaded_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                          </p>
-                        </div>
-                        <a
-                          href={`/api/documents/${doc.id}/download`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Download PDF"
-                          className="text-slate-400 hover:text-teal-600 transition-colors p-1 flex-shrink-0"
-                        >
-                          <Download size={13} />
-                        </a>
-                        {doc.fireflies_url && (
-                          <a
-                            href={doc.fireflies_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="View in Fireflies"
-                            className="text-slate-400 hover:text-orange-500 transition-colors p-1 flex-shrink-0"
-                          >
-                            <ExternalLink size={13} />
-                          </a>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </details>
-            </section>
+            </div>{/* end strategic/intelligence sections */}
 
             {/* ── Documents — Pitch Decks & Transcripts (50/50) ── */}
             <section>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Documents</h2>
-                {/* Compact Data Room row */}
-                <div className="flex items-center gap-3">
-                  {selected.drive_folder_url ? (
-                    <a href={selected.drive_folder_url} target="_blank" rel="noopener noreferrer"
-                      className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition-colors flex items-center gap-1 flex-shrink-0 px-2 py-0.5 rounded-md">
-                      <Link2 size={11} className="flex-shrink-0" /> Data Room Linked
-                    </a>
-                  ) : (
-                    <button
-                      onClick={() => setEditField("drive_folder_url")}
-                      className="text-xs text-slate-400 hover:text-blue-500 flex items-center gap-1 flex-shrink-0"
-                      title="Link a Google Drive folder"
-                    >
-                      <Link2 size={11} /> Link Data Room
-                    </button>
-                  )}
-                  {editField === "drive_folder_url" && (
-                    <div className="flex gap-1 items-center">
-                      <input
-                        autoFocus
-                        className="text-xs border border-blue-300 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-blue-400 w-52"
-                        defaultValue={selected.drive_folder_url ?? ""}
-                        placeholder="Paste Drive URL…"
-                        onKeyDown={async e => {
-                          if (e.key === "Enter") {
-                            const val = e.currentTarget.value.trim() || null;
-                            if (val) {
-                              setDriveLinking(true);
-                              try {
-                                const res = await fetch(`/api/companies/${selected.id}/drive`, {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ folderUrl: val }),
-                                });
-                                if (res.ok) setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, drive_folder_url: val } : c));
-                              } finally { setDriveLinking(false); }
-                            }
-                            setEditField(null);
-                          }
-                          if (e.key === "Escape") setEditField(null);
-                        }}
-                        onBlur={() => setEditField(null)}
-                      />
-                      {driveLinking && <Loader2 size={11} className="animate-spin text-slate-400" />}
-                    </div>
-                  )}
-                </div>
               </div>
 
               <div className="flex gap-4 items-start">
@@ -3029,113 +2958,131 @@ export function PipelineClient({ initialCompanies }: Props) {
               </div>{/* end documents flex */}
             </section>
 
-            {/* ── Drive Sync Tools (shown when Drive folder is linked) ── */}
-            {selected.drive_folder_url && (
-              <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] flex items-center gap-1.5">
+            {/* ── Drive Sync Tools ── */}
+            <section>
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] flex items-center gap-1.5 mr-1 flex-shrink-0">
                     <Link2 size={12} /> Drive Sync
                   </h2>
-                  <div className="flex items-center gap-2">
-                    {(() => {
-                      const n = documents.filter(d => !!d.google_drive_url).length;
-                      return n > 0 ? (
-                        <span className="flex items-center gap-0.5 text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5">
-                          <Check size={8} /> {n} synced
-                        </span>
-                      ) : null;
-                    })()}
-                    <button
-                      onClick={() => { setDriveChanging(true); setDriveInput(""); }}
-                      className="text-[10px] text-slate-400 hover:text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-50"
-                    >
-                      Change URL
-                    </button>
-                  </div>
-                </div>
-                {driveChanging && (
-                  <div className="flex gap-2 mb-3">
-                    <input
-                      type="url"
-                      value={driveInput}
-                      onChange={e => setDriveInput(e.target.value)}
-                      placeholder="Paste new Drive URL…"
-                      className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-300 bg-white"
-                    />
-                    <button
-                      disabled={!driveInput || driveLinking}
-                      onClick={async () => {
-                        if (!driveInput) return;
-                        setDriveLinking(true);
-                        try {
-                          const res = await fetch(`/api/companies/${selected.id}/drive`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ folderUrl: driveInput }),
-                          });
-                          if (res.ok) {
-                            setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, drive_folder_url: driveInput } : c));
-                            setDriveInput("");
-                            setDriveChanging(false);
-                          }
-                        } finally { setDriveLinking(false); }
-                      }}
-                      className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1.5"
-                    >
-                      {driveLinking ? <Loader2 size={11} className="animate-spin" /> : <Link2 size={11} />}
-                      Update
-                    </button>
-                    <button onClick={() => setDriveChanging(false)} className="text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">Cancel</button>
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    disabled={driveSyncing}
-                    onClick={async () => {
-                      setDriveSyncing(true);
-                      setDriveSyncResult(null);
-                      try {
-                        const res = await fetch("/api/drive/sync", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ company_id: selected.id, folder_url: selected.drive_folder_url }),
-                        });
-                        const json = await res.json() as DriveSyncResult;
-                        setDriveSyncResult(json);
-                        if (!json.error) {
-                          const { data: freshDocs } = await supabase.from("documents")
-                            .select("id,name,type,storage_path,google_drive_url,created_at")
-                            .eq("company_id", selected.id)
-                            .order("created_at", { ascending: false });
-                          if (freshDocs) setDocuments(freshDocs);
-                        }
-                      } finally { setDriveSyncing(false); }
-                    }}
-                    className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5"
-                  >
-                    {driveSyncing ? <Loader2 size={11} className="animate-spin" /> : <Bot size={11} />}
-                    {driveSyncing ? "Syncing…" : "Sync to AI"}
-                  </button>
-                  <button
-                    disabled={driveReextracting}
-                    onClick={async () => {
-                      setDriveReextracting(true);
-                      setDriveReextractResult(null);
-                      try {
-                        const res = await fetch("/api/drive/reextract", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ company_id: selected.id }),
-                        });
-                        const json = await res.json() as { success: number; failed: number; processed: number; has_more?: boolean; message?: string };
-                        setDriveReextractResult(json);
-                      } finally { setDriveReextracting(false); }
-                    }}
-                    className="text-xs px-3 py-1.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-40 flex items-center gap-1.5"
-                  >
-                    {driveReextracting ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
-                    {driveReextracting ? "Extracting…" : "Extract Documents"}
-                  </button>
+
+                  {/* ── Inline URL input (shown when linking or changing) ── */}
+                  {driveChanging ? (
+                    <>
+                      <input
+                        autoFocus
+                        type="url"
+                        value={driveInput}
+                        onChange={e => setDriveInput(e.target.value)}
+                        placeholder="Paste Google Drive folder URL…"
+                        className="text-xs border border-blue-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white w-56 flex-shrink-0"
+                        onKeyDown={e => { if (e.key === "Escape") { setDriveChanging(false); setDriveInput(""); } }}
+                      />
+                      <button
+                        disabled={!driveInput || driveLinking}
+                        onClick={async () => {
+                          if (!driveInput) return;
+                          setDriveLinking(true);
+                          try {
+                            const res = await fetch(`/api/companies/${selected.id}/drive`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ folderUrl: driveInput }),
+                            });
+                            if (res.ok) {
+                              setCompanies(prev => prev.map(c => c.id === selected.id ? { ...c, drive_folder_url: driveInput } : c));
+                              setDriveInput("");
+                              setDriveChanging(false);
+                            }
+                          } finally { setDriveLinking(false); }
+                        }}
+                        className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1.5 flex-shrink-0"
+                      >
+                        {driveLinking ? <Loader2 size={11} className="animate-spin" /> : <Link2 size={11} />}
+                        {selected.drive_folder_url ? "Update" : "Link"}
+                      </button>
+                      <button
+                        onClick={() => { setDriveChanging(false); setDriveInput(""); }}
+                        className="text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 flex-shrink-0"
+                      >Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      {/* Data Room button — gray when not linked, green when linked */}
+                      {selected.drive_folder_url ? (
+                        <a href={selected.drive_folder_url} target="_blank" rel="noopener noreferrer"
+                          className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-1.5 flex-shrink-0 font-medium">
+                          <Link2 size={11} className="flex-shrink-0" /> Data Room Linked
+                        </a>
+                      ) : (
+                        <button
+                          onClick={() => { setDriveChanging(true); setDriveInput(""); }}
+                          className="text-xs px-3 py-1.5 bg-slate-200 text-slate-500 rounded-lg hover:bg-slate-300 transition-colors flex items-center gap-1.5 flex-shrink-0 font-medium"
+                        >
+                          <Link2 size={11} /> Link Data Room
+                        </button>
+                      )}
+
+                      {/* Sync & Extract — only when linked */}
+                      {selected.drive_folder_url && (
+                        <button
+                          disabled={driveSyncStep !== "idle"}
+                          onClick={async () => {
+                            setDriveSyncResult(null);
+                            setDriveReextractResult(null);
+                            setDriveSyncStep("syncing");
+                            try {
+                              const syncRes = await fetch("/api/drive/sync", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ company_id: selected.id, folder_url: selected.drive_folder_url }),
+                              });
+                              const syncJson = await syncRes.json() as DriveSyncResult;
+                              setDriveSyncResult(syncJson);
+                              if (syncJson.error) return;
+                              const { data: freshDocs } = await supabase.from("documents")
+                                .select("id,name,type,storage_path,google_drive_url,created_at")
+                                .eq("company_id", selected.id)
+                                .order("created_at", { ascending: false });
+                              if (freshDocs) setDocuments(freshDocs);
+                              setDriveSyncStep("extracting");
+                              const extRes = await fetch("/api/drive/reextract", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ company_id: selected.id }),
+                              });
+                              const extJson = await extRes.json() as { success: number; failed: number; processed: number; has_more?: boolean; message?: string };
+                              setDriveReextractResult(extJson);
+                            } finally { setDriveSyncStep("idle"); }
+                          }}
+                          className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5 flex-shrink-0"
+                        >
+                          {driveSyncStep === "syncing" ? <><Loader2 size={11} className="animate-spin" /> Syncing…</> :
+                           driveSyncStep === "extracting" ? <><Loader2 size={11} className="animate-spin" /> Extracting…</> :
+                           <><Bot size={11} /> Sync &amp; Extract</>}
+                        </button>
+                      )}
+
+                      {/* Extracted count */}
+                      {selected.drive_folder_url && (() => {
+                        const n = documents.filter(d => !!d.google_drive_url).length;
+                        return n > 0 ? (
+                          <span className="flex items-center gap-0.5 text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                            <Check size={8} /> {n} extracted
+                          </span>
+                        ) : null;
+                      })()}
+
+                      {/* Change URL */}
+                      {selected.drive_folder_url && (
+                        <button
+                          onClick={() => { setDriveChanging(true); setDriveInput(""); }}
+                          className="text-[10px] text-slate-400 hover:text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-50 flex-shrink-0"
+                        >
+                          Change URL
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
                 {driveSyncResult && (
                   <div className={`mt-2 rounded-lg px-2.5 py-2 text-[10px] leading-relaxed ${driveSyncResult.error ? "bg-red-50 border border-red-200 text-red-700" : "bg-emerald-50 border border-emerald-200 text-emerald-800"}`}>
@@ -3146,20 +3093,19 @@ export function PipelineClient({ initialCompanies }: Props) {
                     ) : driveSyncResult.error ? (
                       <span>Error: {driveSyncResult.error}</span>
                     ) : (
-                      <span>{(() => { const n = driveSyncResult.saved ?? driveSyncResult.synced ?? 0; return <>✓ {n} file{n!==1?"s":""} indexed{driveSyncResult.skipped>0?`, ${driveSyncResult.skipped} already saved`:""}{n>0&&<><br/><span className="text-amber-700 font-medium">Now click &quot;Extract Documents&quot; to make files readable by AI.</span></>}</>; })()}</span>
+                      <span>{(() => { const n = driveSyncResult.saved ?? driveSyncResult.synced ?? 0; const skipped = driveSyncResult.skipped ?? 0; return <>✓ {n > 0 ? `${n} new file${n!==1?"s":""} indexed` : "All files already saved"}{ skipped > 0 ? `, ${skipped} already saved` : ""}</>; })()}</span>
                     )}
                   </div>
                 )}
-                {driveReextractResult && !driveReextracting && (
-                  <div className="mt-2 rounded-lg px-2.5 py-2 text-[10px] bg-slate-50 border border-slate-200 text-slate-700">
+                {driveReextractResult && driveSyncStep === "idle" && (
+                  <div className="mt-1 rounded-lg px-2.5 py-2 text-[10px] bg-slate-50 border border-slate-200 text-slate-700">
                     {driveReextractResult.message
                       ? <span>✓ {driveReextractResult.message}</span>
-                      : <span>✓ {driveReextractResult.success} doc{driveReextractResult.success !== 1 ? "s" : ""} extracted{driveReextractResult.failed > 0 ? ` · ${driveReextractResult.failed} failed` : ""}{driveReextractResult.has_more ? " · more remaining, click again" : ""}</span>
+                      : <span>✓ {driveReextractResult.success} doc{driveReextractResult.success !== 1 ? "s" : ""} extracted &amp; ready for AI{driveReextractResult.failed > 0 ? ` · ${driveReextractResult.failed} failed (unsupported format)` : ""}{driveReextractResult.has_more ? " · more remaining, click again" : ""}</span>
                     }
                   </div>
                 )}
               </section>
-            )}
 
             {/* ── IC Memo ── */}
             <section>
@@ -3342,9 +3288,12 @@ export function PipelineClient({ initialCompanies }: Props) {
                       )}
                     </div>
 
-                    <input className="input text-sm" placeholder="Title / Role"
+                    <select className="input text-sm text-slate-700"
                       value={addModalContact.title}
-                      onChange={e => setAddModalContact(p => ({ ...p, title: e.target.value }))} />
+                      onChange={e => setAddModalContact(p => ({ ...p, title: e.target.value }))}>
+                      <option value="">Title / Role</option>
+                      {CONTACT_TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
                     <input
                       className="input text-sm"
                       type="email"
@@ -3682,12 +3631,14 @@ export function PipelineClient({ initialCompanies }: Props) {
                             </div>
                           )}
                         </div>
-                        <input
-                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                          placeholder="Title / Role"
+                        <select
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
                           value={newContactForm.title}
                           onChange={e => setNewContactForm(p => ({ ...p, title: e.target.value }))}
-                        />
+                        >
+                          <option value="">Title / Role</option>
+                          {CONTACT_TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
                         <input
                           className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                           type="email"

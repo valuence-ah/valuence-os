@@ -416,7 +416,26 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     };
   }
 
-  // initialCompanies is pre-filtered server-side (force-dynamic page) — no client refetch needed.
+  // Re-fetch on mount using correct client-side type filtering (bypasses Next.js Router Cache).
+  // Must mirror the same STRATEGIC_TYPES Set used in app/(dashboard)/crm/strategic/page.tsx.
+  useEffect(() => {
+    const STRATEGIC_TYPES = new Set(["corporate", "ecosystem_partner", "ecosystem", "strategic partner", "strategic_partner", "eco partner", "eco_partner"]);
+    supabase
+      .from("companies")
+      .select("*")
+      .order("name", { ascending: true })
+      .limit(10000)
+      .then(({ data }) => {
+        if (!data) return;
+        const partners = (data as Company[]).filter(c => {
+          const t = (c.type ?? "").toLowerCase().trim();
+          if (STRATEGIC_TYPES.has(t)) return true;
+          return (c.types ?? []).some((x: string) => STRATEGIC_TYPES.has((x ?? "").toLowerCase().trim()));
+        });
+        setCompanies(partners);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load localStorage
   useEffect(() => {
