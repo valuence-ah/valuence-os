@@ -1248,6 +1248,7 @@ export function CompanyDetailClient({
     setShowLogoPicker(false);
     setLogoUrlInput("");
     setLogoMsg(null);
+    router.refresh(); // bust the companies-list router cache so logo shows on back
   }
 
   async function handleAutoFindLogo() {
@@ -1264,6 +1265,7 @@ export function CompanyDetailClient({
         setCompany(c => ({ ...c, logo_url: data.logo_url }));
         setShowLogoPicker(false);
         setLogoMsg(null);
+        router.refresh(); // bust the companies-list router cache so logo shows on back
       } else {
         setLogoMsg("Logo not found — try entering a URL manually.");
       }
@@ -1409,7 +1411,7 @@ export function CompanyDetailClient({
 
       {/* ── Back button ── */}
       <button
-        onClick={() => router.push("/crm/companies")}
+        onClick={() => router.back()}
         className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-700 transition-colors mb-1 group"
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="group-hover:-translate-x-0.5 transition-transform">
