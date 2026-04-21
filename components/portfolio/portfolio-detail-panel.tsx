@@ -11,8 +11,9 @@ import { PortfolioRelationshipsTab } from "./portfolio-relationships-tab";
 import { PortfolioDocumentsTab } from "./portfolio-documents-tab";
 import { PortfolioReportUpload } from "./portfolio-report-upload";
 import { PortfolioInvestmentsTab } from "./portfolio-investments-tab";
+import { PortfolioAssistantTab } from "./portfolio-assistant-tab";
 
-type TabId = "overview" | "intelligence" | "relationships" | "documents" | "investments";
+type TabId = "overview" | "intelligence" | "relationships" | "documents" | "investments" | "assistant";
 
 interface Props {
   company: Company;
@@ -193,6 +194,7 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
     { id: "relationships",  label: "Relationships" },
     { id: "documents",      label: "Documents" },
     { id: "investments",    label: "Valuence Investment" },
+    { id: "assistant",      label: "✦ AI Assistant" },
   ];
 
   return (
@@ -434,6 +436,13 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
                 companyId={company.id}
                 investments={detail.investments}
                 onRefresh={onDetailRefresh}
+              />
+            )}
+            {activeTab === "assistant" && (
+              <PortfolioAssistantTab
+                companyId={company.id}
+                companyName={company.name}
+                investments={detail.investments}
               />
             )}
           </>

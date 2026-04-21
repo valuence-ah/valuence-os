@@ -397,31 +397,40 @@ export function PortfolioOverviewTab({
             <div className="space-y-1.5 overflow-y-auto max-h-[160px] pr-0.5">
               {investments.map(inv => {
                 const isSafe = inv.investment_type === "safe";
+                const closeDate = inv.close_date
+                  ? new Date(inv.close_date).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+                  : null;
                 return (
                   <button
                     key={inv.id}
                     onClick={() => setSelectedInvestment(inv)}
                     className={`w-full text-left rounded-lg px-2.5 py-2 transition-colors ${isSafe ? "bg-violet-50 hover:bg-violet-100" : "bg-blue-50 hover:bg-blue-100"}`}
                   >
-                    {/* Row 1: badge + type + amount + doc indicators */}
-                    <div className="flex items-center gap-2">
+                    {/* Row 1: Date · Round | Investment ($) | Type | doc indicators */}
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {closeDate && (
+                        <span className="text-[10px] text-slate-500 font-medium flex-shrink-0">{closeDate}</span>
+                      )}
+                      {closeDate && <span className="text-slate-300 text-[10px] flex-shrink-0">·</span>}
                       <span className={`text-[9px] font-bold px-1.5 py-px rounded-full whitespace-nowrap flex-shrink-0 ${isSafe ? "bg-violet-200 text-violet-800" : "bg-blue-200 text-blue-800"}`}>
                         {inv.funding_round ?? (isSafe ? "SAFE / CN" : "Priced")}
                       </span>
-                      <span className={`text-[9px] font-medium flex-shrink-0 ${isSafe ? "text-violet-500" : "text-blue-500"}`}>
-                        {isSafe ? "SAFE / CN" : "Priced Round"}
-                      </span>
                       {inv.investment_amount !== null && (
-                        <span className="text-xs font-bold text-slate-800 ml-auto">{fmtMoney(inv.investment_amount)}</span>
+                        <span className="text-xs font-bold text-slate-800 flex-shrink-0">{fmtMoney(inv.investment_amount)}</span>
                       )}
-                      {inv.memo_file_name && (
-                        <span title={`Memo: ${inv.memo_file_name}`}><FileText size={10} className={isSafe ? "text-violet-400" : "text-blue-400"} /></span>
-                      )}
-                      {inv.subscription_doc_file_name && (
-                        <span title={`Sub doc: ${inv.subscription_doc_file_name}`}><FileText size={10} className="text-slate-400" /></span>
-                      )}
+                      <span className={`text-[9px] font-medium flex-shrink-0 ${isSafe ? "text-violet-500" : "text-blue-500"}`}>
+                        {isSafe ? "SAFE / CN" : "Priced"}
+                      </span>
+                      <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
+                        {inv.memo_file_name && (
+                          <span title={`Memo: ${inv.memo_file_name}`}><FileText size={10} className={isSafe ? "text-violet-400" : "text-blue-400"} /></span>
+                        )}
+                        {inv.subscription_doc_file_name && (
+                          <span title={`Sub doc: ${inv.subscription_doc_file_name}`}><FileText size={10} className="text-slate-400" /></span>
+                        )}
+                      </div>
                     </div>
-                    {/* Row 2: terms + date */}
+                    {/* Row 2: type-specific terms */}
                     <div className={`flex items-center gap-2 mt-0.5 text-[10px] ${isSafe ? "text-violet-500" : "text-blue-500"}`}>
                       {isSafe ? (
                         <>
@@ -433,13 +442,8 @@ export function PortfolioOverviewTab({
                         <>
                           {inv.pre_money_valuation !== null && <span>Pre: {fmtMoney(inv.pre_money_valuation)}</span>}
                           {inv.ownership_pct !== null && <span>{inv.ownership_pct}% own.</span>}
-                          {inv.esop !== null && <span>ESOP {inv.esop}%</span>}
+                          {inv.price_per_share !== null && <span>${inv.price_per_share?.toFixed(4)}/sh</span>}
                         </>
-                      )}
-                      {inv.close_date && (
-                        <span className="ml-auto text-slate-400">
-                          {new Date(inv.close_date).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
-                        </span>
                       )}
                     </div>
                   </button>
@@ -938,7 +942,7 @@ export function PortfolioOverviewTab({
           ] : [
             { label: "Pre-Money Val.",  value: fmtMoney(inv.pre_money_valuation) },
             { label: "Ownership",       value: inv.ownership_pct !== null ? `${inv.ownership_pct}%` : "—" },
-            { label: "ESOP",            value: inv.esop !== null ? `${inv.esop}%` : "—" },
+            { label: "Price per Share", value: inv.price_per_share !== null ? `$${inv.price_per_share?.toFixed(4)}` : "—" },
           ]),
         ];
 
@@ -947,7 +951,7 @@ export function PortfolioOverviewTab({
             className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center p-4"
             onClick={e => { if (e.target === e.currentTarget) setSelectedInvestment(null); }}
           >
-            <div className="bg-white rounded-2xl w-[520px] max-h-[85vh] overflow-y-auto shadow-2xl">
+            <div className="bg-white rounded-2xl w-[520px] max-h-[85vh] overflow-y-auto overflow-x-hidden shadow-2xl">
               {/* Header */}
               <div className={`sticky top-0 ${accentBg} border-b ${accentBorder} px-6 py-4 flex items-start justify-between rounded-t-2xl`}>
                 <div>

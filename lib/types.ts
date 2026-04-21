@@ -398,6 +398,7 @@ export interface PortfolioInvestment {
   pre_money_valuation: number | null;
   ownership_pct: number | null;
   esop: number | null;
+  price_per_share: number | null;
   // Documents
   memo_storage_path: string | null;
   memo_file_name: string | null;
