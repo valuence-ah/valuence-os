@@ -115,10 +115,10 @@ const TABS = [
     icon: Newspaper,
     color: "text-rose-600",
     bg: "bg-rose-50",
-    description: "Generates the intelligence news feed shown on the Pipeline company detail panel. Leave prompt blank to use the built-in default (180-day cutoff, Exa signal prioritisation).",
+    description: "Generates the intelligence news feed shown on the Pipeline company detail panel AND the LP Company News tab. Leave prompt blank to use the built-in default. The 180-day cutoff date ({{cutoff_date}}) is always calculated dynamically from today.",
     variables: ["{{company_name}}", "{{company_header}}", "{{website}}", "{{context}}", "{{cutoff_date}}"],
     promptLabel: "Prompt Template",
-    hint: "Leave blank to use the built-in default prompt. If set, this becomes the full prompt sent to Claude — include the JSON output format block. Available variables: {{company_header}} = company name + website, {{context}} = description/stage/signals/meetings block, {{cutoff_date}} = 180-day cutoff (YYYY-MM-DD). Must return a JSON array with headline, source, date, summary, url fields.",
+    hint: "Leave blank to use the built-in default prompt. If set, this becomes the full prompt — include the JSON output format block. Variables: {{company_header}} = name + website, {{context}} = description/stage/signals/meetings, {{cutoff_date}} = dynamically calculated 180 days before today (YYYY-MM-DD). Must return a JSON array with headline, source, date, summary, url fields. This prompt is used for both startup companies (Pipeline) and LP companies (Company News tab).",
   },
   {
     name: "ma_intelligence",
@@ -155,14 +155,14 @@ const TABS = [
   },
   {
     name: "lp_intelligence",
-    label: "LP Intelligence Snapshot",
+    label: "LP Intelligence",
     icon: Users,
     color: "text-purple-600",
     bg: "bg-purple-50",
-    description: "Generates the LP-ready fund narrative shown in the CRM/LPs Intelligence tab. Claude writes a 2–3 paragraph snapshot covering portfolio, active pipeline, and fund themes — useful for LP meeting prep.",
-    variables: ["{{portfolio}}", "{{pipeline}}"],
+    description: "Powers the Intelligence tab in CRM/LPs. Generates an LP-specific brief: (1) why our fund aligns with this LP, (2) 1–2 portfolio companies to highlight, (3) 2–5 pipeline companies that fit their mandate. Run per LP — each output is tailored to the selected LP.",
+    variables: ["{{lp_name}}", "{{lp_profile}}", "{{portfolio}}", "{{pipeline}}"],
     promptLabel: "Prompt Template",
-    hint: "Leave blank to use the built-in default. {{portfolio}} = bullet list of portfolio companies with sectors/stage/description. {{pipeline}} = bullet list of active pipeline (status ≠ passed/exited) companies. Output is free-form text (not JSON). Aim for 2–3 paragraphs, LP-ready prose.",
+    hint: "Leave blank to use the built-in default. Variables: {{lp_name}} = LP company name, {{lp_profile}} = LP type/description/sectors/location block, {{portfolio}} = bullet list of our portfolio companies, {{pipeline}} = bullet list of active pipeline (status ≠ passed/exited). Must return JSON with fields: alignment_summary (string), portfolio_picks (array of {name, reason}), pipeline_picks (array of {name, reason}). Names must match exactly — they are looked up to attach sector/stage/description data.",
   },
 ] as const;
 
@@ -195,6 +195,7 @@ const TAB_DEFAULTS: Record<string, Omit<AiConfig, "id" | "name" | "label">> = {
   ma_intelligence:        { model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
   pilot_intelligence:     { model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
   competitor_intelligence:{ model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
+  lp_intelligence:        { model: SONNET, max_tokens: 1500,  temperature: 0.30, system_prompt: "You are an LP relations specialist. Return only valid JSON as instructed.", user_prompt: "" },
 };
 
 function makeDefault(name: string, label: string): AiConfig {
