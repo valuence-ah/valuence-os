@@ -616,23 +616,6 @@ export function LpViewClient({ initialCompanies }: Props) {
     try { const s = localStorage.getItem("lp_starred_intel"); if (s) setLpStarredIntel(JSON.parse(s)); } catch {}
   }, []);
 
-  // Reset Company News state when the selected LP changes; restore from cache if available
-  useEffect(() => {
-    setLpIntelligence([]);
-    setLpIntelError(null);
-    setLpIntelCachedAt(null);
-    if (selected?.id) {
-      try {
-        const cached = localStorage.getItem(`lp_intel_${selected.id}`);
-        if (cached) {
-          const { items, cachedAt } = JSON.parse(cached);
-          setLpIntelligence(items ?? []);
-          setLpIntelCachedAt(cachedAt ?? null);
-        }
-      } catch {}
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id]);
   function toggleLpStar(companyId: string, headline: string) {
     setLpStarredIntel(prev => {
       const current = prev[companyId] ?? [];
@@ -847,6 +830,25 @@ export function LpViewClient({ initialCompanies }: Props) {
   }
 
   const selected = companies.find(c => c.id === selectedId) ?? null;
+
+  // Reset Company News state when the selected LP changes; restore from cache if available
+  // (must be after `selected` is declared — TypeScript requires declaration order)
+  useEffect(() => {
+    setLpIntelligence([]);
+    setLpIntelError(null);
+    setLpIntelCachedAt(null);
+    if (selected?.id) {
+      try {
+        const cached = localStorage.getItem(`lp_intel_${selected.id}`);
+        if (cached) {
+          const { items, cachedAt } = JSON.parse(cached);
+          setLpIntelligence(items ?? []);
+          setLpIntelCachedAt(cachedAt ?? null);
+        }
+      } catch {}
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   // Change company type
   async function handleChangeType(newType: string) {
