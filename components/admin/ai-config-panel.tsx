@@ -6,12 +6,15 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2, Save, Check, Bot, FileText, Sparkles, Mail, ClipboardList, Mic, Radar, Search, Building2, Handshake } from "lucide-react";
+import { Loader2, Save, Check, Bot, FileText, Sparkles, Mail, ClipboardList, Mic, Radar, Search, Building2, Handshake, Newspaper } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Model options ─────────────────────────────────────────────────────────────
 const MODELS = [
-  { group: "Claude Sonnet 4.5 (recommended)", options: [
+  { group: "Claude Sonnet 4.6 ✦ recommended", options: [
+    { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+  ]},
+  { group: "Claude Sonnet 4.5", options: [
     { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
   ]},
   { group: "Claude Haiku 4.5 (fast / cheap)", options: [
@@ -19,12 +22,6 @@ const MODELS = [
   ]},
   { group: "Claude Opus 4.5 (most capable)", options: [
     { value: "claude-opus-4-5",   label: "Claude Opus 4.5" },
-  ]},
-  { group: "Claude Sonnet 4 (latest)", options: [
-    { value: "claude-sonnet-4-0", label: "Claude Sonnet 4" },
-  ]},
-  { group: "Claude Opus 4 (most powerful)", options: [
-    { value: "claude-opus-4-0",   label: "Claude Opus 4" },
   ]},
 ];
 
@@ -111,6 +108,17 @@ const TABS = [
     description: "Extracts structured insights (description, funding, tech highlights) from Exa search results for a specific company.",
     variables: ["{{company_name}}", "{{sectors}}", "{{research}}"],
     promptLabel: "Extraction Instructions",
+  },
+  {
+    name: "company_intelligence",
+    label: "Company Intelligence",
+    icon: Newspaper,
+    color: "text-rose-600",
+    bg: "bg-rose-50",
+    description: "Generates the intelligence news feed shown on the Pipeline company detail panel. Leave prompt blank to use the built-in default (180-day cutoff, Exa signal prioritisation).",
+    variables: ["{{company_name}}", "{{company_header}}", "{{website}}", "{{context}}", "{{cutoff_date}}"],
+    promptLabel: "Prompt Template",
+    hint: "Leave blank to use the built-in default prompt. If set, this becomes the full prompt sent to Claude — include the JSON output format block. Available variables: {{company_header}} = company name + website, {{context}} = description/stage/signals/meetings block, {{cutoff_date}} = 180-day cutoff (YYYY-MM-DD). Must return a JSON array with headline, source, date, summary, url fields.",
   },
   {
     name: "ma_intelligence",
@@ -241,7 +249,7 @@ export function AiConfigPanel() {
             Config not found in database. Run migration <code className="bg-slate-100 px-1 rounded">009_agent_configs.sql</code> first.
           </div>
         ) : (
-          <div className="max-w-2xl space-y-6">
+          <div className="max-w-4xl space-y-6">
 
             {/* Header */}
             <div className="flex items-start justify-between">

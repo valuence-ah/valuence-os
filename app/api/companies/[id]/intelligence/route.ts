@@ -1,6 +1,7 @@
 // ─── Company Intelligence /api/companies/[id]/intelligence ───────────────────
 // Uses Claude to surface intelligence items about a company.
 // Enriches context with saved Exa signals + interactions from DB.
+// Prompt is fully editable in Admin → AI Config → Company Intelligence.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -10,6 +11,14 @@ import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 
 export const maxDuration = 45;
+
+/** Replace {{variable}} placeholders in a template string. */
+function interpolate(template: string, vars: Record<string, string>): string {
+  return Object.entries(vars).reduce(
+    (s, [k, v]) => s.replaceAll(`{{${k}}}`, v),
+    template
+  );
+}
 
 export async function POST(
   _req: NextRequest,
@@ -24,7 +33,7 @@ export async function POST(
 
   // Load AI config + company data in parallel
   const [cfg, { data: company }] = await Promise.all([
-    getAiConfig("exa_research"),
+    getAiConfig("company_intelligence"),
     supabase
       .from("companies")
       .select("name, website, description, sectors, sub_type, location_city, location_country, tags, stage")
@@ -85,12 +94,13 @@ export async function POST(
 
   const context = contextLines.join("\n");
 
-  const basePrompt = `You are a VC intelligence analyst. Provide up to 7 intelligence items about "${company.name}"${company.website ? ` (${company.website})` : ""}.
+  // ── Hardcoded default prompt (used when Admin has left user_prompt blank) ───
+  const defaultPrompt = `You are a VC intelligence analyst. Provide up to 7 intelligence items about {{company_header}}.
 
-${context}
+{{context}}
 
 STRICT RULES:
-1. Only include news/events from the last 180 days (on or after ${cutoff180}). Reject anything older.
+1. Only include news/events from the last 180 days (on or after {{cutoff_date}}). Reject anything older.
 2. Prioritise the "Recent signals" listed above — use their exact url, source, and date.
 3. For signal-based items, copy the url exactly from the signal list. Do NOT set url to null if a url was provided.
 4. If you have no signals and cannot confirm an item is within the last 180 days from your knowledge, do NOT include it. Return fewer items rather than fabricating or including old news.
@@ -109,9 +119,21 @@ Return a JSON array ONLY (no markdown, no explanation):
   }
 ]`;
 
-  const finalPrompt = cfg.user_prompt
-    ? `${basePrompt}\n\nAdditional instructions: ${cfg.user_prompt}`
-    : basePrompt;
+  // ── Template variables available in the Admin prompt editor ─────────────────
+  const templateVars: Record<string, string> = {
+    company_name:   company.name,
+    company_header: company.website
+      ? `"${company.name}" (${company.website})`
+      : `"${company.name}"`,
+    website:        company.website ?? "",
+    context,
+    cutoff_date:    cutoff180,
+  };
+
+  // If the Admin has written a custom prompt, use it as the full template.
+  // Otherwise fall back to the hardcoded default.
+  const rawPrompt = cfg.user_prompt?.trim() ? cfg.user_prompt : defaultPrompt;
+  const finalPrompt = interpolate(rawPrompt, templateVars);
 
   const systemPrompt = cfg.system_prompt ??
     "You are a VC intelligence analyst. Return only valid JSON arrays as instructed.";

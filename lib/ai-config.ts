@@ -13,17 +13,20 @@ export interface AiConfig {
   user_prompt: string;
 }
 
-const SONNET = "claude-sonnet-4-5";
+const SONNET = "claude-sonnet-4-6";
 
 const DEFAULTS: Record<string, AiConfig> = {
   pipeline_assistant:  { model: SONNET, max_tokens: 2048, temperature: 0.30, system_prompt: null, user_prompt: "" },
   company_description: { model: SONNET, max_tokens: 500,  temperature: 0.50, system_prompt: null, user_prompt: "" },
-  ic_memo:             { model: SONNET, max_tokens: 4000, temperature: 0.30, system_prompt: null, user_prompt: "" },
+  ic_memo:             { model: SONNET, max_tokens: 12000, temperature: 0.30, system_prompt: null, user_prompt: "" },
   lp_outreach_draft:   { model: SONNET, max_tokens: 800,  temperature: 0.50, system_prompt: null, user_prompt: "" },
   lp_prep_brief:       { model: SONNET, max_tokens: 1500, temperature: 0.30, system_prompt: null, user_prompt: "" },
   lp_meeting_summary:  { model: SONNET, max_tokens: 800,  temperature: 0.30, system_prompt: null, user_prompt: "" },
   sourcing_scorer:     { model: SONNET, max_tokens: 2048, temperature: 0.10, system_prompt: null, user_prompt: "" },
-  exa_research:        { model: SONNET, max_tokens: 1024, temperature: 0.20, system_prompt: null, user_prompt: "" },
+  exa_research:          { model: SONNET, max_tokens: 1024, temperature: 0.20, system_prompt: null, user_prompt: "" },
+  company_intelligence:  { model: SONNET, max_tokens: 1024, temperature: 0.20, system_prompt: null, user_prompt: "" },
+  ma_intelligence:       { model: SONNET, max_tokens: 2500, temperature: 0.20, system_prompt: null, user_prompt: "" },
+  pilot_intelligence:  { model: SONNET, max_tokens: 2500, temperature: 0.20, system_prompt: null, user_prompt: "" },
 };
 
 /** Loads an AI config from Supabase, falling back to hardcoded defaults. */
