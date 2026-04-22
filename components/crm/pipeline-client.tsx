@@ -2645,9 +2645,9 @@ export function PipelineClient({ initialCompanies }: Props) {
                         {isExporting ? (
                           <><Loader2 size={11} className="animate-spin" /> Saving…</>
                         ) : justExported ? (
-                          <><Check size={11} /> Logged in Transcripts</>
+                          <><Check size={11} /> Saved in Transcripts</>
                         ) : (
-                          "Log in Meeting Transcripts"
+                          "Save in Meeting Transcripts"
                         )}
                       </button>
                     </div>
