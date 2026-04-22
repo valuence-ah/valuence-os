@@ -17,7 +17,7 @@ export default async function PipelinePage() {
   const { data: companies } = (await supabase
     .from("companies")
     .select("*")
-    .contains("types", ["startup"])
+    .or('type.eq.startup,types.cs.{startup}')
     .order("updated_at", { ascending: false })
     .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };

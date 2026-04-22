@@ -526,6 +526,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const rightPanelRef = useRef<HTMLDivElement>(null);
   const addEventFormRef = useRef<HTMLDivElement>(null);
   const linkSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const linkSearchAbort = useRef<AbortController | null>(null);
   const [autoSaving, setAutoSaving]     = useState(false);
 
   // Add contact in manage panel
@@ -536,6 +537,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [panelContactSugg, setPanelContactSugg] = useState<Contact[]>([]);
   const [showPanelContactSugg, setShowPanelContactSugg] = useState(false);
   const panelContactTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panelContactAbort = useRef<AbortController | null>(null);
 
   // Add contact inline in add-company modal
   const [addModalContactOpen, setAddModalContactOpen] = useState(false);
@@ -963,12 +965,19 @@ export function PipelineClient({ initialCompanies }: Props) {
     setLinkContactSearch(query);
     if (!query.trim() || query.length < 2) { setLinkContactSuggestions([]); return; }
     linkSearchTimer.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from("contacts")
-        .select("id, first_name, last_name, email, title, company_id")
-        .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%`)
-        .limit(8);
-      setLinkContactSuggestions((data as Contact[]) ?? []);
+      linkSearchAbort.current?.abort();
+      linkSearchAbort.current = new AbortController();
+      try {
+        const res = await fetch(
+          `/api/search/contacts?q=${encodeURIComponent(query.trim())}`,
+          { signal: linkSearchAbort.current.signal }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        setLinkContactSuggestions(data ?? []);
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") console.error(e);
+      }
     }, 250);
   }
 
@@ -981,15 +990,22 @@ export function PipelineClient({ initialCompanies }: Props) {
       return;
     }
     panelContactTimer.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from("contacts")
-        .select("id, first_name, last_name, email, title, company_id")
-        .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%`)
-        .limit(6);
-      // Exclude contacts already linked to this company
-      const suggestions = ((data as Contact[]) ?? []).filter(c => c.company_id !== selected?.id);
-      setPanelContactSugg(suggestions);
-      setShowPanelContactSugg(suggestions.length > 0);
+      panelContactAbort.current?.abort();
+      panelContactAbort.current = new AbortController();
+      try {
+        const res = await fetch(
+          `/api/search/contacts?q=${encodeURIComponent(query.trim())}`,
+          { signal: panelContactAbort.current.signal }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        // Exclude contacts already linked to this company
+        const suggestions = ((data as Contact[]) ?? []).filter(c => c.company_id !== selected?.id);
+        setPanelContactSugg(suggestions);
+        setShowPanelContactSugg(suggestions.length > 0);
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") console.error(e);
+      }
     }, 200);
   }
 

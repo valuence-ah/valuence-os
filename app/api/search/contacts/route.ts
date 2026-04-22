@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     if (idList.length === 0) return NextResponse.json([]);
     const { data } = await supabase
       .from("contacts")
-      .select("id, first_name, last_name, email, company_id")
+      .select("id, first_name, last_name, email, title, company_id")
       .in("id", idList);
     return NextResponse.json(data ?? []);
   }
@@ -45,7 +45,7 @@ export async function GET(req: Request) {
 
   const { data } = await supabase
     .from("contacts")
-    .select("id, first_name, last_name, email, company_id")
+    .select("id, first_name, last_name, email, title, company_id")
     .or(filter)
     .order("first_name")
     .limit(20);

@@ -645,6 +645,7 @@ export function LpViewClient({ initialCompanies }: Props) {
   const colWidths: Record<string, number> = { ...DEFAULT_COL_WIDTHS, ...columnWidths };
   const activityFormRef = useRef<HTMLDivElement>(null);
   const linkSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const linkSearchAbort = useRef<AbortController | null>(null);
 
   function startResize(colName: string, currentWidth: number) {
     return (e: React.MouseEvent) => {
@@ -915,12 +916,19 @@ export function LpViewClient({ initialCompanies }: Props) {
     setLinkContactSearch(query);
     if (!query.trim() || query.length < 2) { setLinkContactSuggestions([]); return; }
     linkSearchTimer.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from("contacts")
-        .select("id, first_name, last_name, email, title, company_id")
-        .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%`)
-        .limit(8);
-      setLinkContactSuggestions((data as Contact[]) ?? []);
+      linkSearchAbort.current?.abort();
+      linkSearchAbort.current = new AbortController();
+      try {
+        const res = await fetch(
+          `/api/search/contacts?q=${encodeURIComponent(query.trim())}`,
+          { signal: linkSearchAbort.current.signal }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        setLinkContactSuggestions(data ?? []);
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") console.error(e);
+      }
     }, 250);
   }
 
