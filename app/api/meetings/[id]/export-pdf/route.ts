@@ -1,7 +1,7 @@
 // ─── POST /api/meetings/[id]/export-pdf ──────────────────────────────────────
 // Receives a base64-encoded PDF generated client-side, uploads it to the
-// "meeting-transcripts" Supabase Storage bucket, and creates a company_documents
-// record so it appears in the Meeting Transcripts panel.
+// "transcripts" Supabase Storage bucket, and inserts a record into the
+// `documents` table so it appears in the Meeting Transcripts panel.
 //
 // Body: { company_id: string, pdf_base64: string }
 
@@ -51,7 +51,7 @@ export async function POST(
     return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
   }
 
-  // ── Build a clean file name — title: "MMM DD YYYY - Meeting Subject.pdf" ──
+  // ── Build a clean file name — "MMM DD YYYY - Meeting Subject.pdf" ─────────
   const meetingDate = meeting.date ? new Date(meeting.date as string) : new Date();
   const datePretty = meetingDate.toLocaleDateString("en-US", {
     month: "short", day: "numeric", year: "numeric",
@@ -71,9 +71,9 @@ export async function POST(
   // ── Decode base64 → Buffer ────────────────────────────────────────────────
   const pdfBuffer = Buffer.from(pdf_base64, "base64");
 
-  // ── Upload to Supabase Storage ────────────────────────────────────────────
+  // ── Upload to Supabase Storage ("transcripts" bucket) ────────────────────
   const { error: uploadErr } = await supabase.storage
-    .from("meeting-transcripts")
+    .from("transcripts")
     .upload(storagePath, pdfBuffer, {
       contentType: "application/pdf",
       upsert:      false,
@@ -84,22 +84,25 @@ export async function POST(
     return NextResponse.json({ error: uploadErr.message }, { status: 500 });
   }
 
-  // ── Insert into company_documents ─────────────────────────────────────────
-  const { error: docErr } = await (supabase
-    .from("company_documents" as "documents")
+  // ── Insert into documents table ───────────────────────────────────────────
+  const { data: docRow, error: docErr } = await supabase
+    .from("documents")
     .insert({
-      meeting_id:    id,
+      name:       fileName,
+      type:       "transcript",
       company_id,
-      file_name:     fileName,
-      storage_path:  storagePath,
-      document_type: "meeting_transcript",
-      uploaded_at:   new Date().toISOString(),
-    }) as unknown as Promise<{ error: { message: string } | null }>);
+      storage_path: storagePath,
+      mime_type:  "application/pdf",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .select("id, name, type, storage_path, google_drive_url, created_at")
+    .single();
 
   if (docErr) {
-    // Non-fatal: storage upload succeeded — log the DB insert error
-    console.warn("[export-pdf] company_documents insert warning:", docErr.message);
+    console.error("[export-pdf] documents insert failed:", docErr.message);
+    return NextResponse.json({ error: docErr.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, file_name: fileName, storage_path: storagePath });
+  return NextResponse.json({ ok: true, file_name: fileName, storage_path: storagePath, document: docRow });
 }

@@ -70,10 +70,11 @@ const STATUS_COLORS: Record<string, string> = {
 const STAGE_OPTIONS = ["Pre-Seed", "Pre-A", "Seed", "Seed Extension", "Series A", "Series B", "Series C", "Growth"];
 
 // Values match Excel "Sector" column
-const SECTOR_OPTIONS = ["Biotech", "Cleantech", "Other"];
+const SECTOR_OPTIONS = ["Cleantech", "Techbio", "Biotech", "Other"];
 
 const SECTOR_COLORS: Record<string, string> = {
   cleantech: "bg-emerald-100 text-emerald-700",
+  techbio:   "bg-teal-100 text-teal-700",
   biotech:   "bg-violet-100 text-violet-700",
   other:     "bg-slate-100 text-slate-600",
 };
@@ -2585,25 +2586,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                             const { generateMeetingPDF } = await import("@/lib/generate-meeting-pdf");
                             const blob = await generateMeetingPDF({ ...m, company: selected as unknown as Company | undefined });
 
-                            // ── Trigger immediate browser download ──────────
-                            const downloadUrl = URL.createObjectURL(blob);
-                            const meetingDate = m.date ? new Date(m.date) : new Date();
-                            const datePretty = meetingDate.toLocaleDateString("en-US", {
-                              month: "short", day: "numeric", year: "numeric",
-                            }); // e.g. "Apr 16, 2026"
-                            const safeTitle = (m.subject ?? "Meeting")
-                              .replace(/[^a-zA-Z0-9\s-]/g, "").trim()
-                              .replace(/\s+/g, " ").slice(0, 60) || "Meeting";
-                            const safeDatePretty = datePretty.replace(/,/g, "").replace(/\s+/g, " ");
-                            const anchor = document.createElement("a");
-                            anchor.href = downloadUrl;
-                            anchor.download = `${safeDatePretty} - ${safeTitle}.pdf`;
-                            document.body.appendChild(anchor);
-                            anchor.click();
-                            document.body.removeChild(anchor);
-                            URL.revokeObjectURL(downloadUrl);
-
-                            // ── Also upload to Supabase storage ─────────────
+                            // ── Base64-encode and POST to server for storage ─
                             const base64 = await new Promise<string>((resolve, reject) => {
                               const reader = new FileReader();
                               reader.onload = () => resolve((reader.result as string).split(",")[1]);
@@ -2616,21 +2599,19 @@ export function PipelineClient({ initialCompanies }: Props) {
                               body: JSON.stringify({ company_id: selected.id, pdf_base64: base64 }),
                             });
                             if (res.ok) {
+                              const json = await res.json() as { document?: { id: string; name: string; type: string; storage_path: string; google_drive_url: string | null; created_at: string } };
                               setExportSuccess(m.id);
-                              // Refresh company documents list
-                              const { data } = await supabase
-                                .from("company_documents" as "documents")
-                                .select("id, meeting_id, file_name, storage_path, uploaded_at, fireflies_url")
-                                .eq("company_id", selected.id)
-                                .eq("document_type", "meeting_transcript")
-                                .order("uploaded_at", { ascending: false });
-                              setCompanyDocuments((data ?? []) as unknown as typeof companyDocuments);
+                              // Append the new document directly to state so it appears immediately
+                              if (json.document) {
+                                setDocuments(prev => [json.document!, ...prev]);
+                              }
                             } else {
                               const errData = await res.json().catch(() => ({})) as { error?: string };
-                              console.error("PDF export API error:", errData);
+                              console.error("PDF save error:", errData.error ?? res.status);
+                              alert(`Failed to save transcript: ${errData.error ?? "Unknown error"}`);
                             }
                           } catch (err) {
-                            console.error("PDF export failed:", err);
+                            console.error("PDF save failed:", err);
                           } finally {
                             setExportingPdf(null);
                           }
