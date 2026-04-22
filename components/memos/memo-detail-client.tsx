@@ -297,11 +297,11 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
               </p>
             </div>
 
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               {/* Recommendation badge/selector */}
               <select
                 className={cn(
-                  "text-sm font-medium px-3 py-1.5 rounded-xl border cursor-pointer",
+                  "h-[30px] text-xs font-medium px-3 rounded-xl border cursor-pointer",
                   recConfig.color
                 )}
                 value={memo.recommendation ?? "pending"}
@@ -314,7 +314,7 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
 
               {/* Status selector */}
               <select
-                className="text-sm border border-slate-300 rounded-xl px-3 py-1.5 bg-white cursor-pointer"
+                className="h-[30px] text-xs font-medium px-3 rounded-xl border border-slate-300 bg-white text-slate-700 cursor-pointer"
                 value={memo.status}
                 onChange={e => updateStatus("status", e.target.value)}
               >
@@ -327,7 +327,7 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
               {/* Export PDF */}
               <button
                 onClick={handleExportPdf}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                className="h-[30px] flex items-center gap-1.5 px-3 text-xs font-medium rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
                 title="Export memo as PDF"
               >
                 <Printer size={12} />
@@ -338,7 +338,7 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
               <button
                 onClick={handleRegenerate}
                 disabled={regenerating}
-                className="no-print flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                className="no-print h-[30px] flex items-center gap-1.5 px-3 text-xs font-medium rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
                 title="Regenerate memo with latest company data"
               >
                 <RefreshCw size={12} className={regenerating ? "animate-spin" : ""} />
