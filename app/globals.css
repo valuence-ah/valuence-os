@@ -119,3 +119,29 @@
 /* ── Sidebar nav — hide scrollbar cross-browser ── */
 .sidebar-nav::-webkit-scrollbar { display: none; }
 .sidebar-nav { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* ── IC Memo print / PDF export ── */
+@media print {
+  /* Hide everything except the memo content */
+  nav, aside, header, .no-print { display: none !important; }
+
+  /* Make the memo fill the page */
+  body, html { background: white !important; }
+  .memo-print-root { padding: 0 !important; overflow: visible !important; }
+  .memo-print-content {
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  /* Force all collapsible section bodies to show */
+  .memo-section-body { display: block !important; }
+
+  /* Page breaks */
+  section { page-break-inside: avoid; }
+
+  /* Remove hover effects */
+  button { display: none !important; }
+  select { border: none !important; background: transparent !important; }
+}

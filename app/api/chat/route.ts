@@ -216,7 +216,7 @@ INSTRUCTIONS:
 
   // ── 6. Stream ─────────────────────────────────────────────────────────────
   const result = streamText({
-    model: anthropic("claude-sonnet-4-5"),
+    model: anthropic("claude-sonnet-4-6"),
     system: systemPrompt,
     messages,
     temperature: 0.3,

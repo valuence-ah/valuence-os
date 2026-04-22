@@ -59,7 +59,7 @@ JSON:
 }`;
 
   const res = await client.messages.create({
-    model: "claude-haiku-4-5",
+    model: "claude-haiku-3-5",
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
@@ -98,7 +98,7 @@ JSON:
 }`;
 
   const res = await client.messages.create({
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-4-6",
     max_tokens: 512,
     messages: [{ role: "user", content: prompt }],
   });

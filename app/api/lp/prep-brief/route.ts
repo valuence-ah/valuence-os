@@ -70,6 +70,7 @@ Write a brief with these EXACT sections (use bold headers):
     const message = await anthropic.messages.create({
       model: cfg.model,
       max_tokens: cfg.max_tokens,
+      temperature: cfg.temperature,
       ...(cfg.system_prompt ? { system: cfg.system_prompt } : {}),
       messages: [{ role: "user", content: fullPrompt }],
     });

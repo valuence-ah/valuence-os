@@ -611,7 +611,11 @@ export function MeetingsClient({
   }, []);
 
   function handleResolved(meetingId: string) {
-    setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, resolution_status: "resolved" } : m));
+    setMeetings(prev => prev.map(m =>
+      m.id === meetingId
+        ? { ...m, resolution_status: "resolved", pending_resolutions: null }
+        : m
+    ));
   }
 
   const handleArchive = useCallback(async (id: string) => {

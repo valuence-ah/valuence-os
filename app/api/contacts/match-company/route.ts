@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
   let suggestion: string | null = null;
   try {
     const { text } = await generateText({
-      model: anthropic("claude-haiku-4-5"),
+      model: anthropic("claude-haiku-3-5"),
       maxTokens: 60,
       messages: [
         {

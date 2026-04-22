@@ -93,7 +93,7 @@ ${promptTemplate}`
   try {
     const cfg = aiConfig as { model: string; max_tokens: number; temperature: number; system_prompt: string | null } | null;
     const { text } = await generateText({
-      model: anthropic((cfg?.model ?? "claude-4-opus-20250514") as Parameters<typeof anthropic>[0]),
+      model: anthropic((cfg?.model ?? "claude-sonnet-4-6") as Parameters<typeof anthropic>[0]),
       maxTokens: cfg?.max_tokens ?? 400,
       temperature: cfg?.temperature ?? 0.3,
       ...(cfg?.system_prompt ? { system: cfg.system_prompt } : {}),

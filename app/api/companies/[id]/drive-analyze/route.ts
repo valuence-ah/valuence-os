@@ -76,7 +76,7 @@ Be specific — reference actual content from the documents. Keep it sharp and a
 
   try {
     const { text } = await generateText({
-      model: anthropic("claude-sonnet-4-5"),
+      model: anthropic("claude-sonnet-4-6"),
       maxTokens: 1500,
       messages: [{ role: "user", content: prompt }],
     });

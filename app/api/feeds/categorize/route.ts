@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
           );
 
           const response = await anthropic.messages.create({
-            model: "claude-haiku-4-5-20251001",
+            model: "claude-haiku-3-5",
             max_tokens: 600,
             system: `You are a VC analyst at Valuence Ventures, a deeptech fund focused on cleantech, biotech, and advanced materials (pre-seed & seed). Categorize news articles and explain thesis relevance. Respond ONLY in valid JSON with no markdown fences.`,
             messages: [

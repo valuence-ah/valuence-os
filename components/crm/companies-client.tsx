@@ -9,18 +9,19 @@ import { createClient } from "@/lib/supabase/client";
 import type { Company, CompanyType } from "@/lib/types";
 import {
   cn, formatCurrency, formatDate,
-  COMPANY_TYPE_COLORS, DEAL_STAGE_COLORS, DEAL_STAGE_LABELS, truncate,
+  COMPANY_TYPE_COLORS, COMPANY_TYPE_LABELS, DEAL_STAGE_COLORS, DEAL_STAGE_LABELS, truncate,
 } from "@/lib/utils";
 import { Plus, Search, ExternalLink, Globe, Filter } from "lucide-react";
 
 const TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: "all",              label: "All types" },
-  { value: "startup",          label: "Startups" },
-  { value: "lp",               label: "LPs" },
-  { value: "corporate",        label: "Corporates" },
-  { value: "ecosystem_partner",label: "Ecosystem Partners" },
-  { value: "fund",             label: "Funds" },
-  { value: "government",       label: "Government" },
+  { value: "all",               label: "All types" },
+  { value: "startup",           label: "Startup" },
+  { value: "fund",              label: "Fund / VC" },
+  { value: "lp",                label: "LP" },
+  { value: "corporate",         label: "Corporate" },
+  { value: "ecosystem_partner", label: "Ecosystem" },
+  { value: "government",        label: "Gov / Academic" },
+  { value: "other",             label: "Other" },
 ];
 
 const STAGE_OPTIONS = [
@@ -177,8 +178,8 @@ export function CompaniesClient({ initialCompanies, initialFilter }: Props) {
                       )}
                     </td>
                     <td>
-                      <span className={cn("badge capitalize", COMPANY_TYPE_COLORS[c.type] ?? "bg-slate-100 text-slate-600")}>
-                        {c.type.replace("_", " ")}
+                      <span className={cn("badge", COMPANY_TYPE_COLORS[c.type] ?? "bg-slate-100 text-slate-600")}>
+                        {COMPANY_TYPE_LABELS[c.type] ?? c.type}
                       </span>
                     </td>
                     <td>
@@ -249,11 +250,12 @@ export function CompaniesClient({ initialCompanies, initialFilter }: Props) {
                   <label className="block text-xs font-medium text-slate-600 mb-1.5">Type *</label>
                   <select className="select" value={form.type} onChange={e => setField("type", e.target.value as CompanyType)} required>
                     <option value="startup">Startup</option>
+                    <option value="fund">Fund / VC</option>
                     <option value="lp">LP</option>
                     <option value="corporate">Corporate</option>
-                    <option value="ecosystem_partner">Ecosystem Partner</option>
-                    <option value="fund">Fund</option>
-                    <option value="government">Government</option>
+                    <option value="ecosystem_partner">Ecosystem</option>
+                    <option value="government">Gov / Academic</option>
+                    <option value="other">Other</option>
                   </select>
                 </div>
 

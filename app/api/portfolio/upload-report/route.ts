@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-4-6",
     max_tokens: 2000,
     system: `You are a VC analyst extracting structured data from portfolio company reports for Valuence Ventures, an early-stage deeptech fund (cleantech, biotech, advanced materials). Extract ALL available data. Return ONLY valid JSON, no markdown fences.`,
     messages: [{

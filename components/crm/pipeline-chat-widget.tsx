@@ -272,34 +272,23 @@ export function PipelineChatWidget() {
         .va-panel { animation:vaSlideIn .2s ease-out; }
       `}</style>
 
-      {/* Floating button */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        title="Valuence AI Assistant"
-        className={cn(
-          "fixed bottom-6 right-6 z-50 w-14 h-14 rounded-2xl shadow-xl",
-          "flex items-center justify-center transition-all duration-200",
-          "bg-gradient-to-br from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700",
-          "hover:scale-105 active:scale-95",
-          open && "rotate-180 from-slate-700 to-slate-800 hover:from-slate-700 hover:to-slate-800"
-        )}
-      >
-        {open ? <X size={22} className="text-white" /> : <Sparkles size={22} className="text-white" />}
-        {!open && <span className="absolute inset-0 rounded-2xl animate-ping opacity-20 bg-blue-500" />}
-      </button>
+      {/* Floating button — hidden when panel is open (panel covers right side) */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          title="Valuence AI Assistant"
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-semibold rounded-full shadow-lg transition-colors"
+        >
+          <Sparkles size={14} />
+          AI Assistant
+          <span className="absolute inset-0 rounded-full animate-ping opacity-20 bg-blue-500" />
+        </button>
+      )}
 
-      {/* Chat panel */}
+      {/* Full-height right-side panel — matches Portfolio AI Assistant */}
       {open && (
         <div
-          className="va-panel fixed bottom-24 right-6 z-50 w-[390px] max-w-[calc(100vw-1.5rem)]"
-          style={{
-            height: "clamp(400px,70vh,580px)",
-            display: "flex",
-            flexDirection: "column",
-            borderRadius: "1.25rem",
-            boxShadow: "0 24px 64px rgba(0,0,0,.18),0 4px 16px rgba(0,0,0,.12)",
-            overflow: "hidden",
-          }}
+          className="va-panel fixed inset-y-0 right-0 z-50 w-[420px] bg-white shadow-2xl border-l border-slate-200 flex flex-col"
         >
           {/* Header */}
           <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 flex-shrink-0">

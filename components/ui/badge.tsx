@@ -122,15 +122,15 @@ export function getLpStageBadgeVariant(stage: string | null | undefined): BadgeV
 // ── Company type → badge variant ──────────────────────────────────────────────
 export function getTypeBadgeVariant(type: string | null | undefined): BadgeVariant {
   switch ((type ?? "").toLowerCase()) {
-    case "startup":           return "blue";
+    case "startup":            return "blue";
     case "fund":
-    case "investor":          return "violet";
+    case "investor":           return "violet";
     case "lp":
-    case "limited partner":   return "teal";
-    case "strategic partner":
-    case "ecosystem_partner": return "cyan";
-    case "corporate":         return "orange";
-    case "government":        return "slate";
-    default:                  return "default";
+    case "limited partner":    return "teal";
+    case "corporate":
+    case "strategic partner":  return "orange";
+    case "ecosystem_partner":  return "cyan";
+    case "government":         return "slate";
+    default:                   return "default";
   }
 }

@@ -14,7 +14,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 300;
 
-const MODEL = "claude-haiku-4-5";
+const MODEL = "claude-haiku-3-5";
 
 function buildPrompt(name: string, loc: string, stage: string, sectors: string[], website: string): string {
   const parts: string[] = [];

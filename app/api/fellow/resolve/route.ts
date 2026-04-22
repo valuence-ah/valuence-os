@@ -143,12 +143,14 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Mark meeting as resolved ──────────────────────────────────────────────────
+  // Also null out pending_resolutions so stale AI-detected data never shows on re-open.
   const { error: updateErr } = await supabase
     .from("interactions")
     .update({
       resolution_status: "resolved",
       company_id: companyId,
       contact_ids: contactIds.length ? contactIds : null,
+      pending_resolutions: null,
     })
     .eq("id", meeting_id);
 

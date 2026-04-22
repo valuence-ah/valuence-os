@@ -86,62 +86,97 @@ ${extraContext ? `\nADDITIONAL CONTEXT:\n${extraContext.slice(0, 3000)}` : ""}`;
   }
   messageContent.push({ type: "text", text: `Write an IC memo for this company:\n\n${context}` });
 
-  const cfg = aiConfig as { model?: string; max_tokens?: number; temperature?: number; system_prompt?: string | null } | null;
-  const systemPrompt = cfg?.system_prompt ?? `You are a senior venture capital analyst at Valuence Ventures, a deeptech fund focused on cleantech, techbio, and advanced materials at pre-seed and seed stage.
+  const cfg = aiConfig as { model?: string; max_tokens?: number; temperature?: number; system_prompt?: string | null; user_prompt?: string | null } | null;
+
+  // Default system prompt if none configured in Admin -> AI Config
+  const defaultSystemPrompt = `You are a senior venture capital analyst at Valuence Ventures, a deeptech fund focused on cleantech, techbio, and advanced materials at pre-seed and seed stage.
 
 Write a comprehensive IC (Investment Committee) memo based on the provided company data, meeting notes, transcripts, and deck. Be analytical, objective, and specific. Use Valuence's focus areas to evaluate fit.
 
 Return ONLY a valid JSON object with these exact keys (no markdown, no extra text):
 {
   "title": "string",
-  "executive_summary": "string (2-3 paragraphs: what the company does, why now, why Valuence)",
-  "problem_solution": "string",
-  "market_opportunity": "string",
-  "business_model": "string",
-  "traction": "string (metrics, customers, milestones)",
+  "company_overview": "string (2-3 paragraphs: what the company does, why now, why Valuence)",
+  "problem_statement": "string (1-2 paragraphs)",
+  "technology": "string",
+  "industry_sector": "string",
+  "competitive_analysis": "string (competitive landscape, moat)",
   "team": "string (founders backgrounds, relevant expertise)",
-  "competition": "string (competitive landscape, moat)",
-  "risks": "string (top 3-5 risks)",
+  "path_success": "string (unicorn potential, milestones, customer profile and scalability)",
+  "exit_analysis": "string (list 4-8 acquirers; for each: name, 1-2 bullet strategic rationale)",
+  "risks_mitigation": "string (address all 7 risk categories from the writing rules)",
   "financials": "string (current financials, use of proceeds)",
-  "investment_thesis": "string (why invest now, fit with Valuence thesis)",
+  "go_right": "string (what can go massively right)",
+  "top_reasons_invest": "string (Strong Rationale for Investing)",
+  "top_reasons_pass": "string (strong rationale for NOT investing; candid, evidence-based)",
+  "evaluation_score": "string (Tech Evaluation and Scores)",
   "recommendation": "invest" | "pass" | "more_diligence" | "pending"
 }`;
 
+  const systemPrompt = cfg?.system_prompt ?? defaultSystemPrompt;
+
   const { text } = await generateText({
-    model: anthropic((cfg?.model ?? "claude-4-opus-20250514") as Parameters<typeof anthropic>[0]),
-    maxTokens: cfg?.max_tokens ?? 16000,
+    model: anthropic((cfg?.model ?? "claude-sonnet-4-6") as Parameters<typeof anthropic>[0]),
+    maxTokens: cfg?.max_tokens ?? 12000,
     temperature: cfg?.temperature ?? 0.3,
     system: systemPrompt,
     messages: [{ role: "user", content: messageContent }],
   });
 
-  const clean = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  // Strip markdown code fences Claude sometimes wraps around JSON
+  const clean = text
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
 
-  let sections: Record<string, string>;
+  // Find the outermost {...} in case Claude prepended/appended text
+  const jsonStart = clean.indexOf("{");
+  const jsonEnd   = clean.lastIndexOf("}");
+  const jsonStr   = jsonStart !== -1 && jsonEnd !== -1 ? clean.slice(jsonStart, jsonEnd + 1) : clean;
+
+  let s: Record<string, string>;
   try {
-    sections = JSON.parse(clean);
+    s = JSON.parse(jsonStr);
   } catch {
-    throw new Error(`Failed to parse Claude response: ${text.slice(0, 200)}`);
+    throw new Error(`Claude returned invalid JSON. Preview: ${clean.slice(0, 300)}`);
   }
 
+  // ── Map Claude's response fields → DB columns ──────────────────────────────
+  // Handles both the new system prompt keys and the old legacy keys gracefully.
   const { data: memo, error } = await supabase
     .from("ic_memos")
     .insert({
       company_id,
-      title:              sections.title || `${company.name} — IC Memo`,
-      executive_summary:  sections.executive_summary,
-      problem_solution:   sections.problem_solution,
-      market_opportunity: sections.market_opportunity,
-      business_model:     sections.business_model,
-      traction:           sections.traction,
-      team:               sections.team,
-      competition:        sections.competition,
-      risks:              sections.risks,
-      financials:         sections.financials,
-      investment_thesis:  sections.investment_thesis,
-      recommendation:     sections.recommendation ?? "pending",
-      status:             "draft",
-      created_by:         created_by ?? null,
+      title:               s.title || `${company.name} — IC Memo`,
+
+      // ── New columns (matching user's AI Config system prompt) ──────────────
+      company_overview:    s.company_overview    ?? s.executive_summary   ?? null,
+      problem_statement:   s.problem_statement   ?? s.problem_solution    ?? null,
+      technology:          s.technology          ?? null,
+      industry_sector:     s.industry_sector     ?? s.market_opportunity  ?? null,
+      competitive_analysis:s.competitive_analysis ?? s.competition        ?? null,
+      team:                s.team                ?? null,
+      path_success:        s.path_success        ?? null,
+      exit_analysis:       s.exit_analysis       ?? null,
+      risks_mitigation:    s.risks_mitigation    ?? s.risks               ?? null,
+      financials:          s.financials          ?? null,
+      go_right:            s.go_right            ?? s.investment_thesis   ?? null,
+      top_reasons_invest:  s.top_reasons_invest  ?? null,
+      top_reasons_pass:    s.top_reasons_pass    ?? null,
+      evaluation_score:    s.evaluation_score    ?? null,
+      recommendation:      s.recommendation      ?? "pending",
+
+      // ── Legacy columns kept for backward compat ────────────────────────────
+      executive_summary:   s.company_overview    ?? s.executive_summary   ?? null,
+      problem_solution:    s.problem_statement   ?? s.problem_solution    ?? null,
+      market_opportunity:  s.industry_sector     ?? s.market_opportunity  ?? null,
+      competition:         s.competitive_analysis ?? s.competition        ?? null,
+      risks:               s.risks_mitigation    ?? s.risks               ?? null,
+      investment_thesis:   s.go_right            ?? s.investment_thesis   ?? null,
+
+      status:     "draft",
+      created_by: created_by ?? null,
     })
     .select("*, company:companies(id, name, type, sectors)")
     .single();

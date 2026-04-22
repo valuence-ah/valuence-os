@@ -15,11 +15,13 @@ export default async function StrategicPage() {
     .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };
 
-  // Match both singular `type` field AND `types` array (same logic as admin filter)
+  // Strategic = corporate, ecosystem_partner, and legacy "strategic partner"
+  const STRATEGIC_TYPES = new Set(["corporate", "ecosystem_partner", "ecosystem", "strategic partner", "strategic_partner", "eco partner", "eco_partner"]);
   const companies = (all ?? []).filter((c: Company) => {
-    const t = (c.type ?? "").toLowerCase();
-    const ts = ((c.types as string[] | null) ?? []).map((x: string) => x.toLowerCase());
-    return t.includes("strategic partner") || ts.some((x: string) => x.includes("strategic partner"));
+    const t = (c.type ?? "").toLowerCase().trim();
+    if (STRATEGIC_TYPES.has(t)) return true;
+    const ts = c.types ?? [];
+    return ts.some((x: string) => STRATEGIC_TYPES.has((x ?? "").toLowerCase().trim()));
   });
 
   return (

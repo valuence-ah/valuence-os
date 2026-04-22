@@ -15,17 +15,19 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json() as {
-    subject?:     string;
-    company_id?:  string | null;
-    contact_ids?: string[] | null;
-    archived?:    boolean;
+    subject?:      string;
+    company_id?:   string | null;
+    contact_ids?:  string[] | null;
+    archived?:     boolean;
+    meeting_type?: string | null;
   };
 
   const patch: Record<string, unknown> = {};
-  if (body.subject      !== undefined) patch.subject      = body.subject;
-  if (body.company_id   !== undefined) patch.company_id   = body.company_id;
-  if (body.contact_ids  !== undefined) patch.contact_ids  = body.contact_ids;
-  if (body.archived     !== undefined) patch.archived     = body.archived;
+  if (body.subject       !== undefined) patch.subject       = body.subject;
+  if (body.company_id    !== undefined) patch.company_id    = body.company_id;
+  if (body.contact_ids   !== undefined) patch.contact_ids   = body.contact_ids;
+  if (body.archived      !== undefined) patch.archived      = body.archived;
+  if (body.meeting_type  !== undefined) patch.meeting_type  = body.meeting_type;
 
   if (Object.keys(patch).length === 0)
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });

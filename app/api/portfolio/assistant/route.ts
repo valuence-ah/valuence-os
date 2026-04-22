@@ -154,7 +154,7 @@ ${fileParts.length > 0
 
   // ── Stream ─────────────────────────────────────────────────────────────────
   const result = streamText({
-    model: anthropic("claude-sonnet-4-5"),
+    model: anthropic("claude-sonnet-4-6"),
     system: systemPrompt,
     messages: augmentedMessages,
     maxTokens: 2048,

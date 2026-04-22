@@ -316,7 +316,7 @@ ${fullContext}`;
     : defaultSystemPrompt;
 
   // ── Stream response ────────────────────────────────────────────────────────
-  const modelId = aiConfig?.model ?? "claude-sonnet-4-5";
+  const modelId = aiConfig?.model ?? "claude-sonnet-4-6";
   console.log(`[pipeline-chat] model=${modelId} promptChars=${systemPrompt.length} msgs=${messages.length}`);
 
   // Trim system prompt if it exceeds ~400k chars (~100k tokens) to stay safe

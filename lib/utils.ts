@@ -107,12 +107,32 @@ export const LP_STAGE_COLORS: Record<string, string> = {
 };
 
 export const COMPANY_TYPE_COLORS: Record<string, string> = {
-  startup: "bg-blue-100 text-blue-700",
-  lp: "bg-purple-100 text-purple-700",
-  corporate: "bg-orange-100 text-orange-700",
-  ecosystem_partner: "bg-teal-100 text-teal-700",
-  fund: "bg-indigo-100 text-indigo-700",
-  government: "bg-gray-100 text-gray-700",
+  startup:          "bg-blue-100 text-blue-700",
+  fund:             "bg-indigo-100 text-indigo-700",
+  lp:               "bg-purple-100 text-purple-700",
+  corporate:        "bg-orange-100 text-orange-700",
+  ecosystem_partner:"bg-teal-100 text-teal-700",
+  government:       "bg-gray-100 text-gray-700",
+  other:            "bg-slate-100 text-slate-600",
+  // legacy → remap to canonical colours
+  investor:         "bg-indigo-100 text-indigo-700",
+  "limited partner":"bg-purple-100 text-purple-700",
+  "strategic partner":"bg-orange-100 text-orange-700",
+};
+
+// Human-readable labels for every company type value (canonical + legacy)
+export const COMPANY_TYPE_LABELS: Record<string, string> = {
+  startup:           "Startup",
+  fund:              "Fund / VC",
+  lp:                "LP",
+  corporate:         "Corporate",
+  ecosystem_partner: "Ecosystem",
+  government:        "Gov / Academic",
+  other:             "Other",
+  // legacy display labels
+  investor:          "Fund / VC",
+  "limited partner": "LP",
+  "strategic partner":"Corporate",
 };
 
 // Format a snake_case DB type value into a human-readable label

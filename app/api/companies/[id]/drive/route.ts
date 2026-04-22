@@ -18,10 +18,10 @@ export async function POST(
   const { folderUrl } = await req.json();
 
   // Extract folder ID from various Drive URL formats
-  const folderIdMatch = (folderUrl as string | undefined)?.match(
-    /\/folders\/([a-zA-Z0-9_-]+)/
-  );
-  const folderId = folderIdMatch?.[1] ?? null;
+  const url = folderUrl as string | undefined ?? "";
+  const folderMatch = url.match(/\/folders\/([a-zA-Z0-9_-]{5,})/);
+  const idMatch    = url.match(/[?&]id=([a-zA-Z0-9_-]{5,})/);
+  const folderId   = folderMatch?.[1] ?? idMatch?.[1] ?? null;
 
   const { error } = await supabase
     .from("companies")

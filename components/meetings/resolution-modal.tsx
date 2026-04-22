@@ -3,11 +3,34 @@
 // Shows for meetings with partial/unresolved CRM resolution status.
 // Allows users to confirm/create contacts and companies from meeting attendees.
 
-import { useState } from "react";
-import { X, Check, Building2, User, ChevronRight, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Check, Building2, User, ChevronRight, Loader2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 import type { Interaction } from "@/lib/types";
 import type { AttendeeResolution, CompanyResolution, PendingResolutions } from "@/lib/meeting-resolution";
+
+const TITLE_OPTIONS = [
+  "General Partner",
+  "Managing Partner",
+  "Partner",
+  "Venture Partner",
+  "Principal",
+  "Associate",
+  "Analyst",
+  "CEO / Co-Founder",
+  "CTO / Co-Founder",
+  "COO",
+  "CFO",
+  "President",
+  "Founder",
+  "VP",
+  "Director",
+  "Advisor",
+  "Professor / Researcher",
+  "Government Official",
+  "Other",
+] as const;
 
 const CONTACT_TYPES = [
   "Founder / Mgmt", "Investor", "Government/Academic", "Limited Partner",
@@ -55,6 +78,8 @@ interface CompanyForm {
   mode: "matched" | "new" | "skip";
 }
 
+interface CompanyStub { id: string; name: string; type: string; website?: string | null; }
+
 export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
   const resolutions = meeting.pending_resolutions as PendingResolutions | null;
   const externalAttendees: AttendeeResolution[] = resolutions?.attendees ?? [];
@@ -72,20 +97,57 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
     }))
   );
 
+  // Prefer the meeting's live-joined company over the (possibly stale) AI-detected pending_resolution
+  const effectiveCompany = meeting.company ?? companyRes?.company ?? null;
+
   const [companyForm, setCompanyForm] = useState<CompanyForm>({
-    existing_id: companyRes?.company?.id ?? "",
-    name: companyRes?.company?.name ?? companyRes?.extracted_name ?? "",
+    existing_id: effectiveCompany?.id ?? "",
+    name: effectiveCompany?.name ?? companyRes?.extracted_name ?? "",
     website: companyRes?.extracted_domain ? `https://${companyRes.extracted_domain}` : "",
-    type: companyRes?.company?.type ?? "startup",
+    type: (effectiveCompany as CompanyStub | null)?.type ?? companyRes?.company?.type ?? "startup",
     city: "",
     country: "",
-    mode: companyRes?.company ? "matched" : companyRes?.extracted_name ? "new" : "skip",
+    mode: effectiveCompany ? "matched" : companyRes?.extracted_name ? "new" : "skip",
   });
+
+  // Company search state
+  const [allCompanies, setAllCompanies] = useState<CompanyStub[]>([]);
+  const [companySearch, setCompanySearch] = useState("");
+  const [showCompanySearch, setShowCompanySearch] = useState(false);
+  const [matchedCompany, setMatchedCompany] = useState<CompanyStub | null>(
+    effectiveCompany
+      ? { id: effectiveCompany.id, name: effectiveCompany.name, type: (effectiveCompany as CompanyStub).type ?? "startup" }
+      : null
+  );
 
   const [addToPipeline, setAddToPipeline] = useState(false);
   const [pipelineStage, setPipelineStage] = useState<string>("First Meeting");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Load companies for search
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.from("companies").select("id, name, type, website").order("name").limit(500)
+      .then(({ data }) => { if (data) setAllCompanies(data as CompanyStub[]); });
+  }, []);
+
+  const filteredCompanies = allCompanies.filter(c =>
+    !companySearch || c.name.toLowerCase().includes(companySearch.toLowerCase())
+  ).slice(0, 8);
+
+  function handleSelectCompany(c: CompanyStub) {
+    setMatchedCompany(c);
+    setCompanyForm(f => ({ ...f, existing_id: c.id, name: c.name, type: c.type, mode: "matched" }));
+    setShowCompanySearch(false);
+    setCompanySearch("");
+  }
+
+  function handleUnmatch() {
+    setMatchedCompany(null);
+    setCompanyForm(f => ({ ...f, existing_id: "", mode: "matched" }));
+    setShowCompanySearch(true);
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -188,7 +250,7 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
                                   : "border-slate-200 text-slate-400 hover:border-slate-300"
                               )}
                             >
-                              {mode === "matched" ? "Matched" : mode === "new" ? "Create New" : "Skip"}
+                              {mode === "matched" ? "Re-Match" : mode === "new" ? "Create New" : "Skip"}
                             </button>
                           ))}
                         </div>
@@ -224,10 +286,14 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
                           </div>
                           <div>
                             <label className="text-[10px] text-slate-400 mb-0.5 block">Title</label>
-                            <input value={form.title}
+                            <select
+                              value={form.title}
                               onChange={e => setAttendeeForms(p => p.map((f, j) => j === i ? { ...f, title: e.target.value } : f))}
-                              placeholder="CEO, Founder…"
-                              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-400" />
+                              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400"
+                            >
+                              <option value="">Select title…</option>
+                              {TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
                           </div>
                           <div>
                             <label className="text-[10px] text-slate-400 mb-0.5 block">Contact Type</label>
@@ -265,7 +331,11 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
                   {(["matched", "new", "skip"] as const).map((mode) => (
                     <button
                       key={mode}
-                      onClick={() => setCompanyForm(f => ({ ...f, mode }))}
+                      onClick={() => {
+                        setCompanyForm(f => ({ ...f, mode }));
+                        if (mode === "matched") setShowCompanySearch(!matchedCompany);
+                        else setShowCompanySearch(false);
+                      }}
                       className={cn(
                         "text-[10px] px-2 py-0.5 rounded border font-medium transition-colors",
                         companyForm.mode === mode
@@ -274,21 +344,59 @@ export function ResolutionModal({ meeting, onClose, onResolved }: Props) {
                           : "border-slate-200 text-slate-400 hover:border-slate-300"
                       )}
                     >
-                      {mode === "matched" ? "Matched" : mode === "new" ? "Create New" : "Skip"}
+                      {mode === "matched" ? "Re-Match" : mode === "new" ? "Create New" : "Skip"}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {companyForm.mode === "matched" && companyRes?.company && (
+              {/* Matched company display — with Unmatch + Re-match */}
+              {companyForm.mode === "matched" && matchedCompany && !showCompanySearch && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-emerald-800">{companyRes.company.name}</p>
-                    <p className="text-[10px] text-emerald-600">{companyRes.company.type}</p>
+                    <p className="text-xs font-semibold text-emerald-800">{matchedCompany.name}</p>
+                    <p className="text-[10px] text-emerald-600 capitalize">{matchedCompany.type}</p>
                   </div>
-                  <span className="text-[9px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-200 rounded font-medium">
-                    {companyRes.confidence === "high" ? "Exact match" : "Name match"}
-                  </span>
+                  <button
+                    onClick={handleUnmatch}
+                    className="text-[10px] px-2 py-0.5 rounded border border-slate-300 text-slate-500 hover:bg-slate-100 transition-colors"
+                  >
+                    Unmatch
+                  </button>
+                </div>
+              )}
+
+              {/* Company search — shown when mode=matched but no company selected yet, or after unmatch */}
+              {companyForm.mode === "matched" && (!matchedCompany || showCompanySearch) && (
+                <div className="space-y-1.5">
+                  <div className="relative">
+                    <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      autoFocus
+                      value={companySearch}
+                      onChange={e => setCompanySearch(e.target.value)}
+                      placeholder="Search existing companies…"
+                      className="w-full text-xs border border-teal-300 rounded-lg pl-7 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                    />
+                  </div>
+                  {filteredCompanies.length > 0 ? (
+                    <div className="border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100">
+                      {filteredCompanies.map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => handleSelectCompany(c)}
+                          className="w-full text-left px-3 py-2 hover:bg-teal-50 transition-colors flex items-center justify-between"
+                        >
+                          <span className="text-xs font-medium text-slate-800">{c.name}</span>
+                          <span className="text-[10px] text-slate-400 capitalize">{c.type}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : companySearch ? (
+                    <p className="text-[11px] text-slate-400 pl-1">No companies found — try "Create New" instead.</p>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 pl-1">Type to search companies…</p>
+                  )}
                 </div>
               )}
 

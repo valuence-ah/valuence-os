@@ -5,6 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { generateMemo } from "@/lib/memo-generator";
 
+// IC memo generation can take 60–120 s with large context + 16k output tokens.
+// Must override Vercel's default 10 s serverless timeout.
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
 

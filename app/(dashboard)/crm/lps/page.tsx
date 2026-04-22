@@ -11,14 +11,21 @@ export const metadata = { title: "Limited Partners" };
 export default async function LpsPage() {
   const supabase = createAdminClient();
 
-  // Filter at DB level: match type = "limited partner" OR types array contains "limited partner"
-  const { data: companies } = (await supabase
+  // Fetch all companies and filter client-side to handle all LP type variants reliably
+  const { data: allCompanies } = (await supabase
     .from("companies")
     .select("*")
-    .or('type.ilike.%limited partner%,types.cs.{limited partner}')
     .order("name", { ascending: true })
-    .limit(1000)
+    .limit(5000)
   ) as unknown as { data: Company[] | null; error: unknown };
+
+  const LP_TYPES = new Set(["lp", "limited partner", "limited_partner"]);
+  const companies = (allCompanies ?? []).filter(c => {
+    const t = (c.type ?? "").toLowerCase().trim();
+    if (LP_TYPES.has(t)) return true;
+    const ts = c.types ?? [];
+    return ts.some((v: string) => LP_TYPES.has((v ?? "").toLowerCase().trim()));
+  });
 
   return (
     <div className="flex flex-col h-full">

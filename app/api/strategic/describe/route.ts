@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   const { company_id, name, sectors } = await req.json();
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const msg = await anthropic.messages.create({
-    model: "claude-haiku-4-5",
+    model: "claude-haiku-3-5",
     max_tokens: 200,
     messages: [{ role: "user", content: `Write a factual description of ${name} (sectors: ${(sectors ?? []).join(", ")}) in exactly 60 words or fewer. Be specific about what they do, their focus areas, and their relevance to a cleantech/techbio VC fund. No fluff. Just facts.` }],
   });

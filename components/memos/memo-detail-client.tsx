@@ -1,6 +1,6 @@
 "use client";
 // ─── Memo Detail Client ───────────────────────────────────────────────────────
-// Displays a full 13-section IC memo with collapsible sections.
+// Displays a full 14-section IC memo with collapsible sections.
 // Allows editing any section inline and updating recommendation/status.
 
 import { useState } from "react";
@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { IcMemo } from "@/lib/types";
 import { formatDate, cn } from "@/lib/utils";
-import { Edit3, X, RefreshCw, CheckCircle, XCircle, AlertCircle, Clock, ChevronDown } from "lucide-react";
+import { Edit3, X, RefreshCw, CheckCircle, XCircle, AlertCircle, Clock, ChevronDown, Printer } from "lucide-react";
 
 const REC_CONFIG = {
   invest:         { label: "Invest",          color: "bg-green-100 text-green-700 border-green-200",   icon: CheckCircle },
@@ -20,17 +20,18 @@ const REC_CONFIG = {
 const SECTIONS = [
   { key: "company_overview",      label: "Company Overview",                       defaultOpen: true  },
   { key: "problem_statement",     label: "Problem Statement",                      defaultOpen: true  },
-  { key: "technology_deep_dive",  label: "Technology Deep Dive",                   defaultOpen: true  },
-  { key: "industry_analysis",     label: "Industry and Sector Analysis",           defaultOpen: false },
+  { key: "technology",            label: "Technology Deep Dive",                   defaultOpen: true  },
+  { key: "industry_sector",       label: "Industry and Sector Analysis",           defaultOpen: false },
   { key: "competitive_analysis",  label: "Competitive Analysis",                   defaultOpen: false },
   { key: "team",                  label: "Team",                                   defaultOpen: true  },
-  { key: "path_to_success",       label: "Path to Success",                        defaultOpen: false },
+  { key: "path_success",          label: "Path to Success",                        defaultOpen: false },
   { key: "exit_analysis",         label: "Exit Analysis",                          defaultOpen: false },
-  { key: "key_risks",             label: "Key Risks and Mitigation Strategies",    defaultOpen: false },
+  { key: "risks_mitigation",      label: "Key Risks and Mitigation Strategies",    defaultOpen: false },
   { key: "financials",            label: "Financials",                             defaultOpen: false },
-  { key: "bull_case",             label: "What Can Go Massively Right",            defaultOpen: false },
-  { key: "bear_case",             label: "Strong Rationale for NOT Investing",     defaultOpen: false },
-  { key: "tech_evaluation",       label: "Tech Evaluation and Scores",             defaultOpen: true  },
+  { key: "go_right",              label: "What Can Go Massively Right",            defaultOpen: false },
+  { key: "top_reasons_invest",    label: "Strong Rationale for Investing",         defaultOpen: false },
+  { key: "top_reasons_pass",      label: "Strong Rationale for NOT Investing",     defaultOpen: false },
+  { key: "evaluation_score",      label: "Tech Evaluation and Scores",             defaultOpen: true  },
 ] as const;
 
 type SectionKey = typeof SECTIONS[number]["key"];
@@ -53,21 +54,22 @@ function getSectionContent(memo: MemoWithCompany, key: string): string {
   if (key in memo && memo[key as keyof typeof memo]) {
     return String(memo[key as keyof typeof memo] ?? "");
   }
-  // Fallback mapping from new section keys to old column names
+  // Fallback mapping from new section keys to old column names (for legacy memos)
   const fallback: Record<string, string> = {
-    company_overview:     (memo as any).executive_summary ?? "",
-    problem_statement:    (memo as any).problem_solution ?? "",
-    technology_deep_dive: "",
-    industry_analysis:    (memo as any).market_opportunity ?? "",
-    competitive_analysis: (memo as any).competition ?? "",
-    team:                 (memo as any).team ?? "",
-    path_to_success:      [(memo as any).business_model, (memo as any).traction].filter(Boolean).join("\n\n"),
-    exit_analysis:        "",
-    key_risks:            (memo as any).risks ?? "",
-    financials:           (memo as any).financials ?? "",
-    bull_case:            (memo as any).investment_thesis ?? "",
-    bear_case:            "",
-    tech_evaluation:      "",
+    company_overview:    (memo as any).executive_summary  ?? "",
+    problem_statement:   (memo as any).problem_solution   ?? "",
+    technology:          "",
+    industry_sector:     (memo as any).market_opportunity ?? "",
+    competitive_analysis:(memo as any).competition        ?? "",
+    team:                (memo as any).team               ?? "",
+    path_success:        [(memo as any).business_model, (memo as any).traction].filter(Boolean).join("\n\n"),
+    exit_analysis:       "",
+    risks_mitigation:    (memo as any).risks              ?? "",
+    financials:          (memo as any).financials         ?? "",
+    go_right:            (memo as any).investment_thesis  ?? "",
+    top_reasons_invest:  "",
+    top_reasons_pass:    "",
+    evaluation_score:    "",
   };
   return fallback[key] ?? "";
 }
@@ -126,6 +128,7 @@ function MemoSection({
   defaultOpen = true,
   sectionKey,
   onEdit,
+  forceOpen = false,
 }: {
   number: number;
   title: string;
@@ -133,9 +136,11 @@ function MemoSection({
   defaultOpen?: boolean;
   sectionKey: string;
   onEdit: (key: string) => void;
+  forceOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [hovered, setHovered] = useState(false);
+  const isOpen = forceOpen || open;
 
   return (
     <section className="border-b border-gray-100 py-4">
@@ -147,17 +152,17 @@ function MemoSection({
         <h2 className="text-sm font-semibold text-gray-900 flex-1">{title}</h2>
         <ChevronDown
           size={14}
-          className={`text-gray-400 transition-transform flex-shrink-0 ${open ? "rotate-180" : ""}`}
+          className={`text-gray-400 transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`}
         />
       </button>
-      {open && (
+      {isOpen && (
         <div
-          className="mt-3 ml-8 text-sm text-gray-700 leading-relaxed relative group"
+          className="memo-section-body mt-3 ml-8 text-sm text-gray-700 leading-relaxed relative group"
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
         >
           {children}
-          {hovered && (
+          {hovered && !forceOpen && (
             <button
               onClick={() => onEdit(sectionKey)}
               className="absolute top-0 right-0 text-gray-300 hover:text-blue-500 p-1 rounded transition-colors"
@@ -182,18 +187,37 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
   const [editText, setEditText]  = useState("");
   const [saving, setSaving]      = useState(false);
   const [regenerating, setRegen] = useState(false);
+  const [regenError, setRegenError] = useState<string | null>(null);
+
+  function handleExportPdf() {
+    window.open(`/print/memos/${memo.id}`, "_blank");
+  }
 
   async function handleRegenerate() {
     if (!memo.company_id) return;
     setRegen(true);
+    setRegenError(null);
     try {
       const res = await fetch("/api/memos/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ company_id: memo.company_id }),
       });
-      const json = await res.json();
-      if (json.data?.id) router.push(`/memos/${json.data.id}`);
+      // Guard: Vercel may return an HTML 504 page — parse defensively
+      let json: Record<string, unknown> = {};
+      try { json = await res.json(); } catch {
+        setRegenError(res.status === 504
+          ? "Generation timed out — try again (memo generation can take up to 60 s)"
+          : `Server returned an unexpected response (${res.status})`);
+        return;
+      }
+      if (!res.ok || json.error) {
+        setRegenError((json.error as string) ?? `Server error ${res.status}`);
+        return;
+      }
+      if ((json.data as { id?: string })?.id) router.push(`/memos/${(json.data as { id: string }).id}`);
+    } catch (err) {
+      setRegenError(err instanceof Error ? err.message : "Network error");
     } finally {
       setRegen(false);
     }
@@ -231,8 +255,8 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
   const recConfig = REC_CONFIG[memo.recommendation as keyof typeof REC_CONFIG] ?? REC_CONFIG.pending;
 
   return (
-    <div className="flex-1 overflow-auto p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="memo-print-root flex-1 overflow-auto p-6">
+      <div className="memo-print-content max-w-4xl mx-auto space-y-6">
 
         {/* ── Header ────────────────────────────────────────────────────────── */}
         <div className="card p-6">
@@ -249,7 +273,7 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
                   </a>
                   {memo.company.sectors && (
                     <span className="text-slate-400 text-sm">
-                      · {memo.company.sectors.slice(0, 2).join(", ")}
+                      · {[...new Set(memo.company.sectors)].slice(0, 2).join(" · ")}
                     </span>
                   )}
                 </div>
@@ -286,11 +310,21 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
                 <option value="rejected">Rejected</option>
               </select>
 
+              {/* Export PDF */}
+              <button
+                onClick={handleExportPdf}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                title="Export memo as PDF"
+              >
+                <Printer size={12} />
+                Export PDF
+              </button>
+
               {/* Regenerate */}
               <button
                 onClick={handleRegenerate}
                 disabled={regenerating}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                className="no-print flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
                 title="Regenerate memo with latest company data"
               >
                 <RefreshCw size={12} className={regenerating ? "animate-spin" : ""} />
@@ -300,7 +334,15 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
           </div>
         </div>
 
-        {/* ── 13 Collapsible Sections ───────────────────────────────────────── */}
+        {/* ── Regenerate error banner ──────────────────────────────────────── */}
+        {regenError && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
+            <span>⚠ Regeneration failed: {regenError}</span>
+            <button onClick={() => setRegenError(null)} className="text-red-400 hover:text-red-600 font-medium">Dismiss</button>
+          </div>
+        )}
+
+        {/* ── 14 Collapsible Sections ───────────────────────────────────────── */}
         <div className="card px-6 py-2">
           {SECTIONS.map(({ key, label, defaultOpen }, index) => {
             const isEditing = editingKey === key;
@@ -353,7 +395,7 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
                 onEdit={startEdit}
               >
                 {content ? (
-                  key === "tech_evaluation" ? (
+                  key === "evaluation_score" ? (
                     <TechScoreCard content={content} />
                   ) : (
                     <p className="whitespace-pre-wrap">{content}</p>

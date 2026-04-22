@@ -220,7 +220,7 @@ async function generateSummaries(signals: RawSignal[]): Promise<Map<number, stri
 
   try {
     const message = await client.messages.create({
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-3-5",
       max_tokens: 2048,
       system: SUMMARY_SYSTEM_PROMPT,
       messages: [

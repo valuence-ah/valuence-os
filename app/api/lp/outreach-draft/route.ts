@@ -38,6 +38,7 @@ Keep the total email under 180 words. Avoid generic VC language. Be specific and
     const message = await anthropic.messages.create({
       model: cfg.model,
       max_tokens: cfg.max_tokens,
+      temperature: cfg.temperature,
       ...(cfg.system_prompt ? { system: cfg.system_prompt } : {}),
       messages: [{ role: "user", content: fullPrompt }],
     });

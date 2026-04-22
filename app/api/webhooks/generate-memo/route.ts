@@ -7,6 +7,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, validateWebhookSecret } from "@/lib/supabase/admin";
 import { generateMemo } from "@/lib/memo-generator";
 
+// IC memo generation can take 60–120 s with large context + 16k output tokens.
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
   if (!validateWebhookSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
