@@ -316,15 +316,73 @@ function ContactTypeCell({ row, onSaved }: { row: ContactRow; onSaved: (id: stri
 // ─── TitleCell: portal single-select for contact title ───────────────────────
 
 const TITLE_OPTIONS_LIST = [
-  "Admin", "Advisor", "Analyst", "Associate", "Board Member",
-  "CEO", "CEO / Co-founder", "CFO", "Chief of Staff", "Co-Founder",
-  "COO", "CTO", "CTO / Co-founder", "Director", "Founder",
-  "General Counsel", "General Partner", "Head of Investments",
-  "Head of Portfolio", "Investment Manager", "Managing Director",
-  "Managing Partner", "Operating Partner", "Partner", "Portfolio Manager",
-  "President", "Principal", "Senior Associate", "Senior Vice President",
-  "Venture Partner", "Vice President", "Other",
+  // Founder / C-suite combos
+  "CEO / Co-founder", "CTO / Co-founder", "Co-Founder",
+  // Pure C-suite
+  "CEO", "CTO", "COO", "CFO", "President", "Chairman",
+  // Directors
+  "Managing Director", "Senior Director", "Director", "General Manager",
+  // Partners
+  "General Partner", "Managing Partner", "Partner", "Venture Partner",
+  // VP / Senior
+  "VP", "Senior Vice President", "Senior Associate",
+  // Investment
+  "Principal", "Investment Associate", "Associate", "Analyst",
+  "Head of Investments", "Investor Relations",
+  // Business
+  "Business Development", "Corporate Development", "Manager",
+  // Advisory / Other
+  "Board Member", "Advisor", "Professor",
+  "Admin", "Executive Assistant", "Lawyer", "Other",
 ];
+
+const TITLE_COLORS: Record<string, { bg: string; color: string }> = {
+  // Founder combos — violet
+  "CEO / Co-founder":  { bg: "#f5f3ff", color: "#6d28d9" },
+  "CTO / Co-founder":  { bg: "#f5f3ff", color: "#6d28d9" },
+  "Co-Founder":        { bg: "#f5f3ff", color: "#6d28d9" },
+  // Pure C-suite — blue
+  "CEO":               { bg: "#eff6ff", color: "#1d4ed8" },
+  "CTO":               { bg: "#eff6ff", color: "#1d4ed8" },
+  "COO":               { bg: "#eff6ff", color: "#1d4ed8" },
+  "CFO":               { bg: "#eff6ff", color: "#1d4ed8" },
+  "President":         { bg: "#eff6ff", color: "#1d4ed8" },
+  "Chairman":          { bg: "#eff6ff", color: "#1d4ed8" },
+  // Directors — indigo
+  "Managing Director": { bg: "#eef2ff", color: "#4338ca" },
+  "Senior Director":   { bg: "#eef2ff", color: "#4338ca" },
+  "Director":          { bg: "#eef2ff", color: "#4338ca" },
+  "General Manager":   { bg: "#eef2ff", color: "#4338ca" },
+  // Partners — emerald
+  "General Partner":   { bg: "#ecfdf5", color: "#065f46" },
+  "Managing Partner":  { bg: "#ecfdf5", color: "#065f46" },
+  "Partner":           { bg: "#ecfdf5", color: "#065f46" },
+  "Venture Partner":   { bg: "#ecfdf5", color: "#065f46" },
+  // VP / Senior — sky
+  "VP":                { bg: "#f0f9ff", color: "#0369a1" },
+  "Senior Vice President": { bg: "#f0f9ff", color: "#0369a1" },
+  "Senior Associate":  { bg: "#f0f9ff", color: "#0369a1" },
+  // Investment — amber
+  "Principal":         { bg: "#fffbeb", color: "#92400e" },
+  "Investment Associate": { bg: "#fffbeb", color: "#92400e" },
+  "Associate":         { bg: "#fffbeb", color: "#92400e" },
+  "Analyst":           { bg: "#fffbeb", color: "#92400e" },
+  "Head of Investments": { bg: "#fffbeb", color: "#92400e" },
+  "Investor Relations":  { bg: "#fffbeb", color: "#92400e" },
+  // Business — orange
+  "Business Development": { bg: "#fff7ed", color: "#c2410c" },
+  "Corporate Development": { bg: "#fff7ed", color: "#c2410c" },
+  "Manager":           { bg: "#fff7ed", color: "#c2410c" },
+  // Advisory / other — slate
+  "Board Member":      { bg: "#f1f5f9", color: "#475569" },
+  "Advisor":           { bg: "#f1f5f9", color: "#475569" },
+  "Professor":         { bg: "#f1f5f9", color: "#475569" },
+  "Admin":             { bg: "#f8fafc", color: "#64748b" },
+  "Executive Assistant": { bg: "#f8fafc", color: "#64748b" },
+  "Lawyer":            { bg: "#f8fafc", color: "#64748b" },
+  "Other":             { bg: "#f8fafc", color: "#64748b" },
+};
+const TITLE_COLOR_DEFAULT = { bg: "#f8fafc", color: "#64748b" };
 
 function TitleCell({ row, onSaved }: { row: ContactRow; onSaved: (id: string, title: string) => void }) {
   const supabase = createClient();
@@ -337,7 +395,7 @@ function TitleCell({ row, onSaved }: { row: ContactRow; onSaved: (id: string, ti
   function openDropdown(e: React.MouseEvent) {
     e.stopPropagation();
     if (cellRef.current) {
-      setPos(getPortalPos(cellRef.current.getBoundingClientRect(), 320, 200));
+      setPos(getPortalPos(cellRef.current.getBoundingClientRect(), 340, 260));
     }
     setOpen(true);
   }
@@ -359,33 +417,118 @@ function TitleCell({ row, onSaved }: { row: ContactRow; onSaved: (id: string, ti
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  const c = TITLE_COLORS[current] ?? TITLE_COLOR_DEFAULT;
   return (
     <div ref={cellRef} onClick={openDropdown}
       style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer" }}
       title="Click to edit">
       {current ? (
-        <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#1e293b", fontWeight: 500 }}>
+        <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 500 }}>
           {saving ? "Saving…" : current}
         </span>
       ) : (
-        <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#cbd5e1" }}>{saving ? "Saving…" : "—"}</span>
+        <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#cbd5e1" }}>{saving ? "Saving…" : "Click to set"}</span>
       )}
       {open && pos && createPortal(
         <div
           style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 99999, overflow: "hidden", fontFamily: "inherit" }}
           onMouseDown={e => e.stopPropagation()}
         >
-          <div style={{ padding: "6px 0", maxHeight: 280, overflowY: "auto" }}>
+          <div style={{ padding: "6px 0", maxHeight: 300, overflowY: "auto" }}>
             <div onClick={e => pick("", e)}
-              style={{ padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>
-              — No title
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}>
+              <div style={{ width: 14, height: 14, flexShrink: 0, borderRadius: "50%", border: `2px solid ${!current ? "#3b82f6" : "#d1d5db"}`, background: !current ? "#3b82f6" : "#fff" }} />
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>— No title</span>
             </div>
-            {TITLE_OPTIONS_LIST.map(opt => (
-              <div key={opt} onClick={e => pick(opt, e)}
-                style={{ padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#1e293b", background: opt === current ? "#f0f9ff" : "transparent" }}>
-                {opt}
-              </div>
-            ))}
+            {TITLE_OPTIONS_LIST.map(opt => {
+              const tc = TITLE_COLORS[opt] ?? TITLE_COLOR_DEFAULT;
+              return (
+                <div key={opt} onClick={e => pick(opt, e)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", cursor: "pointer", userSelect: "none", background: opt === current ? "#f0f9ff" : "transparent" }}>
+                  <div style={{ width: 14, height: 14, flexShrink: 0, borderRadius: "50%", border: `2px solid ${opt === current ? "#3b82f6" : "#d1d5db"}`, background: opt === current ? "#3b82f6" : "#fff" }} />
+                  <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: tc.bg, color: tc.color, fontWeight: 500 }}>{opt}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+// ─── StatusCell: badge bubble picker for contact status ──────────────────────
+
+const STATUS_OPTIONS_LIST = ["active", "pending"];
+const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+  active:  { bg: "#dcfce7", color: "#15803d" },
+  pending: { bg: "#fef9c3", color: "#854d0e" },
+};
+const STATUS_COLOR_DEFAULT = { bg: "#f8fafc", color: "#64748b" };
+
+function StatusCell({ row, onSaved }: { row: ContactRow; onSaved: (id: string, status: string) => void }) {
+  const supabase = createClient();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const cellRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const current = (row.status as string) ?? "";
+
+  function openDropdown(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (cellRef.current) {
+      setPos(getPortalPos(cellRef.current.getBoundingClientRect(), 200, 120));
+    }
+    setOpen(true);
+  }
+
+  async function pick(opt: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setOpen(false);
+    if (!row.id) return;
+    setSaving(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from("contacts") as any).update({ status: opt || null }).eq("id", row.id);
+    setSaving(false);
+    onSaved(row.id, opt);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) { if (!cellRef.current?.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const c = STATUS_COLORS[current.toLowerCase()] ?? STATUS_COLOR_DEFAULT;
+  return (
+    <div ref={cellRef} onClick={openDropdown}
+      style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", padding: "0 6px", cursor: "pointer" }}
+      title="Click to edit">
+      {current ? (
+        <span style={{ fontSize: 10, padding: "1px 8px", borderRadius: 9999, background: c.bg, color: c.color, fontWeight: 600, textTransform: "capitalize" }}>
+          {saving ? "Saving…" : current}
+        </span>
+      ) : (
+        <span style={{ fontSize: 11, color: saving ? "#3b82f6" : "#cbd5e1" }}>{saving ? "Saving…" : "Click to set"}</span>
+      )}
+      {open && pos && createPortal(
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 99999, overflow: "hidden", fontFamily: "inherit" }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div style={{ padding: "6px 0" }}>
+            {STATUS_OPTIONS_LIST.map(opt => {
+              const sc = STATUS_COLORS[opt] ?? STATUS_COLOR_DEFAULT;
+              return (
+                <div key={opt} onClick={e => pick(opt, e)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", cursor: "pointer", userSelect: "none", background: opt === current ? "#f0f9ff" : "transparent" }}>
+                  <div style={{ width: 14, height: 14, flexShrink: 0, borderRadius: "50%", border: `2px solid ${opt === current ? "#3b82f6" : "#d1d5db"}`, background: opt === current ? "#3b82f6" : "#fff" }} />
+                  <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 9999, background: sc.bg, color: sc.color, fontWeight: 600, textTransform: "capitalize" }}>{opt}</span>
+                </div>
+              );
+            })}
           </div>
         </div>,
         document.body
@@ -2287,10 +2430,18 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       {
         key: "status",
         name: "Status",
-        width: 100,
+        width: 110,
         sortable: true,
         resizable: true,
-        renderEditCell: makeComboEditor<ContactRow>(["active","pending"]),
+        editable: false,
+        renderCell: ({ row }: { row: ContactRow }) => (
+          <StatusCell
+            row={row}
+            onSaved={(id, status) => {
+              setContacts(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+            }}
+          />
+        ),
       },
       {
         key: "created_at",
