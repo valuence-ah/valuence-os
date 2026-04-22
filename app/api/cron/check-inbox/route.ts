@@ -18,7 +18,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const DEFAULT_MAILBOXES  = (process.env.OUTLOOK_MAILBOXES ?? "andrew@valuence.vc")
   .split(",").map(m => m.trim().toLowerCase()).filter(Boolean);
-const DEFAULT_LOOKBACK   = 2;    // hours (covers hourly run + overlap)
+const DEFAULT_LOOKBACK   = 25;   // hours — covers a full daily run + 1-hour buffer
 const DEFAULT_MAX        = 50;   // emails per mailbox per folder
 const DEFAULT_AUTO_CO    = true; // auto-create company stubs
 

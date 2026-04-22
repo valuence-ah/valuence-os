@@ -605,6 +605,10 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [pipelineItems,  setPipelineItems]  = useState<FundCompany[]>([]);
   const [fundLoaded,     setFundLoaded]     = useState(false);
   const [fundLoading,    setFundLoading]    = useState(false);
+  // AI-generated narrative for Intelligence tab
+  const [fundNarrative,        setFundNarrative]        = useState<string | null>(null);
+  const [fundNarrativeLoading, setFundNarrativeLoading] = useState(false);
+  const [fundNarrativeError,   setFundNarrativeError]   = useState<string | null>(null);
 
   // LP Starred intel — persisted to localStorage
   const [lpStarredIntel, setLpStarredIntel] = useState<Record<string, string[]>>({});
@@ -911,6 +915,26 @@ export function LpViewClient({ initialCompanies }: Props) {
       setFundLoaded(true);
     } catch { /* silent */ } finally {
       setFundLoading(false);
+    }
+  }
+
+  // Generate AI narrative for Intelligence tab via /api/lp/intelligence-snapshot
+  async function generateFundNarrative() {
+    if (fundNarrativeLoading) return;
+    setFundNarrativeLoading(true);
+    setFundNarrativeError(null);
+    try {
+      const res = await fetch("/api/lp/intelligence-snapshot", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json() as { narrative?: string };
+        setFundNarrative(data.narrative ?? null);
+      } else {
+        setFundNarrativeError("Failed to generate narrative");
+      }
+    } catch {
+      setFundNarrativeError("Network error");
+    } finally {
+      setFundNarrativeLoading(false);
     }
   }
 
@@ -1965,11 +1989,45 @@ export function LpViewClient({ initialCompanies }: Props) {
                   )}
                 </div>
 
-                {/* Refresh link */}
+                {/* AI-generated narrative section */}
+                <div className="border-t border-slate-100 pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles size={10} className="text-purple-500" /> AI Fund Narrative
+                    </p>
+                    <button
+                      onClick={generateFundNarrative}
+                      disabled={fundNarrativeLoading}
+                      className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {fundNarrativeLoading
+                        ? <><Loader2 size={10} className="animate-spin" />Generating…</>
+                        : <><Sparkles size={10} />{fundNarrative ? "Regenerate" : "Generate"}</>
+                      }
+                    </button>
+                  </div>
+                  {fundNarrativeError && (
+                    <p className="text-xs text-red-400 italic mb-2">{fundNarrativeError}</p>
+                  )}
+                  {fundNarrative ? (
+                    <div className="bg-purple-50 border border-purple-100 rounded-xl p-3.5 space-y-2.5">
+                      {fundNarrative.split(/\n{2,}/).map((para, i) => (
+                        <p key={i} className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">{para.trim()}</p>
+                      ))}
+                    </div>
+                  ) : !fundNarrativeLoading && (
+                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center">
+                      <p className="text-xs text-slate-400">Click Generate to create an LP-ready fund narrative</p>
+                      <p className="text-[10px] text-slate-300 mt-1">Prompt is configurable in Admin → AI Config → LP Intelligence Snapshot</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Refresh data link */}
                 {fundLoaded && (
                   <button onClick={() => { setFundLoaded(false); fetchFundSnapshot(); }}
                     className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1 mx-auto">
-                    <RefreshCw size={9} /> Refresh snapshot
+                    <RefreshCw size={9} /> Refresh company data
                   </button>
                 )}
               </div>

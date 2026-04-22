@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2, Save, Check, Bot, FileText, Sparkles, Mail, ClipboardList, Mic, Radar, Search, Building2, Handshake, Newspaper, Swords } from "lucide-react";
+import { Loader2, Save, Check, Bot, FileText, Sparkles, Mail, ClipboardList, Mic, Radar, Search, Building2, Handshake, Newspaper, Swords, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Model options ─────────────────────────────────────────────────────────────
@@ -152,6 +152,17 @@ const TABS = [
     variables: ["{{company_name}}", "{{description}}", "{{sectors}}", "{{stage}}", "{{kpi_context}}", "{{milestones}}", "{{documents}}"],
     promptLabel: "Prompt Template",
     hint: "Leave blank to use the built-in default. If set, this replaces the full prompt — include the JSON output format. Must return an array with entity_name, description, fit_level (high/medium/low), warmth fields. {{documents}} injects extracted text from the company's pitch deck and data room (up to 5 most recent docs, ~1500 chars each) — use this to ground competitors in the company's actual technology.",
+  },
+  {
+    name: "lp_intelligence",
+    label: "LP Intelligence Snapshot",
+    icon: Users,
+    color: "text-purple-600",
+    bg: "bg-purple-50",
+    description: "Generates the LP-ready fund narrative shown in the CRM/LPs Intelligence tab. Claude writes a 2–3 paragraph snapshot covering portfolio, active pipeline, and fund themes — useful for LP meeting prep.",
+    variables: ["{{portfolio}}", "{{pipeline}}"],
+    promptLabel: "Prompt Template",
+    hint: "Leave blank to use the built-in default. {{portfolio}} = bullet list of portfolio companies with sectors/stage/description. {{pipeline}} = bullet list of active pipeline (status ≠ passed/exited) companies. Output is free-form text (not JSON). Aim for 2–3 paragraphs, LP-ready prose.",
   },
 ] as const;
 

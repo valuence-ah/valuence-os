@@ -28,6 +28,7 @@ const DEFAULTS: Record<string, AiConfig> = {
   ma_intelligence:        { model: SONNET, max_tokens: 2500, temperature: 0.20, system_prompt: null, user_prompt: "" },
   pilot_intelligence:     { model: SONNET, max_tokens: 2500, temperature: 0.20, system_prompt: null, user_prompt: "" },
   competitor_intelligence:{ model: SONNET, max_tokens: 2500, temperature: 0.20, system_prompt: null, user_prompt: "" },
+  lp_intelligence:        { model: SONNET, max_tokens: 1200, temperature: 0.30, system_prompt: null, user_prompt: "" },
 };
 
 /** Loads an AI config from Supabase, falling back to hardcoded defaults. */
