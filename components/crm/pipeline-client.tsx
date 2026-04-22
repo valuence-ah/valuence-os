@@ -75,7 +75,7 @@ const STATUS_COLORS: Record<string, string> = {
 const STAGE_OPTIONS = ["Pre-Seed", "Pre-A", "Seed", "Seed Extension", "Series A", "Series B", "Series C", "Growth"];
 
 // Values match Excel "Sector" column
-const SECTOR_OPTIONS = ["Cleantech", "Techbio", "Biotech", "Other"];
+const SECTOR_OPTIONS = ["Cleantech", "Techbio", "Other"];
 
 const SECTOR_COLORS: Record<string, string> = {
   cleantech: "bg-emerald-100 text-emerald-700",

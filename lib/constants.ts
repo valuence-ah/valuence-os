@@ -12,12 +12,11 @@ export const COMPANY_TYPE_OPTIONS = [
 ] as const;
 
 export const INVESTOR_TYPE_OPTIONS = [
-  { value: "VC",              label: "VC" },
-  { value: "Angel",           label: "Angel" },
-  { value: "CVC",             label: "Corporate VC" },
+  { value: "Venture Capital", label: "Venture Capital" },
+  { value: "Accelerator",     label: "Accelerator" },
+  { value: "Corporate",       label: "Corporate" },
   { value: "Family Office",   label: "Family Office" },
-  { value: "Fund of Funds",   label: "Fund of Funds" },
-  { value: "PE",              label: "Private Equity" },
+  { value: "HNW",             label: "HNW" },
   { value: "Other",           label: "Other" },
 ] as const;
 
