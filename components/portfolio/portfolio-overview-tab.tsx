@@ -390,7 +390,16 @@ export function PortfolioOverviewTab({
 
         {/* Left: Valuence Investment — compact clickable cards */}
         <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col min-h-[110px]">
-          <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-2 flex-shrink-0">Valuence Investment</h3>
+          <div className="flex items-center justify-between mb-2 flex-shrink-0">
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Valuence Investment</h3>
+            <button
+              onClick={onDetailRefresh}
+              className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors"
+              title="Refresh overview with latest investment data"
+            >
+              <RefreshCw size={10} /> Refresh
+            </button>
+          </div>
           {investments.length === 0 ? (
             <p className="text-xs text-slate-400 flex-1 flex items-center">No investments recorded yet.</p>
           ) : (
@@ -491,7 +500,7 @@ export function PortfolioOverviewTab({
             )}
           </div>
           {!editingFt ? (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <div className="grid grid-cols-4 gap-x-4">
               <div>
                 <p className="text-[10px] text-emerald-600 mb-0.5">Round</p>
                 <p className="text-xs font-semibold text-slate-800">{company.raise_round ?? company.stage ?? "—"}</p>
@@ -510,44 +519,40 @@ export function PortfolioOverviewTab({
               </div>
             </div>
           ) : (
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <p className="text-[10px] text-emerald-600 mb-0.5">Round</p>
-                  <select value={ftForm.raise_round} onChange={e => setFtForm(p => ({ ...p, raise_round: e.target.value }))}
-                    className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400">
-                    <option value="">—</option>
-                    <option value="Pre-seed">Pre-seed</option>
-                    <option value="Seed">Seed</option>
-                    <option value="Series A">Series A</option>
-                    <option value="Series B">Series B</option>
-                    <option value="Bridge">Bridge</option>
-                    <option value="SAFE">SAFE</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <p className="text-[10px] text-emerald-600 mb-0.5">Status</p>
-                  <select value={ftForm.current_raise_status} onChange={e => setFtForm(p => ({ ...p, current_raise_status: e.target.value }))}
-                    className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400">
-                    <option value="not_raising">Not raising</option>
-                    <option value="preparing">Preparing</option>
-                    <option value="actively_raising">Actively raising</option>
-                    <option value="closing">Closing</option>
-                  </select>
-                </div>
+            <div className="grid grid-cols-4 gap-x-3">
+              <div>
+                <p className="text-[10px] text-emerald-600 mb-0.5">Round</p>
+                <select value={ftForm.raise_round} onChange={e => setFtForm(p => ({ ...p, raise_round: e.target.value }))}
+                  className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400">
+                  <option value="">—</option>
+                  <option value="Pre-seed">Pre-seed</option>
+                  <option value="Seed">Seed</option>
+                  <option value="Series A">Series A</option>
+                  <option value="Series B">Series B</option>
+                  <option value="Bridge">Bridge</option>
+                  <option value="SAFE">SAFE</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <p className="text-[10px] text-emerald-600 mb-0.5">Target amount</p>
-                  <input type="text" value={ftForm.current_raise_target} onChange={e => setFtForm(p => ({ ...p, current_raise_target: e.target.value }))}
-                    placeholder="e.g. $5M" className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-emerald-600 mb-0.5">Target close</p>
-                  <input type="text" value={ftForm.raise_target_close} onChange={e => setFtForm(p => ({ ...p, raise_target_close: e.target.value }))}
-                    placeholder="e.g. Q3 2026" className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400" />
-                </div>
+              <div>
+                <p className="text-[10px] text-emerald-600 mb-0.5">Status</p>
+                <select value={ftForm.current_raise_status} onChange={e => setFtForm(p => ({ ...p, current_raise_status: e.target.value }))}
+                  className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400">
+                  <option value="not_raising">Not raising</option>
+                  <option value="preparing">Preparing</option>
+                  <option value="actively_raising">Actively raising</option>
+                  <option value="closing">Closing</option>
+                </select>
+              </div>
+              <div>
+                <p className="text-[10px] text-emerald-600 mb-0.5">Target</p>
+                <input type="text" value={ftForm.current_raise_target} onChange={e => setFtForm(p => ({ ...p, current_raise_target: e.target.value }))}
+                  placeholder="e.g. $5M" className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+              </div>
+              <div>
+                <p className="text-[10px] text-emerald-600 mb-0.5">Target close</p>
+                <input type="text" value={ftForm.raise_target_close} onChange={e => setFtForm(p => ({ ...p, raise_target_close: e.target.value }))}
+                  placeholder="e.g. Q3 2026" className="w-full text-xs border border-emerald-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400" />
               </div>
             </div>
           )}
@@ -573,6 +578,7 @@ export function PortfolioOverviewTab({
                 className="text-[10px] text-teal-600 hover:text-teal-700">Edit KPIs</button>
             )}
           </div>
+          <div className="h-[120px] overflow-y-auto pr-0.5">
           <div className="grid grid-cols-4 gap-2">
             <div className="bg-slate-50 rounded-lg p-2.5">
               <p className="text-[10px] text-slate-400 mb-1">Monthly burn</p>
@@ -620,6 +626,7 @@ export function PortfolioOverviewTab({
               )}
             </div>
           </div>
+          </div>
           {latestKpi && !editingKpis && <p className="text-[10px] text-slate-400 mt-1">Period: {latestKpi.period}</p>}
         </div>
 
@@ -629,7 +636,7 @@ export function PortfolioOverviewTab({
             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Meeting history</h3>
             <button onClick={() => setShowFullTimeline(true)} className="text-[10px] text-blue-500 hover:text-blue-700">View all →</button>
           </div>
-          <div className="h-[96px] overflow-y-auto pr-0.5">
+          <div className="h-[120px] overflow-y-auto pr-0.5">
             {interactions.filter(i => i.type === "meeting").length === 0 ? (
               <p className="text-xs text-slate-400">No meetings logged yet</p>
             ) : (
@@ -662,7 +669,7 @@ export function PortfolioOverviewTab({
               <Plus size={10} /> Add
             </button>
           </div>
-          <div className="h-[180px] overflow-y-auto space-y-1 pr-0.5">
+          <div className="h-[120px] overflow-y-auto space-y-1 pr-0.5">
             {localMilestones.length === 0 && !addingMilestone && (
               <p className="text-xs text-slate-400">No milestones yet.</p>
             )}
@@ -740,7 +747,7 @@ export function PortfolioOverviewTab({
             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Strategic initiatives</h3>
             <button onClick={() => setAddingInit(true)} className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-700"><Plus size={10} /> Add</button>
           </div>
-          <div className="h-[180px] overflow-y-auto pr-0.5">
+          <div className="h-[120px] overflow-y-auto pr-0.5">
             {addingInit && (
               <div className="mb-2 p-2.5 bg-slate-50 rounded-lg space-y-1.5 border border-slate-200">
                 <input autoFocus placeholder="Initiative title" value={addInitForm.title} onChange={e => setAddInitForm(p => ({ ...p, title: e.target.value }))}
@@ -812,7 +819,7 @@ export function PortfolioOverviewTab({
               <RefreshCw size={10} className={refreshing === "ma_acquirer" ? "animate-spin" : ""} /> Refresh
             </button>
           </div>
-          <div className="h-[180px] overflow-y-auto pr-0.5">
+          <div className="h-[200px] overflow-y-auto pr-0.5">
             {acquirers.length === 0 ? (
               <p className="text-xs text-slate-400">Click Refresh to generate candidates</p>
             ) : (
@@ -843,7 +850,7 @@ export function PortfolioOverviewTab({
               <RefreshCw size={10} className={refreshing === "pilot_partner" ? "animate-spin" : ""} /> Refresh
             </button>
           </div>
-          <div className="h-[180px] overflow-y-auto pr-0.5">
+          <div className="h-[200px] overflow-y-auto pr-0.5">
             {pilots.length === 0 ? (
               <p className="text-xs text-slate-400">Click Refresh to generate candidates</p>
             ) : (
