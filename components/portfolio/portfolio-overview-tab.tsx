@@ -20,7 +20,7 @@ interface Props {
   intelligence: PortfolioIntelligence[];
   interactions: Interaction[];
   investments: PortfolioInvestment[];
-  onIntelligenceRefresh: (type: "ma_acquirer" | "pilot_partner") => Promise<void>;
+  onIntelligenceRefresh: (type: "ma_acquirer" | "pilot_partner" | "competitor") => Promise<void>;
   onDetailRefresh: () => void;
   onCompanyUpdate: (id: string, updates: Partial<Company>) => void;
 }
@@ -144,7 +144,7 @@ export function PortfolioOverviewTab({
   company, kpis, milestones, initiatives, intelligence, interactions, investments,
   onIntelligenceRefresh, onDetailRefresh, onCompanyUpdate,
 }: Props) {
-  const [refreshing, setRefreshing] = useState<"ma_acquirer" | "pilot_partner" | null>(null);
+  const [refreshing, setRefreshing] = useState<"ma_acquirer" | "pilot_partner" | "competitor" | null>(null);
   const [selectedInvestment, setSelectedInvestment] = useState<PortfolioInvestment | null>(null);
   const [openingDoc, setOpeningDoc] = useState<string | null>(null); // tracks which doc is opening
 
@@ -198,7 +198,7 @@ export function PortfolioOverviewTab({
 
   const headcountChange = latestKpi?.headcount_change;
 
-  async function handleRefresh(type: "ma_acquirer" | "pilot_partner") {
+  async function handleRefresh(type: "ma_acquirer" | "pilot_partner" | "competitor") {
     setRefreshing(type);
     await onIntelligenceRefresh(type);
     setRefreshing(null);
@@ -669,6 +669,26 @@ export function PortfolioOverviewTab({
               <Plus size={10} /> Add
             </button>
           </div>
+          {addingMilestone && (
+            <div className="mb-2 p-2.5 bg-slate-50 rounded-lg space-y-2 border border-slate-200">
+              <input autoFocus placeholder="Milestone title" value={msForm.title} onChange={e => setMsForm(p => ({ ...p, title: e.target.value }))}
+                onKeyDown={e => { if (e.key === "Enter") handleAddMilestone(); if (e.key === "Escape") setAddingMilestone(false); }}
+                className="w-full text-xs border border-slate-200 rounded px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500/30" />
+              <div className="flex gap-2">
+                <select value={msForm.status} onChange={e => setMsForm(p => ({ ...p, status: e.target.value as PortfolioMilestone["status"] }))} className="flex-1 text-xs border border-slate-200 rounded px-2.5 py-1.5">
+                  <option value="upcoming">Upcoming</option><option value="in_progress">In progress</option><option value="done">Done</option><option value="blocked">Blocked</option>
+                </select>
+                <input type="text" placeholder="Target date" value={msForm.target_date} onChange={e => setMsForm(p => ({ ...p, target_date: e.target.value }))}
+                  className="flex-1 text-xs border border-slate-200 rounded px-2.5 py-1.5" />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setAddingMilestone(false)} className="text-xs px-3 py-1 border border-slate-200 rounded text-slate-600 hover:bg-slate-50">Cancel</button>
+                <button onClick={handleAddMilestone} disabled={savingMs || !msForm.title.trim()} className="text-xs px-3 py-1 bg-blue-600 text-white rounded disabled:opacity-50">
+                  {savingMs ? "Saving…" : "Add"}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="h-[120px] overflow-y-auto space-y-1 pr-0.5">
             {localMilestones.length === 0 && !addingMilestone && (
               <p className="text-xs text-slate-400">No milestones yet.</p>
@@ -719,26 +739,6 @@ export function PortfolioOverviewTab({
               </div>
             ))}
           </div>
-          {addingMilestone && (
-            <div className="mt-2 p-2.5 bg-slate-50 rounded-lg space-y-2 border border-slate-200">
-              <input autoFocus placeholder="Milestone title" value={msForm.title} onChange={e => setMsForm(p => ({ ...p, title: e.target.value }))}
-                onKeyDown={e => { if (e.key === "Enter") handleAddMilestone(); if (e.key === "Escape") setAddingMilestone(false); }}
-                className="w-full text-xs border border-slate-200 rounded px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500/30" />
-              <div className="flex gap-2">
-                <select value={msForm.status} onChange={e => setMsForm(p => ({ ...p, status: e.target.value as PortfolioMilestone["status"] }))} className="flex-1 text-xs border border-slate-200 rounded px-2.5 py-1.5">
-                  <option value="upcoming">Upcoming</option><option value="in_progress">In progress</option><option value="done">Done</option><option value="blocked">Blocked</option>
-                </select>
-                <input type="text" placeholder="Target date" value={msForm.target_date} onChange={e => setMsForm(p => ({ ...p, target_date: e.target.value }))}
-                  className="flex-1 text-xs border border-slate-200 rounded px-2.5 py-1.5" />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => setAddingMilestone(false)} className="text-xs px-3 py-1 border border-slate-200 rounded text-slate-600 hover:bg-slate-50">Cancel</button>
-                <button onClick={handleAddMilestone} disabled={savingMs || !msForm.title.trim()} className="text-xs px-3 py-1 bg-blue-600 text-white rounded disabled:opacity-50">
-                  {savingMs ? "Saving…" : "Add"}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Right: Strategic initiatives */}
@@ -872,6 +872,55 @@ export function PortfolioOverviewTab({
           </div>
         </div>
       </div>
+
+      {/* ═══ ROW 5: Competitor Landscape (full width) ═══════════════════════════ */}
+      {(() => {
+        const competitors = intelligence
+          .filter(i => i.type === "competitor")
+          .sort((a, b) => (FIT_ORDER[a.fit_level] ?? 3) - (FIT_ORDER[b.fit_level] ?? 3));
+
+        const THREAT_BADGE: Record<string, string> = {
+          high:   "bg-red-100 text-red-700",
+          medium: "bg-amber-100 text-amber-700",
+          low:    "bg-slate-100 text-slate-500",
+        };
+        const THREAT_LABEL: Record<string, string> = {
+          high:   "Direct threat",
+          medium: "Adjacent",
+          low:    "Indirect",
+        };
+
+        return (
+          <div>
+            <div className="flex items-center justify-between mb-3 flex-shrink-0">
+              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Competitor landscape</h3>
+              <button onClick={() => handleRefresh("competitor")} disabled={refreshing !== null}
+                className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-700 disabled:opacity-50">
+                <RefreshCw size={10} className={refreshing === "competitor" ? "animate-spin" : ""} /> Refresh
+              </button>
+            </div>
+            {competitors.length === 0 ? (
+              <p className="text-xs text-slate-400">Click Refresh to generate competitor landscape</p>
+            ) : (
+              <div className="grid grid-cols-4 gap-2">
+                {competitors.slice(0, 4).map(c => (
+                  <div key={c.id} className="bg-slate-50 rounded-lg p-2.5">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                      <p className="text-[12px] font-semibold text-slate-800">{c.entity_name}</p>
+                      <span className={`text-[9px] px-1 py-px rounded font-medium ${THREAT_BADGE[c.fit_level] ?? "bg-slate-100 text-slate-500"}`}>
+                        {THREAT_LABEL[c.fit_level] ?? c.fit_level}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug line-clamp-3">
+                      {stripCiteTags(c.description || "No details yet — click Refresh.")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Full timeline slide-out panel */}
       {showFullTimeline && (

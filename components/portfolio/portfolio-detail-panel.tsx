@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ExternalLink, Upload, Check, X, Pencil, GitBranch, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -160,6 +160,9 @@ function CompanyLogoHeader({ company }: { company: Company }) {
 export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetailRefresh, onCompanyUpdate }: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+
+  // Reset to Overview whenever a different company is selected
+  useEffect(() => { setActiveTab("overview"); }, [company.id]);
   const [showUpload, setShowUpload] = useState(false);
   const [showAssistant, setShowAssistant] = useState(false);
   const [editingWebsite, setEditingWebsite] = useState(false);
@@ -178,7 +181,7 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
     onCompanyUpdate(company.id, updates);
   }
 
-  async function handleIntelRefresh(type: "ma_acquirer" | "pilot_partner") {
+  async function handleIntelRefresh(type: "ma_acquirer" | "pilot_partner" | "competitor") {
     await fetch("/api/portfolio/intelligence", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

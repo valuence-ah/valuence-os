@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 90; // Web search adds latency
@@ -225,11 +226,38 @@ Sort by fit_level (high = direct competitor first).`;
 
   // ── Call Claude with web search ──────────────────────────────────────────────
 
+  const configKey = type === "ma_acquirer"
+    ? "ma_intelligence"
+    : type === "competitor"
+    ? "competitor_intelligence"
+    : "pilot_intelligence";
+  const cfg = await getAiConfig(configKey);
+
+  // Allow full prompt override from Admin AI Config
+  // Variables available: {{company_name}}, {{description}}, {{sectors}}, {{stage}}, {{kpi_context}}, {{milestones}}
+  if (cfg.user_prompt?.trim()) {
+    const vars: Record<string, string> = {
+      company_name: company.name,
+      description:  company.description ?? "",
+      sectors:      (company.sectors ?? []).join(", ") || "Not specified",
+      stage:        company.stage || "Early-stage",
+      kpi_context:  kpiContext,
+      milestones:   milestoneContext,
+      lp_names:     lpNames,
+    };
+    userPrompt = Object.entries(vars).reduce(
+      (s, [k, v]) => s.replaceAll(`{{${k}}}`, v),
+      cfg.user_prompt
+    );
+  }
+  if (cfg.system_prompt) systemPrompt = cfg.system_prompt;
+
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 2500,
+    model: cfg.model,
+    max_tokens: cfg.max_tokens ?? 2500,
+    temperature: cfg.temperature,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tools: [{ type: "web_search_20250305" as any, name: "web_search" }] as any,
     system: systemPrompt,

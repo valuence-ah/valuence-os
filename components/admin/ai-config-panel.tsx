@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2, Save, Check, Bot, FileText, Sparkles, Mail, ClipboardList, Mic, Radar, Search, Building2, Handshake, Newspaper } from "lucide-react";
+import { Loader2, Save, Check, Bot, FileText, Sparkles, Mail, ClipboardList, Mic, Radar, Search, Building2, Handshake, Newspaper, Swords } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Model options ─────────────────────────────────────────────────────────────
@@ -140,6 +140,17 @@ const TABS = [
     variables: ["{{company_name}}", "{{description}}", "{{sectors}}", "{{stage}}", "{{kpi_context}}", "{{milestones}}", "{{lp_names}}"],
     promptLabel: "Pilot User Prompt Template",
   },
+  {
+    name: "competitor_intelligence",
+    label: "Competitor Landscape",
+    icon: Swords,
+    color: "text-red-600",
+    bg: "bg-red-50",
+    description: "Generates competitor landscape cards shown on the Portfolio overview tab. Leave prompt blank to use the built-in default.",
+    variables: ["{{company_name}}", "{{description}}", "{{sectors}}", "{{stage}}", "{{kpi_context}}", "{{milestones}}"],
+    promptLabel: "Prompt Template",
+    hint: "Leave blank to use the built-in default. If set, this replaces the full prompt — include the JSON output format. Must return an array with entity_name, description, fit_level (high/medium/low), warmth fields.",
+  },
 ] as const;
 
 type TabName = typeof TABS[number]["name"];
@@ -168,8 +179,9 @@ const TAB_DEFAULTS: Record<string, Omit<AiConfig, "id" | "name" | "label">> = {
   sourcing_scorer:     { model: SONNET, max_tokens: 2048,  temperature: 0.10, system_prompt: null, user_prompt: "" },
   exa_research:        { model: SONNET, max_tokens: 1024,  temperature: 0.20, system_prompt: null, user_prompt: "" },
   company_intelligence:{ model: SONNET, max_tokens: 1024,  temperature: 0.20, system_prompt: "You are a VC intelligence analyst. Return only valid JSON arrays as instructed.", user_prompt: "" },
-  ma_intelligence:     { model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
-  pilot_intelligence:  { model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
+  ma_intelligence:        { model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
+  pilot_intelligence:     { model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
+  competitor_intelligence:{ model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
 };
 
 function makeDefault(name: string, label: string): AiConfig {
