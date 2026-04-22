@@ -822,11 +822,17 @@ export function LpViewClient({ initialCompanies }: Props) {
   // Change company type
   async function handleChangeType(newType: string) {
     if (!selectedId) return;
-    setCompanies(prev => prev.map(c =>
-      c.id === selectedId ? { ...c, type: newType as Company["type"], types: [newType] } : c
-    ));
     setChangeTypePos(null);
     await supabase.from("companies").update({ type: newType, types: [newType] }).eq("id", selectedId);
+    if (newType !== "lp") {
+      // Remove from LP view — this company is no longer an LP
+      setCompanies(prev => prev.filter(c => c.id !== selectedId));
+      setSelectedId(null);
+    } else {
+      setCompanies(prev => prev.map(c =>
+        c.id === selectedId ? { ...c, type: newType as Company["type"], types: [newType] } : c
+      ));
+    }
   }
 
   // Save — pure optimistic, no full-row re-fetch (prevents race condition overwriting other fields)

@@ -540,11 +540,18 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   // Change company type
   async function handleChangeType(newType: string) {
     if (!selectedId) return;
-    setCompanies(prev => prev.map(c =>
-      c.id === selectedId ? { ...c, type: newType as Company["type"], types: [newType] } : c
-    ));
     setChangeTypePos(null);
     await supabase.from("companies").update({ type: newType, types: [newType] }).eq("id", selectedId);
+    const strategicTypes = ["corporate", "ecosystem_partner", "government"];
+    if (!strategicTypes.includes(newType)) {
+      // Remove from Strategic view — this company is no longer a strategic partner
+      setCompanies(prev => prev.filter(c => c.id !== selectedId));
+      setSelectedId(null);
+    } else {
+      setCompanies(prev => prev.map(c =>
+        c.id === selectedId ? { ...c, type: newType as Company["type"], types: [newType] } : c
+      ));
+    }
   }
 
   // Save company field to Supabase (optimistic update)
