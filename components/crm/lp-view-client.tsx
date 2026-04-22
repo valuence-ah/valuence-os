@@ -13,7 +13,7 @@ import {
   BarChart2, AlertCircle, CheckSquare, Video,
   ChevronDown, ChevronUp, ChevronsUpDown, MoreHorizontal, Loader2, ArrowUpRight, FileText,
   Pencil, Check, LayoutGrid, List, Globe, Wand2, Send, Copy, RefreshCw, Link2, Sparkles,
-  Clock, Star, Building2,
+  Clock, Star, Building2, Newspaper, Briefcase,
 } from "lucide-react";
 
 // ── LP Type bubble picker — same interaction pattern as StagePicker ────────────
@@ -587,17 +587,24 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [savingActivity, setSavingActivity] = useState(false);
 
   // LP Detail tab
-  const [lpDetailTab, setLpDetailTab] = useState<"overview" | "intelligence">("overview");
+  const [lpDetailTab, setLpDetailTab] = useState<"overview" | "company_news" | "intelligence">("overview");
 
   // Contact pop-out panel
   const [viewingContact, setViewingContact] = useState<Contact | null>(null);
 
-  // LP Intelligence feed
+  // LP Company News feed (renamed from "Intelligence")
   type LpIntelItem = { headline: string; source: string; date: string; summary?: string; url?: string };
   const [lpIntelligence, setLpIntelligence] = useState<LpIntelItem[]>([]);
   const [lpIntelLoading, setLpIntelLoading] = useState(false);
   const [lpIntelError, setLpIntelError]     = useState<string | null>(null);
   const [lpIntelCachedAt, setLpIntelCachedAt] = useState<string | null>(null);
+
+  // Intelligence tab — fund portfolio & pipeline snapshot
+  type FundCompany = { id: string; name: string; sectors: string[] | null; status: string | null; description: string | null; stage: string | null };
+  const [portfolioItems, setPortfolioItems] = useState<FundCompany[]>([]);
+  const [pipelineItems,  setPipelineItems]  = useState<FundCompany[]>([]);
+  const [fundLoaded,     setFundLoaded]     = useState(false);
+  const [fundLoading,    setFundLoading]    = useState(false);
 
   // LP Starred intel — persisted to localStorage
   const [lpStarredIntel, setLpStarredIntel] = useState<Record<string, string[]>>({});
@@ -880,6 +887,30 @@ export function LpViewClient({ initialCompanies }: Props) {
       setLpIntelError("Network error");
     } finally {
       setLpIntelLoading(false);
+    }
+  }
+
+  // Fetch portfolio (status=portfolio, limit 2) + active pipeline (not passed/exited, limit 6)
+  async function fetchFundSnapshot() {
+    if (fundLoaded || fundLoading) return;
+    setFundLoading(true);
+    try {
+      const [{ data: portfolio }, { data: pipeline }] = await Promise.all([
+        supabase.from("companies")
+          .select("id, name, sectors, status, description, stage")
+          .eq("status", "portfolio")
+          .order("name").limit(2),
+        supabase.from("companies")
+          .select("id, name, sectors, status, description, stage")
+          .not("status", "in", '("passed","exited","portfolio")')
+          .not("status", "is", null)
+          .order("updated_at", { ascending: false }).limit(6),
+      ]);
+      setPortfolioItems(portfolio ?? []);
+      setPipelineItems(pipeline ?? []);
+      setFundLoaded(true);
+    } catch { /* silent */ } finally {
+      setFundLoading(false);
     }
   }
 
@@ -1737,18 +1768,28 @@ export function LpViewClient({ initialCompanies }: Props) {
 
             {/* Detail panel tabs */}
             <div className="flex border-b border-slate-200 px-5 flex-shrink-0">
-              {(["overview", "intelligence"] as const).map(tab => (
-                <button key={tab} onClick={() => { setLpDetailTab(tab); if (tab === "intelligence" && lpIntelligence.length === 0 && !lpIntelLoading) fetchLpIntelligence(); }}
-                  className={cn("px-3 py-2.5 text-xs font-medium border-b-2 transition-colors capitalize flex items-center gap-1.5",
-                    lpDetailTab === tab ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"
+              {([
+                { key: "overview",      label: "Overview",      icon: null },
+                { key: "company_news",  label: "Company News",  icon: <Newspaper size={11} /> },
+                { key: "intelligence",  label: "Intelligence",  icon: <Briefcase size={11} /> },
+              ] as const).map(({ key, label, icon }) => (
+                <button key={key}
+                  onClick={() => {
+                    setLpDetailTab(key);
+                    // Intelligence tab: lazy-load fund snapshot on first open
+                    if (key === "intelligence") fetchFundSnapshot();
+                    // Company News: never auto-fetch — user clicks Refresh
+                  }}
+                  className={cn("px-3 py-2.5 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5",
+                    lpDetailTab === key ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"
                   )}>
-                  {tab === "intelligence" && <Sparkles size={11} />}{tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {icon}{label}
                 </button>
               ))}
             </div>
 
-            {/* Intelligence tab */}
-            {lpDetailTab === "intelligence" && (() => {
+            {/* Company News tab */}
+            {lpDetailTab === "company_news" && (() => {
               const sixMonthsAgo = new Date(Date.now() - 180 * 86_400_000);
               const starred = (lpStarredIntel[selected?.id ?? ""] ?? []);
 
@@ -1860,6 +1901,79 @@ export function LpViewClient({ initialCompanies }: Props) {
                 </div>
               );
             })()}
+
+            {/* Intelligence tab — Fund Portfolio & Pipeline Snapshot */}
+            {lpDetailTab === "intelligence" && (
+              <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 space-y-5">
+
+                {/* Portfolio section */}
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <CheckSquare size={10} className="text-emerald-500" /> Our Portfolio
+                  </p>
+                  {fundLoading ? (
+                    <div className="space-y-2">{[1, 2].map(i => <div key={i} className="h-16 bg-slate-50 rounded-xl animate-pulse" />)}</div>
+                  ) : portfolioItems.length === 0 ? (
+                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center">
+                      <p className="text-xs text-slate-400 italic">No portfolio companies yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {portfolioItems.map(c => (
+                        <div key={c.id} className="border border-slate-200 rounded-xl p-3 bg-white">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <p className="text-xs font-semibold text-slate-800">{c.name}</p>
+                            {c.sectors?.slice(0, 2).map(s => (
+                              <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold capitalize">{s}</span>
+                            ))}
+                            {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
+                          </div>
+                          {c.description && <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">{c.description}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Active Pipeline section */}
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <TrendingUp size={10} className="text-blue-500" /> Active Pipeline
+                    <span className="text-[9px] font-normal text-slate-300 normal-case tracking-normal">· status ≠ Passed</span>
+                  </p>
+                  {fundLoading ? (
+                    <div className="space-y-2">{[1, 2, 3, 4].map(i => <div key={i} className="h-14 bg-slate-50 rounded-xl animate-pulse" />)}</div>
+                  ) : pipelineItems.length === 0 ? (
+                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center">
+                      <p className="text-xs text-slate-400 italic">No active pipeline companies</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {pipelineItems.map(c => (
+                        <div key={c.id} className="border border-slate-200 rounded-xl p-3 bg-white">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <p className="text-xs font-semibold text-slate-800">{c.name}</p>
+                            {c.sectors?.slice(0, 2).map(s => (
+                              <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold capitalize">{s}</span>
+                            ))}
+                            {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
+                          </div>
+                          {c.description && <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">{c.description}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Refresh link */}
+                {fundLoaded && (
+                  <button onClick={() => { setFundLoaded(false); fetchFundSnapshot(); }}
+                    className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1 mx-auto">
+                    <RefreshCw size={9} /> Refresh snapshot
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Overview tab — Body */}
             {lpDetailTab === "overview" && (
