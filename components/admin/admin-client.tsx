@@ -1,6 +1,7 @@
 "use client";
 // ─── Admin Spreadsheet Client ─────────────────────────────────────────────────
-// Embeds a react-data-grid for Companies and Contacts with inline cell editing
+// Embeds a react-data-grid for Companies and Contacts with inline cell editing.
+// Contacts: Title + Status columns use badge/bubble pickers (like Type column).
 // that saves directly to Supabase on change.
 // Enhanced with: column sorting, column resizing, filter panel,
 // column picker, and clear-filters button.
