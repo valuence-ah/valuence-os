@@ -840,6 +840,8 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
     await supabase.from("companies")
       .update({ type: primaryType, types: newTypes })
       .eq("id", companyId);
+    // Bust the router cache so pipeline / LP / strategic views reflect the change immediately
+    router.refresh();
   }
 
   // ── Update description (from AI generate) ────────────────────────────────

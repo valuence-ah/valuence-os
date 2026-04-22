@@ -8,6 +8,7 @@ import { PipelineClient } from "@/components/crm/pipeline-client";
 import { PipelineChatWidget } from "@/components/crm/pipeline-chat-widget";
 import type { Company } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Pipeline" };
 
 export default async function PipelinePage() {
