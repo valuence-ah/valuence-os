@@ -144,7 +144,7 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
 
         @page {
           size: A4 portrait;
-          margin: 18mm 20mm 18mm 20mm;
+          margin: 15mm 15mm;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -159,10 +159,11 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
           print-color-adjust: exact;
         }
 
+        /* Container is intentionally narrow so it fits A4 even with browser default margins */
         .memo-container {
-          max-width: 720px;
+          max-width: 640px;
           margin: 0 auto;
-          padding: 36px 40px;
+          padding: 32px 0;
         }
 
         /* ── Cover header ── */
@@ -172,18 +173,20 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
           margin-bottom: 28px;
         }
         .cover-title {
-          font-size: 22px;
+          font-size: 20px;
           font-weight: 700;
           color: #0f172a;
-          margin-bottom: 6px;
+          margin-bottom: 8px;
           line-height: 1.3;
+          word-break: break-word;
         }
+        /* Badges row: company name + sector + recommendation */
         .cover-meta {
           display: flex;
           align-items: center;
-          gap: 16px;
+          gap: 12px;
           flex-wrap: wrap;
-          margin-top: 8px;
+          margin-top: 4px;
         }
         .cover-company {
           font-size: 13px;
@@ -194,10 +197,12 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
           font-size: 12px;
           color: #64748b;
         }
+        /* Date on its own row — never overflows */
         .cover-date {
           font-size: 11px;
           color: #94a3b8;
-          margin-left: auto;
+          margin-top: 6px;
+          display: block;
         }
         .rec-badge {
           display: inline-block;
@@ -281,12 +286,13 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
         /* ── Print-only tweaks ── */
         @media print {
           body { font-size: 11px; }
-          /* Let @page margins handle spacing — don't zero-out container padding */
-          .memo-container { padding: 0; max-width: 100%; }
+          /* Keep the container's own max-width — don't expand to 100% which
+             would push content against @page margins and cause right-side clipping */
+          .memo-container { padding: 16px 0; }
           .no-print { display: none !important; }
           .section { page-break-inside: avoid; }
-          /* Ensure nothing overflows the printed page width */
-          * { max-width: 100%; overflow-wrap: break-word; word-break: break-word; }
+          /* Belt-and-suspenders: nothing should overflow the container */
+          * { overflow-wrap: break-word; word-break: break-word; }
         }
 
         /* ── Screen: show a "close" button ── */
@@ -336,6 +342,7 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
         {/* Cover */}
         <div className="cover-header">
           <div className="cover-title">{memo.title}</div>
+          {/* Badges row — company, sector, recommendation */}
           <div className="cover-meta">
             {memo.company && (
               <span className="cover-company">{memo.company.name}</span>
@@ -351,10 +358,11 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
             >
               {rec.label}
             </span>
-            <span className="cover-date">
-              {createdDate} · Confidential
-            </span>
           </div>
+          {/* Date on its own line — no overflow risk */}
+          <span className="cover-date">
+            {createdDate} · Confidential
+          </span>
         </div>
 
         {/* All 14 sections — fully expanded */}
