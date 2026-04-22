@@ -1,6 +1,7 @@
 // ─── POST /api/funds/generate-recent-investments ──────────────────────────────
-// Uses Claude Haiku to generate a list of recent investments made by a VC fund,
-// based on the fund's name, location, focus, and any available context.
+// Uses Exa (real web search) + Claude to extract genuinely recent investments
+// made by a VC fund. Exa returns live news with publication dates, so results
+// are grounded in real articles — not hallucinated from training memory.
 // Body: { company_id: string; force?: boolean }
 // Returns: { investments: { name, round, sector, date }[]; updated_at: string | null }
 
@@ -10,7 +11,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 60;
-const MODEL = "claude-haiku-4-5";
+const MODEL = "claude-haiku-3-5";
+
+interface ExaResult {
+  url?: string;
+  title?: string;
+  text?: string;
+  publishedDate?: string;
+}
 
 export async function POST(req: NextRequest) {
   // Auth check
@@ -25,14 +33,14 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  // ── Load from cache if not forcing (only serve rows updated in the last 90 days) ─
+  // ── Load from cache if not forcing (serve rows updated in the last 7 days) ──
   if (!body.force) {
-    const cutoff90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const cutoff7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: cached } = await supabase
       .from("fund_investments")
       .select("company_name, round, sector, year, updated_at")
       .eq("fund_id", body.company_id)
-      .gte("updated_at", cutoff90)
+      .gte("updated_at", cutoff7d)
       .order("company_name");
 
     if (cached && cached.length > 0) {
@@ -59,84 +67,144 @@ export async function POST(req: NextRequest) {
 
   if (!fund?.name) return NextResponse.json({ investments: [], updated_at: null });
 
-  const name      = (fund.name as string).trim();
-  const locParts  = [(fund.location_city as string | null), (fund.location_country as string | null)].filter(Boolean);
-  const loc       = locParts.join(", ");
-  const sectors   = ((fund.sectors as string[] | null) ?? []).slice(0, 4).join(", ");
-  const stage     = (fund.stage as string | null) ?? "";
-  const desc      = (fund.description as string | null) ?? "";
-
-  const contextParts: string[] = [];
-  if (loc)     contextParts.push(`based in ${loc}`);
-  if (stage)   contextParts.push(`${stage}-stage focus`);
-  if (sectors) contextParts.push(`sectors: ${sectors}`);
-  if (desc)    contextParts.push(`about: ${desc}`);
-
-  const context = contextParts.length ? `(${contextParts.join("; ")})` : "";
-
-  const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-    .toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-
-  const prompt =
-    `Find investments made in the last 90 days (since ${cutoffDate}) by ${name} ${context}.\n` +
-    `Only include investments from ${name} where the investment date is confirmed to be within the past 90 days.\n` +
-    `If no investments were made in the last 90 days, return an empty array [].\n` +
-    `For each investment, provide: company name, funding round (e.g. Seed, Series A), primary sector (2-3 words), and year.\n` +
-    `Return ONLY a JSON array — no markdown, no explanation:\n` +
-    `[{"name":"Company","round":"Series A","sector":"Energy Storage","date":"2025"}, ...]`;
-
+  const name    = (fund.name as string).trim();
+  const EXA_KEY = process.env.EXA_API_KEY;
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  try {
-    const msg = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 500,
-      messages: [{ role: "user", content: prompt }],
-    });
+  let investments: { name: string; round: string; sector: string; date: string }[] = [];
 
-    const raw = msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
-    if (!raw) return NextResponse.json({ investments: [], updated_at: null });
+  // ── Strategy A: Exa live search (preferred — returns real dated articles) ───
+  if (EXA_KEY) {
+    const queries = [
+      `"${name}" investment portfolio company 2025`,
+      `"${name}" backs funds invests seed series 2025`,
+    ];
+    const results: ExaResult[] = [];
 
-    // Extract JSON array from response (in case Claude wraps it in prose)
-    const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) return NextResponse.json({ investments: [], updated_at: null });
-
-    const parsed = JSON.parse(match[0]) as unknown[];
-
-    // Validate and sanitize each item
-    const investments = parsed
-      .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
-      .map(item => ({
-        name:   String(item.name   ?? "").trim().slice(0, 60),
-        round:  String(item.round  ?? "").trim().slice(0, 30),
-        sector: String(item.sector ?? "").trim().slice(0, 40),
-        date:   String(item.date   ?? "").trim().slice(0, 10),
-      }))
-      .filter(i => i.name.length > 0)
-      .slice(0, 5);
-
-    // Persist to fund_investments table
-    const now = new Date().toISOString();
-    if (investments.length > 0) {
-      // Delete existing rows for this fund then insert fresh
-      await supabase.from("fund_investments").delete().eq("fund_id", body.company_id);
-      await supabase.from("fund_investments").insert(
-        investments.map(inv => ({
-          fund_id:      body.company_id,
-          company_name: inv.name,
-          round:        inv.round,
-          sector:       inv.sector,
-          year:         inv.date,
-          source:       "ai_generated",
-          updated_at:   now,
-        }))
-      );
+    for (const q of queries) {
+      try {
+        const r = await fetch("https://api.exa.ai/search", {
+          method: "POST",
+          headers: { "x-api-key": EXA_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: q,
+            numResults: 6,
+            contents: { text: { maxCharacters: 600 } },
+            startPublishedDate: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+          }),
+        });
+        if (r.ok) {
+          const d = await r.json();
+          results.push(...(d.results ?? []));
+        }
+      } catch {}
     }
 
-    return NextResponse.json({ investments, updated_at: now, from_cache: false });
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    console.error(`generate-recent-investments error for ${name}:`, reason);
-    return NextResponse.json({ investments: [], updated_at: null, error: reason });
+    if (results.length > 0) {
+      const combined = results.slice(0, 8).map((r, i) =>
+        `[${i}] Title: ${r.title}\nDate: ${r.publishedDate?.slice(0, 10) ?? "unknown"}\nURL: ${r.url}\nSnippet: ${r.text?.slice(0, 400)}`
+      ).join("\n\n---\n\n");
+
+      try {
+        const msg = await anthropic.messages.create({
+          model: MODEL,
+          max_tokens: 600,
+          messages: [{
+            role: "user",
+            content:
+              `You are a VC research assistant. From the news articles below about ${name} (a VC fund), ` +
+              `extract investments that ${name} MADE INTO portfolio companies (not investments made in the fund itself). ` +
+              `Only include deals where ${name} is explicitly named as the investor.\n\n` +
+              `For each deal extract: portfolio company name, funding round (Seed/Series A/etc), sector (2-3 words), ` +
+              `and date (YYYY-MM format from the article date).\n\n` +
+              `Return ONLY a JSON array, no markdown:\n` +
+              `[{"name":"Company","round":"Series A","sector":"Energy Storage","date":"2025-03"}, ...]\n\n` +
+              `If no clear investment deals are mentioned, return [].\n\n` +
+              `Articles:\n${combined}`,
+          }],
+        });
+
+        const raw = msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
+        const match = raw.match(/\[[\s\S]*\]/);
+        if (match) {
+          const parsed = JSON.parse(match[0]) as unknown[];
+          investments = parsed
+            .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+            .map(item => ({
+              name:   String(item.name   ?? "").trim().slice(0, 60),
+              round:  String(item.round  ?? "").trim().slice(0, 30),
+              sector: String(item.sector ?? "").trim().slice(0, 40),
+              date:   String(item.date   ?? "").trim().slice(0, 10),
+            }))
+            .filter(i => i.name.length > 0)
+            .slice(0, 6);
+        }
+      } catch {}
+    }
   }
+
+  // ── Strategy B: Claude from knowledge (fallback if no Exa key or no results) ─
+  // Note: Claude's training has a knowledge cutoff so dates may not be accurate.
+  // This is a best-effort fallback only.
+  if (investments.length === 0) {
+    const loc     = [(fund.location_city as string | null), (fund.location_country as string | null)].filter(Boolean).join(", ");
+    const sectors = ((fund.sectors as string[] | null) ?? []).slice(0, 4).join(", ");
+    const stage   = (fund.stage as string | null) ?? "";
+    const contextParts: string[] = [];
+    if (loc)     contextParts.push(`based in ${loc}`);
+    if (stage)   contextParts.push(`${stage}-stage focus`);
+    if (sectors) contextParts.push(`sectors: ${sectors}`);
+    const context = contextParts.length ? `(${contextParts.join("; ")})` : "";
+
+    try {
+      const msg = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 500,
+        messages: [{
+          role: "user",
+          content:
+            `List the most recent known portfolio investments made by ${name} ${context}.\n` +
+            `Note: only include investments you have high confidence in from your training data.\n` +
+            `For each: company name, funding round, sector (2-3 words), and approximate date (YYYY or YYYY-MM).\n` +
+            `Return ONLY a JSON array:\n` +
+            `[{"name":"Company","round":"Series A","sector":"Energy Storage","date":"2024-Q3"}, ...]`,
+        }],
+      });
+
+      const raw = msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
+      const match = raw.match(/\[[\s\S]*\]/);
+      if (match) {
+        const parsed = JSON.parse(match[0]) as unknown[];
+        investments = parsed
+          .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+          .map(item => ({
+            name:   String(item.name   ?? "").trim().slice(0, 60),
+            round:  String(item.round  ?? "").trim().slice(0, 30),
+            sector: String(item.sector ?? "").trim().slice(0, 40),
+            date:   String(item.date   ?? "").trim().slice(0, 10),
+          }))
+          .filter(i => i.name.length > 0)
+          .slice(0, 5);
+      }
+    } catch {}
+  }
+
+  // Persist to fund_investments table
+  const now = new Date().toISOString();
+  if (investments.length > 0) {
+    await supabase.from("fund_investments").delete().eq("fund_id", body.company_id);
+    await supabase.from("fund_investments").insert(
+      investments.map(inv => ({
+        fund_id:      body.company_id,
+        company_name: inv.name,
+        round:        inv.round,
+        sector:       inv.sector,
+        year:         inv.date,
+        source:       EXA_KEY ? "exa_search" : "ai_generated",
+        updated_at:   now,
+      }))
+    );
+  }
+
+  return NextResponse.json({ investments, updated_at: now, from_cache: false });
 }

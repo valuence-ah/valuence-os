@@ -2121,7 +2121,7 @@ export function PipelineClient({ initialCompanies }: Props) {
               </div>
 
               {/* Content: Contacts list — sorted by last contact date desc */}
-              <div className="h-[220px] overflow-y-auto space-y-2 pr-1 bg-slate-50 rounded-xl p-3">
+              <div className="h-[150px] overflow-y-auto space-y-2 pr-1 bg-slate-50 rounded-xl p-3">
                 {loadingDetail ? (
                   <div className="h-12 bg-slate-50 rounded-lg animate-pulse" />
                 ) : contacts.length === 0 ? (
@@ -2200,7 +2200,7 @@ export function PipelineClient({ initialCompanies }: Props) {
               </div>
 
               {/* Content: Timeline (event form + scroll area) */}
-              <div className="h-[220px] overflow-y-auto bg-slate-50 rounded-xl p-3">
+              <div className="h-[150px] overflow-y-auto bg-slate-50 rounded-xl p-3">
               {/* Add event form */}
               {addingNote && (
                 <div ref={addEventFormRef} className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
@@ -2653,7 +2653,7 @@ export function PipelineClient({ initialCompanies }: Props) {
               </div>
 
               {/* Content: Strategic Partnerships */}
-              <div className="h-[220px] overflow-y-auto pr-1 bg-slate-50 rounded-xl p-3">
+              <div className="h-[150px] overflow-y-auto pr-1 bg-slate-50 rounded-xl p-3">
                 {showAddPartnership && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
                     <div className="flex gap-2">
@@ -2778,7 +2778,7 @@ export function PipelineClient({ initialCompanies }: Props) {
               </div>
 
               {/* Content: Portfolio Intelligence */}
-              <div className="h-[220px] overflow-y-auto pr-1 bg-slate-50 rounded-xl p-3">
+              <div className="h-[150px] overflow-y-auto pr-1 bg-slate-50 rounded-xl p-3">
                 {loadingIntelligence ? (
                   <div className="space-y-2">
                     {[1,2,3].map(i => <div key={i} className="h-10 bg-slate-50 rounded-lg animate-pulse" />)}
@@ -2798,14 +2798,21 @@ export function PipelineClient({ initialCompanies }: Props) {
                   <div className="space-y-2">
                     {intelligence.map((item, i) => (
                       <div key={i} className="border border-slate-200 rounded-lg p-2.5 bg-white hover:bg-slate-50 transition-colors">
-                        <p className="text-xs font-medium text-slate-800 leading-snug mb-1">{item.headline}</p>
+                        {item.url ? (
+                          <a href={item.url} target="_blank" rel="noopener noreferrer"
+                            className="text-xs font-medium text-blue-700 hover:underline leading-snug mb-1 block">
+                            {item.headline}
+                          </a>
+                        ) : (
+                          <p className="text-xs font-medium text-slate-800 leading-snug mb-1">{item.headline}</p>
+                        )}
                         {item.summary && <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">{item.summary}</p>}
-                        <div className="flex items-center justify-between mt-1.5 gap-2">
+                        <div className="flex items-center gap-2 mt-1.5">
                           <span className="text-[10px] text-slate-400">{item.source} · {item.date}</span>
                           {item.url && (
                             <a href={item.url} target="_blank" rel="noopener noreferrer"
-                              className="text-[10px] text-blue-500 hover:underline flex items-center gap-0.5 flex-shrink-0">
-                              <ExternalLink size={9} /> View
+                              className="text-[10px] text-blue-400 hover:text-blue-600 flex items-center gap-0.5 flex-shrink-0">
+                              <ExternalLink size={9} />
                             </a>
                           )}
                         </div>

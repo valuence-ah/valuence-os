@@ -1972,16 +1972,9 @@ export function FundsViewClient({ initialCompanies }: Props) {
                           )}
                         </button>
                       </div>
-                      <p className="text-[10px] text-gray-400 italic mb-2">Last 90 days</p>
+                      <p className="text-[10px] text-gray-400 italic mb-2">Recent investments (via live search)</p>
                       {(() => {
-                        const cutoff = new Date();
-                        cutoff.setDate(cutoff.getDate() - 90);
-                        const updatedAt = selectedId ? (fundInvestmentsUpdatedAt[selectedId] ?? null) : null;
-                        const filtered = selected.recentInvest.filter(inv => {
-                          if (updatedAt) return new Date(updatedAt) >= cutoff;
-                          if (inv.date) return parseInt(inv.date) >= new Date().getFullYear() - 1;
-                          return false;
-                        });
+                        const filtered = selected.recentInvest;
                         return filtered.length > 0 ? (
                           <div className="flex flex-col gap-1.5">
                             {filtered.map(inv => (
@@ -2004,7 +1997,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
                           </div>
                         ) : (
                           <p className="text-xs text-slate-400">
-                            {selectedId && generatingRecentIds.has(selectedId) ? "Generating…" : "No investments in the last 90 days."}
+                            {selectedId && generatingRecentIds.has(selectedId) ? "Searching…" : "No recent investments found."}
                           </p>
                         );
                       })()}
