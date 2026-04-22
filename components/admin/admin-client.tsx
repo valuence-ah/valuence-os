@@ -99,17 +99,24 @@ function makeComboEditor<TRow>(options: string[]) {
 
 const TYPE_OPTIONS = ["startup","fund","lp","corporate","ecosystem_partner","government","other"];
 const TYPE_LABELS: Record<string, string> = {
-  startup:           "Startup",
-  fund:              "Fund / VC",
-  lp:                "LP",
-  corporate:         "Corporate",
-  ecosystem_partner: "Ecosystem",
-  government:        "Gov / Academic",
-  other:             "Other",
+  startup:              "Startup",
+  fund:                 "Fund / VC",
+  lp:                   "LP",
+  corporate:            "Corporate",
+  ecosystem_partner:    "Ecosystem",
+  government:           "Gov / Academic",
+  other:                "Other",
   // Legacy DB values → display as their modern label
-  investor:          "Fund / VC",
-  "strategic partner": "Corporate",
-  "limited partner": "LP",
+  investor:             "Fund / VC",
+  "fund vc":            "Fund / VC",
+  "fund/vc":            "Fund / VC",
+  "strategic partner":  "Corporate",
+  "limited partner":    "LP",
+  "eco partner":        "Ecosystem",
+  "eco_partner":        "Ecosystem",
+  "ecosystem":          "Ecosystem",
+  "government/academic":"Gov / Academic",
+  "gov/academic":       "Gov / Academic",
 };
 const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   "startup":           { bg: "#eff6ff", color: "#1d4ed8" },
@@ -1672,8 +1679,8 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
   }, []);
 
   // ── Sort state ───────────────────────────────────────────────────────────
-  const [companySortColumns, setCompanySortColumns] = useState<readonly SortColumn[]>([]);
-  const [contactSortColumns, setContactSortColumns] = useState<readonly SortColumn[]>([]);
+  const [companySortColumns, setCompanySortColumns] = useState<readonly SortColumn[]>([{ columnKey: "name", direction: "ASC" }]);
+  const [contactSortColumns, setContactSortColumns] = useState<readonly SortColumn[]>([{ columnKey: "name", direction: "ASC" }]);
 
   // ── Column width persistence ──────────────────────────────────────────────
   const [companyColWidths, setCompanyColWidths] = useState<Record<string, number>>(() => {
@@ -1907,10 +1914,15 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
       {
         key: "description",
         name: "Description",
-        width: 300,
+        width: 420,
         sortable: true,
         resizable: true,
         renderEditCell: renderTextEditor,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <div style={{ width: "100%", padding: "4px 8px", fontSize: 12, whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.4, overflow: "hidden" }}>
+            {(row as CompanyRow).description ?? ""}
+          </div>
+        ),
       },
       {
         key: "website",
@@ -1927,6 +1939,11 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         sortable: true,
         resizable: true,
         renderEditCell: renderTextEditor,
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <div style={{ width: "100%", padding: "0 8px", fontSize: 10, display: "flex", alignItems: "center", height: "100%" }}>
+            {(row as CompanyRow).location_city ?? ""}
+          </div>
+        ),
       },
       {
         key: "location_country",
@@ -1935,6 +1952,11 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
         sortable: true,
         resizable: true,
         renderEditCell: makeComboEditor<CompanyRow>(["USA","UK","Canada","Singapore","South Korea","Japan","Germany","France","Australia","Israel","India","China","Thailand","Malaysia","Brunei","Other"]),
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <div style={{ width: "100%", padding: "0 8px", fontSize: 10, display: "flex", alignItems: "center", height: "100%" }}>
+            {(row as CompanyRow).location_country ?? ""}
+          </div>
+        ),
       },
       {
         key: "founded_year",
@@ -3259,6 +3281,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
               onSelectedRowsChange={setSelectedCompanyRows}
               sortColumns={companySortColumns}
               onSortColumnsChange={setCompanySortColumns}
+              headerRowHeight={24}
               onColumnResize={(col, width) => {
                 const key = col.key as string;
                 setCompanyColWidths(prev => {
@@ -3311,6 +3334,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
               onSelectedRowsChange={setSelectedContactRows}
               sortColumns={contactSortColumns}
               onSortColumnsChange={setContactSortColumns}
+              headerRowHeight={24}
               onColumnResize={(col, width) => {
                 const key = col.key as string;
                 setContactColWidths(prev => {
