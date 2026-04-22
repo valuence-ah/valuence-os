@@ -48,7 +48,7 @@ Produce an LP intelligence brief for {{lp_name}}:
 
 2. PORTFOLIO PICKS (1–2 companies): Select 1–2 companies from the portfolio list above that best match this LP's mandate. Base your selection on company name and sector — a description is not required. For each pick, write one sentence of rationale tied to the LP's interests.
 
-3. PIPELINE PICKS (2–5 companies): Select 2–5 companies from the pipeline list above that would interest this LP. Base selection on sector and stage alignment — a description is not required. For each pick, write one sentence of rationale. Never fabricate company names — only use names exactly as they appear in the lists above.
+3. PIPELINE PICKS (3–5 companies): Select 3–5 companies from the pipeline list above that would interest this LP. Base selection on sector and stage alignment — a description is not required. For each pick, write one sentence of rationale. Never fabricate company names — only use names exactly as they appear in the lists above.
 
 IMPORTANT: You MUST populate portfolio_picks and pipeline_picks. Do not return empty arrays unless the lists above literally say "None."
 
@@ -85,14 +85,16 @@ export async function POST(
     supabase
       .from("companies")
       .select("id, name, sectors, stage, description")
-      .eq("status", "portfolio")
+      .eq("deal_status", "portfolio")
+      .eq("type", "startup")
       .order("name")
       .limit(10),
     supabase
       .from("companies")
-      .select("id, name, sectors, stage, description, status")
-      .not("status", "in", '("passed","exited","portfolio")')
-      .not("status", "is", null)
+      .select("id, name, sectors, stage, description, deal_status")
+      .not("deal_status", "in", '("passed","exited","portfolio")')
+      .not("deal_status", "is", null)
+      .eq("type", "startup")
       .order("updated_at", { ascending: false })
       .limit(15),
   ]);
@@ -131,6 +133,11 @@ export async function POST(
     portfolio:  companyList(portfolio),
     pipeline:   companyList(pipeline),
   };
+
+  // Debug: log what we found so Vercel logs show the data
+  console.log("[lp/alignment] portfolio count:", portfolio?.length ?? 0, "| pipeline count:", pipeline?.length ?? 0);
+  console.log("[lp/alignment] portfolio list:\n", companyList(portfolio));
+  console.log("[lp/alignment] pipeline list:\n", companyList(pipeline).slice(0, 500));
 
   const rawPrompt    = cfg.user_prompt?.trim() ? cfg.user_prompt : DEFAULT_PROMPT;
   const finalPrompt  = interpolate(rawPrompt, templateVars);
