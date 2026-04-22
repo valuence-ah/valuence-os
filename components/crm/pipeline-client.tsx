@@ -12,7 +12,7 @@ import {
   Search, Plus, ExternalLink, ChevronRight, Pencil, Check, X,
   User, FileText, Link2, MapPin, Calendar, Mail, Phone,
   Building2, Sparkles, Paperclip, Tag, Upload, Loader2, ImageIcon, Bot,
-  List, LayoutGrid, Eye, Download, CheckSquare, Clock,
+  List, LayoutGrid, Eye, Download, CheckSquare, Clock, RefreshCw,
 } from "lucide-react";
 import { PdfCover } from "@/components/ui/pdf-cover";
 import { formatMeetingSummary } from "@/lib/format-meeting-summary";
@@ -485,6 +485,11 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [memo, setMemo]                   = useState<IcMemo | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [emailEvents, setEmailEvents]     = useState<Array<{id:string;kind:"email";title:string;body:string;date:string;url:string}>>([]);
+  // Pipeline intelligence (competitor + M&A)
+  type PipelineIntelItem = { id: string; type: string; entity_name: string; description: string | null; fit_level: string };
+  const [pipelineIntel, setPipelineIntel] = useState<PipelineIntelItem[]>([]);
+  const [refreshingIntel, setRefreshingIntel] = useState<"competitor" | "ma_acquirer" | null>(null);
+  const [intelError, setIntelError]       = useState<string | null>(null);
 
   // Inline event adding
   const [addingNote, setAddingNote]         = useState(false);
@@ -755,6 +760,16 @@ export function PipelineClient({ initialCompanies }: Props) {
       .eq("document_type", "meeting_transcript")
       .order("uploaded_at", { ascending: false })
       .then(({ data }) => setCompanyDocuments((data ?? []) as unknown as typeof companyDocuments));
+
+    // Load pipeline intelligence (competitor + M&A)
+    supabase
+      .from("portfolio_intelligence" as "companies")
+      .select("id, type, entity_name, description, fit_level")
+      .eq("company_id", id)
+      .in("type", ["competitor", "ma_acquirer"])
+      .order("fit_level")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then(({ data }) => setPipelineIntel((data ?? []) as any));
   }, [supabase]);
 
   const loadEmails = useCallback(async (id: string) => {
@@ -1202,6 +1217,37 @@ export function PipelineClient({ initialCompanies }: Props) {
       alert(e instanceof Error ? e.message : "Memo generation failed");
     } finally {
       setGeneratingMemo(false);
+    }
+  }
+
+  // ── Pipeline Intelligence (Competitor / M&A) refresh ─────────────────────
+  async function handlePipelineIntelRefresh(type: "competitor" | "ma_acquirer") {
+    if (!selected) return;
+    setRefreshingIntel(type);
+    setIntelError(null);
+    try {
+      const res = await fetch("/api/portfolio/intelligence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: selected.id, type }),
+      });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) {
+        setIntelError(data.error ?? "Failed to generate");
+      } else {
+        const { data: fresh } = await supabase
+          .from("portfolio_intelligence" as "companies")
+          .select("id, type, entity_name, description, fit_level")
+          .eq("company_id", selected.id)
+          .in("type", ["competitor", "ma_acquirer"])
+          .order("fit_level");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setPipelineIntel((fresh ?? []) as any);
+      }
+    } catch (e) {
+      setIntelError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setRefreshingIntel(null);
     }
   }
 
@@ -2965,22 +3011,17 @@ export function PipelineClient({ initialCompanies }: Props) {
                           ? supabase.storage.from("transcripts").getPublicUrl(doc.storage_path).data.publicUrl
                           : null;
                         return (
-                          <div key={doc.id} className="relative group flex flex-col justify-between border border-slate-200 rounded-xl bg-white p-3 h-full min-w-0">
-                            <div className="flex items-start gap-2 min-w-0">
-                              <div className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
-                                <Paperclip size={11} className="text-violet-500" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[10px] font-medium text-slate-700 truncate leading-tight">{doc.name}</p>
-                                <p className="text-[9px] text-slate-400 mt-0.5">{formatDate(doc.created_at)}</p>
-                              </div>
+                          <div key={doc.id} className="relative group border border-slate-200 rounded-xl overflow-hidden bg-white h-full flex flex-col">
+                            {/* Main area — icon (same pattern as pitch deck tiles) */}
+                            <a href={url ?? "#"} target={url ? "_blank" : undefined} rel="noopener noreferrer"
+                              className="flex-1 min-h-0 bg-violet-50 flex items-center justify-center">
+                              <Paperclip size={18} className="text-violet-400" />
+                            </a>
+                            {/* Footer */}
+                            <div className="px-2 py-1.5 border-t border-slate-100 flex-shrink-0">
+                              <p className="text-[9px] text-slate-600 truncate font-medium">{doc.name}</p>
+                              <p className="text-[9px] text-slate-400">{formatDate(doc.created_at)}</p>
                             </div>
-                            {url && (
-                              <a href={url} target="_blank" rel="noopener noreferrer"
-                                className="mt-2 text-[9px] text-blue-500 hover:underline flex items-center gap-0.5 truncate">
-                                <ExternalLink size={9} /> Open
-                              </a>
-                            )}
                             <button
                               onClick={e => { e.stopPropagation(); handleDeleteTranscript(doc.id, doc.storage_path); }}
                               className="absolute top-1.5 right-1.5 w-5 h-5 bg-white/90 backdrop-blur rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 border border-slate-200"
@@ -3158,6 +3199,75 @@ export function PipelineClient({ initialCompanies }: Props) {
                   </div>
                 )}
               </section>
+
+            {/* ── Competitor Landscape & M&A Acquirers ── */}
+            <section>
+              {(() => {
+                const competitors = pipelineIntel.filter(i => i.type === "competitor");
+                const acquirers   = pipelineIntel.filter(i => i.type === "ma_acquirer");
+                const THREAT: Record<string, string> = { high: "bg-red-100 text-red-700", medium: "bg-amber-100 text-amber-700", low: "bg-slate-100 text-slate-500" };
+                const THREAT_LABEL: Record<string, string> = { high: "Direct", medium: "Adjacent", low: "Indirect" };
+                const FIT: Record<string, string> = { high: "bg-emerald-100 text-emerald-700", medium: "bg-amber-100 text-amber-700", low: "bg-slate-100 text-slate-500" };
+                return (
+                  <div className="flex gap-4" style={{ height: "150px" }}>
+                    {/* Competitor Landscape */}
+                    <div style={{ flex: "0 0 50%", minWidth: 0 }} className="flex flex-col min-h-0">
+                      <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
+                        <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Competitor Landscape</h2>
+                        <button onClick={() => handlePipelineIntelRefresh("competitor")} disabled={refreshingIntel !== null}
+                          className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1 disabled:opacity-40">
+                          <RefreshCw size={9} className={refreshingIntel === "competitor" ? "animate-spin" : ""} /> Refresh
+                        </button>
+                      </div>
+                      <div className="flex-1 min-h-0 overflow-y-auto space-y-1 pr-0.5">
+                        {competitors.length === 0 ? (
+                          <p className="text-[11px] text-slate-400 pt-1">{refreshingIntel === "competitor" ? "Generating…" : "Click Refresh to generate"}</p>
+                        ) : competitors.slice(0, 4).map(c => (
+                          <div key={c.id} className="flex items-start gap-1.5 py-0.5">
+                            <span className={`text-[8px] px-1 py-px rounded font-semibold flex-shrink-0 mt-0.5 ${THREAT[c.fit_level] ?? "bg-slate-100 text-slate-500"}`}>
+                              {THREAT_LABEL[c.fit_level] ?? c.fit_level}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold text-slate-800 leading-tight truncate">{c.entity_name}</p>
+                              {c.description && <p className="text-[10px] text-slate-500 leading-snug line-clamp-1">{c.description}</p>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* M&A Acquirers */}
+                    <div style={{ flex: "0 0 50%", minWidth: 0 }} className="flex flex-col min-h-0">
+                      <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
+                        <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Potential M&A Acquirers</h2>
+                        <button onClick={() => handlePipelineIntelRefresh("ma_acquirer")} disabled={refreshingIntel !== null}
+                          className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1 disabled:opacity-40">
+                          <RefreshCw size={9} className={refreshingIntel === "ma_acquirer" ? "animate-spin" : ""} /> Refresh
+                        </button>
+                      </div>
+                      <div className="flex-1 min-h-0 overflow-y-auto space-y-1 pr-0.5">
+                        {acquirers.length === 0 ? (
+                          <p className="text-[11px] text-slate-400 pt-1">{refreshingIntel === "ma_acquirer" ? "Generating…" : "Click Refresh to generate"}</p>
+                        ) : acquirers.slice(0, 4).map(a => (
+                          <div key={a.id} className="flex items-start gap-1.5 py-0.5">
+                            <span className={`text-[8px] px-1 py-px rounded font-semibold flex-shrink-0 mt-0.5 ${FIT[a.fit_level] ?? "bg-slate-100 text-slate-500"}`}>
+                              {a.fit_level}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold text-slate-800 leading-tight truncate">{a.entity_name}</p>
+                              {a.description && <p className="text-[10px] text-slate-500 leading-snug line-clamp-1">{a.description}</p>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {intelError && (
+                <p className="text-[10px] text-red-500 mt-1">{intelError}</p>
+              )}
+            </section>
 
             {/* ── IC Memo ── */}
             <section>
