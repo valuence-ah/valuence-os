@@ -873,54 +873,6 @@ export function PortfolioOverviewTab({
         </div>
       </div>
 
-      {/* ═══ ROW 5: Competitor Landscape (full width) ═══════════════════════════ */}
-      {(() => {
-        const competitors = intelligence
-          .filter(i => i.type === "competitor")
-          .sort((a, b) => (FIT_ORDER[a.fit_level] ?? 3) - (FIT_ORDER[b.fit_level] ?? 3));
-
-        const THREAT_BADGE: Record<string, string> = {
-          high:   "bg-red-100 text-red-700",
-          medium: "bg-amber-100 text-amber-700",
-          low:    "bg-slate-100 text-slate-500",
-        };
-        const THREAT_LABEL: Record<string, string> = {
-          high:   "Direct threat",
-          medium: "Adjacent",
-          low:    "Indirect",
-        };
-
-        return (
-          <div>
-            <div className="flex items-center justify-between mb-3 flex-shrink-0">
-              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Competitor landscape</h3>
-              <button onClick={() => handleRefresh("competitor")} disabled={refreshing !== null}
-                className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-700 disabled:opacity-50">
-                <RefreshCw size={10} className={refreshing === "competitor" ? "animate-spin" : ""} /> Refresh
-              </button>
-            </div>
-            {competitors.length === 0 ? (
-              <p className="text-xs text-slate-400">Click Refresh to generate competitor landscape</p>
-            ) : (
-              <div className="grid grid-cols-4 gap-2">
-                {competitors.slice(0, 4).map(c => (
-                  <div key={c.id} className="bg-slate-50 rounded-lg p-2.5">
-                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                      <p className="text-[12px] font-semibold text-slate-800">{c.entity_name}</p>
-                      <span className={`text-[9px] px-1 py-px rounded font-medium ${THREAT_BADGE[c.fit_level] ?? "bg-slate-100 text-slate-500"}`}>
-                        {THREAT_LABEL[c.fit_level] ?? c.fit_level}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-snug line-clamp-3">
-                      {stripCiteTags(c.description || "No details yet — click Refresh.")}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       {/* Full timeline slide-out panel */}
       {showFullTimeline && (
