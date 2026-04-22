@@ -470,9 +470,16 @@ export function PipelineClient({ initialCompanies }: Props) {
 
   // ── State ────────────────────────────────────────────────────────────────────
   const [companies, setCompanies]         = useState<Company[]>(initialCompanies);
-  const [selectedId, setSelectedId]       = useState<string | null>(
-    initialCompanies[0]?.id ?? null
-  );
+  const [selectedId, setSelectedId]       = useState<string | null>(() => {
+    // Restore last-viewed company on mount (client-only)
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("pipeline_last_company");
+        if (saved && initialCompanies.some(c => c.id === saved)) return saved;
+      } catch {}
+    }
+    return initialCompanies[0]?.id ?? null;
+  });
   const [search, setSearch]               = useState("");
   const [pipelineView, setPipelineView]   = useState<"list" | "board">("list");
   const [boardDragItem, setBoardDragItem] = useState<string | null>(null);
@@ -828,6 +835,13 @@ export function PipelineClient({ initialCompanies }: Props) {
       loadEmails(selectedId);
     }
   }, [selectedId, loadDetail, loadEmails]);
+
+  // Persist the last-viewed company so the page re-opens to it on next visit
+  useEffect(() => {
+    if (selectedId) {
+      try { localStorage.setItem("pipeline_last_company", selectedId); } catch {}
+    }
+  }, [selectedId]);
 
   // Load partner companies (strategics / LPs / investors) for search
   useEffect(() => {
@@ -2302,9 +2316,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </button>
               </div>
 
-              {/* Content: Timeline — no inner scroll, outer panel scrolls */}
-              <div className="bg-slate-50 rounded-xl p-3">
-              {/* Add event form */}
+              {/* Add event form — sits above the fixed-height scroll box */}
               {addingNote && (
                 <div ref={addEventFormRef} className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
                   <div className="grid grid-cols-2 gap-2">
@@ -2370,9 +2382,11 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </div>
               )}
 
+              {/* Fixed-height scrollable box — identical to Contacts */}
+              <div className="h-[150px] overflow-y-auto bg-slate-50 rounded-xl p-3 relative">
               {loadingDetail ? (
                 <div className="space-y-3">
-                  {[1,2,3].map(i => <div key={i} className="h-14 bg-slate-50 rounded-xl animate-pulse" />)}
+                  {[1,2,3].map(i => <div key={i} className="h-14 bg-white rounded-xl animate-pulse" />)}
                 </div>
               ) : (() => {
                 // Merge interactions + document uploads into a single timeline
@@ -2425,9 +2439,9 @@ export function PipelineClient({ initialCompanies }: Props) {
                 };
 
                 return (
-                  <div className="relative h-[200px] overflow-y-auto pr-1">
-                    {/* Vertical line */}
-                    <div className="absolute left-[15px] top-2 bottom-2 w-px bg-slate-200" />
+                  <>
+                    {/* Vertical line — positioned inside the outer relative box */}
+                    <div className="absolute left-[27px] top-2 bottom-2 w-px bg-slate-200" />
                     <div className="space-y-3">
                       {events.map(ev => (
                         <div key={ev.id} className="flex gap-3">
@@ -2509,11 +2523,10 @@ export function PipelineClient({ initialCompanies }: Props) {
                         </div>
                       ))}
                     </div>
-
-                  </div>
+                  </>
                 );
               })()}
-              </div>{/* end timeline content */}
+              </div>{/* end fixed-height timeline box */}
               </section>
 
             </div>{/* end contacts/timeline sections */}
