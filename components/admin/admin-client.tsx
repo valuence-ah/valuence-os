@@ -461,10 +461,11 @@ function TitleCell({ row, onSaved }: { row: ContactRow; onSaved: (id: string, ti
 
 // ─── StatusCell: badge bubble picker for contact status ──────────────────────
 
-const STATUS_OPTIONS_LIST = ["active", "pending"];
+const STATUS_OPTIONS_LIST = ["active", "pending", "archived"];
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  active:  { bg: "#dcfce7", color: "#15803d" },
-  pending: { bg: "#fef9c3", color: "#854d0e" },
+  active:   { bg: "#dcfce7", color: "#15803d" },
+  pending:  { bg: "#fef9c3", color: "#854d0e" },
+  archived: { bg: "#f1f5f9", color: "#64748b" },
 };
 const STATUS_COLOR_DEFAULT = { bg: "#f8fafc", color: "#64748b" };
 
