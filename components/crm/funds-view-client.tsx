@@ -986,16 +986,20 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
   async function handleChangeType(newType: string) {
     if (!selectedId) return;
+    const id = selectedId;
+    const snapshot = companies.find(c => c.id === id);
     setChangeTypePos(null);
-    await supabase.from("companies").update({ type: newType, types: [newType] }).eq("id", selectedId);
     if (newType !== "fund") {
-      // Remove from Funds view — this company is no longer a fund
-      setCompanies(prev => prev.filter(c => c.id !== selectedId));
+      setCompanies(prev => prev.filter(c => c.id !== id));
       setSelectedId(null);
     } else {
       setCompanies(prev => prev.map(c =>
-        c.id === selectedId ? { ...c, type: newType as Company["type"], types: [newType] } : c
+        c.id === id ? { ...c, type: newType as Company["type"], types: [newType] } : c
       ));
+    }
+    const { error } = await supabase.from("companies").update({ type: newType, types: [newType] }).eq("id", id);
+    if (error && snapshot) {
+      setCompanies(prev => [snapshot, ...prev.filter(c => c.id !== id)]);
     }
   }
 

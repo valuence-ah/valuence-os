@@ -822,16 +822,21 @@ export function LpViewClient({ initialCompanies }: Props) {
   // Change company type
   async function handleChangeType(newType: string) {
     if (!selectedId) return;
+    const id = selectedId;
+    const snapshot = companies.find(c => c.id === id);
     setChangeTypePos(null);
-    await supabase.from("companies").update({ type: newType, types: [newType] }).eq("id", selectedId);
     if (newType !== "lp") {
-      // Remove from LP view — this company is no longer an LP
-      setCompanies(prev => prev.filter(c => c.id !== selectedId));
+      setCompanies(prev => prev.filter(c => c.id !== id));
       setSelectedId(null);
     } else {
       setCompanies(prev => prev.map(c =>
-        c.id === selectedId ? { ...c, type: newType as Company["type"], types: [newType] } : c
+        c.id === id ? { ...c, type: newType as Company["type"], types: [newType] } : c
       ));
+    }
+    const { error } = await supabase.from("companies").update({ type: newType, types: [newType] }).eq("id", id);
+    if (error && snapshot) {
+      // Rollback on failure
+      setCompanies(prev => [snapshot, ...prev.filter(c => c.id !== id)]);
     }
   }
 
