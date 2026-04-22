@@ -46,18 +46,20 @@ Produce an LP intelligence brief for {{lp_name}}:
 
 1. ALIGNMENT (2–3 sentences): Why is Valuence Ventures a strong fit for this LP? Reference their specific type, mandate, geography, or stated interests. Be concrete — no generic VC language.
 
-2. PORTFOLIO PICKS (1–2 companies): Which of our portfolio companies would resonate most with this LP? For each, give one sentence tied to their mandate or interests.
+2. PORTFOLIO PICKS (1–2 companies): Select 1–2 companies from the portfolio list above that best match this LP's mandate. Base your selection on company name and sector — a description is not required. For each pick, write one sentence of rationale tied to the LP's interests.
 
-3. PIPELINE PICKS (2–5 companies): Which active pipeline companies would interest this LP most? For each, give one sentence tied to their interests. Only pick companies that have a description. Never fabricate company names — only use companies listed above.
+3. PIPELINE PICKS (2–5 companies): Select 2–5 companies from the pipeline list above that would interest this LP. Base selection on sector and stage alignment — a description is not required. For each pick, write one sentence of rationale. Never fabricate company names — only use names exactly as they appear in the lists above.
+
+IMPORTANT: You MUST populate portfolio_picks and pipeline_picks. Do not return empty arrays unless the lists above literally say "None."
 
 Return ONLY valid JSON (no markdown, no explanation):
 {
   "alignment_summary": "2–3 sentence explanation of fund–LP fit",
   "portfolio_picks": [
-    { "name": "Exact company name from list above", "reason": "One sentence why this fits the LP" }
+    { "name": "Exact company name from portfolio list", "reason": "One sentence why this fits the LP" }
   ],
   "pipeline_picks": [
-    { "name": "Exact company name from list above", "reason": "One sentence why this fits the LP" }
+    { "name": "Exact company name from pipeline list", "reason": "One sentence why this fits the LP" }
   ]
 }`;
 
@@ -115,9 +117,10 @@ export async function POST(
   function companyList(cos: typeof portfolio): string {
     if (!cos || cos.length === 0) return "None.";
     return cos.map(c => {
-      const sectors = (c.sectors ?? []).join(", ") || "N/A";
-      const desc    = c.description ? c.description.slice(0, 200) : "(no description)";
-      return `- ${c.name} (${sectors}, ${c.stage ?? "early-stage"}): ${desc}`;
+      const sectors = (c.sectors ?? []).join(", ") || "unknown sector";
+      const parts   = [`${c.name} (${sectors}, ${c.stage ?? "early-stage"})`];
+      if (c.description) parts.push(c.description.slice(0, 200));
+      return `- ${parts.join(": ")}`;
     }).join("\n");
   }
 
@@ -145,9 +148,13 @@ export async function POST(
       messages: [{ role: "user", content: finalPrompt }],
     });
 
+    // Log raw output so server logs show exactly what Claude returned
+    console.log("[lp/alignment] raw response:", text.slice(0, 600));
+
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      return NextResponse.json({ error: "Model returned unexpected format" }, { status: 500 });
+      console.error("[lp/alignment] no JSON found in:", text.slice(0, 300));
+      return NextResponse.json({ error: "Model returned unexpected format — no JSON object found" }, { status: 500 });
     }
 
     const result = JSON.parse(jsonMatch[0]) as {
@@ -155,6 +162,9 @@ export async function POST(
       portfolio_picks?: { name: string; reason: string }[];
       pipeline_picks?:  { name: string; reason: string }[];
     };
+
+    console.log("[lp/alignment] parsed picks — portfolio:", result.portfolio_picks?.length ?? 0,
+      "pipeline:", result.pipeline_picks?.length ?? 0);
 
     // Enrich picks with id/sector/stage/description.
     // Uses case-insensitive trimmed match so Claude's slight casing
