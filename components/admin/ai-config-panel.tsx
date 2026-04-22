@@ -127,8 +127,9 @@ const TABS = [
     color: "text-blue-600",
     bg: "bg-blue-50",
     description: "Generates M&A acquirer candidates for portfolio companies. Prompts read from DB at runtime.",
-    variables: ["{{company_name}}", "{{description}}", "{{sectors}}", "{{stage}}", "{{kpi_context}}", "{{milestones}}", "{{lp_names}}"],
+    variables: ["{{company_name}}", "{{description}}", "{{sectors}}", "{{stage}}", "{{kpi_context}}", "{{milestones}}", "{{lp_names}}", "{{documents}}"],
     promptLabel: "M&A User Prompt Template",
+    hint: "{{documents}} injects extracted text from the company's pitch deck and data room documents (up to 5 most recent, ~1500 chars each). Use it to instruct Claude to reference the company's own materials before identifying acquirers.",
   },
   {
     name: "pilot_intelligence",
@@ -137,8 +138,9 @@ const TABS = [
     color: "text-emerald-600",
     bg: "bg-emerald-50",
     description: "Generates pilot/commercial partner candidates for portfolio companies. Prompts read from DB at runtime.",
-    variables: ["{{company_name}}", "{{description}}", "{{sectors}}", "{{stage}}", "{{kpi_context}}", "{{milestones}}", "{{lp_names}}"],
+    variables: ["{{company_name}}", "{{description}}", "{{sectors}}", "{{stage}}", "{{kpi_context}}", "{{milestones}}", "{{lp_names}}", "{{documents}}"],
     promptLabel: "Pilot User Prompt Template",
+    hint: "{{documents}} injects extracted text from the company's pitch deck and data room documents (up to 5 most recent, ~1500 chars each). Use it to instruct Claude to reference the company's own materials before identifying partners.",
   },
   {
     name: "competitor_intelligence",
@@ -147,9 +149,9 @@ const TABS = [
     color: "text-red-600",
     bg: "bg-red-50",
     description: "Generates competitor landscape cards shown on the Portfolio overview tab. Leave prompt blank to use the built-in default.",
-    variables: ["{{company_name}}", "{{description}}", "{{sectors}}", "{{stage}}", "{{kpi_context}}", "{{milestones}}"],
+    variables: ["{{company_name}}", "{{description}}", "{{sectors}}", "{{stage}}", "{{kpi_context}}", "{{milestones}}", "{{documents}}"],
     promptLabel: "Prompt Template",
-    hint: "Leave blank to use the built-in default. If set, this replaces the full prompt — include the JSON output format. Must return an array with entity_name, description, fit_level (high/medium/low), warmth fields.",
+    hint: "Leave blank to use the built-in default. If set, this replaces the full prompt — include the JSON output format. Must return an array with entity_name, description, fit_level (high/medium/low), warmth fields. {{documents}} injects extracted text from the company's pitch deck and data room (up to 5 most recent docs, ~1500 chars each) — use this to ground competitors in the company's actual technology.",
   },
 ] as const;
 

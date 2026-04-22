@@ -74,12 +74,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "company_id and type required" }, { status: 400 });
   }
 
-  // Fetch company details, latest KPIs, milestones in parallel
-  const [companyResult, kpisResult, milestonesResult, lpResult] = await Promise.all([
+  // Fetch company details, latest KPIs, milestones, documents, and LPs in parallel
+  const [companyResult, kpisResult, milestonesResult, lpResult, docsResult] = await Promise.all([
     supabase.from("companies").select("name, sectors, stage, description, sub_type").eq("id", company_id).single(),
     supabase.from("portfolio_kpis").select("*").eq("company_id", company_id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("portfolio_milestones").select("title, status, target_date").eq("company_id", company_id).order("created_at", { ascending: false }).limit(5),
     supabase.from("companies").select("name").eq("type", "limited partner").order("name").limit(20),
+    supabase.from("documents").select("name, type, extracted_text").eq("company_id", company_id).not("extracted_text", "is", null).order("created_at", { ascending: false }).limit(5),
   ]);
 
   const company = companyResult.data;
@@ -97,6 +98,17 @@ export async function POST(request: NextRequest) {
   const kpi = kpisResult.data;
   const milestones = milestonesResult.data ?? [];
   const lpNames = (lpResult.data ?? []).map(l => l.name).join(", ");
+
+  // Build a compact document context from extracted text (pitch decks, data room)
+  const docs = docsResult.data ?? [];
+  const documentsContext = docs.length
+    ? docs.map(d => {
+        const label = `[${d.type ?? "document"}: ${d.name}]`;
+        // Truncate each doc to ~1500 chars to stay within token budget
+        const text = (d.extracted_text ?? "").substring(0, 1500).trim();
+        return `${label}\n${text}`;
+      }).join("\n\n---\n\n")
+    : "No data room documents available.";
 
   const kpiContext = kpi
     ? `KPIs (${kpi.period}): MRR $${kpi.mrr ?? "N/A"}, Burn $${kpi.monthly_burn ?? "N/A"}/mo, Runway ${kpi.runway_months ?? "N/A"}mo, ${kpi.customers ?? "N/A"} customers, ${kpi.pilots_active ?? "N/A"} active pilots.`
@@ -123,6 +135,9 @@ COMPANY PROFILE:
 - Sub-type: ${company.sub_type || "N/A"}
 ${kpiContext}
 ${milestoneContext}
+
+DATA ROOM & PITCH DECK MATERIALS (use these for deeper technical context):
+${documentsContext}
 
 LP NETWORK (potential warm intro paths): ${lpNames || "None specified"}
 
@@ -167,6 +182,9 @@ COMPANY PROFILE:
 ${kpiContext}
 ${milestoneContext}
 
+DATA ROOM & PITCH DECK MATERIALS (use these for deeper technical context):
+${documentsContext}
+
 LP NETWORK (warm intro paths): ${lpNames || "None specified"}
 If any LP or LP-connected entity is relevant as a partner, flag warmth as "lp_connection" and explain the connection.
 
@@ -209,6 +227,9 @@ COMPANY PROFILE:
 ${kpiContext}
 ${milestoneContext}
 
+DATA ROOM & PITCH DECK MATERIALS (review these to understand the company's specific technology and differentiation before identifying competitors):
+${documentsContext}
+
 For each competitor, explain their specific technology approach vs ${company.name}'s, their funding and notable backers, and why they are a direct threat.
 
 Return JSON array:
@@ -234,7 +255,8 @@ Sort by fit_level (high = direct competitor first).`;
   const cfg = await getAiConfig(configKey);
 
   // Allow full prompt override from Admin AI Config
-  // Variables available: {{company_name}}, {{description}}, {{sectors}}, {{stage}}, {{kpi_context}}, {{milestones}}
+  // Variables available: {{company_name}}, {{description}}, {{sectors}}, {{stage}},
+  //                       {{kpi_context}}, {{milestones}}, {{lp_names}}, {{documents}}
   if (cfg.user_prompt?.trim()) {
     const vars: Record<string, string> = {
       company_name: company.name,
@@ -244,6 +266,7 @@ Sort by fit_level (high = direct competitor first).`;
       kpi_context:  kpiContext,
       milestones:   milestoneContext,
       lp_names:     lpNames,
+      documents:    documentsContext,
     };
     userPrompt = Object.entries(vars).reduce(
       (s, [k, v]) => s.replaceAll(`{{${k}}}`, v),
