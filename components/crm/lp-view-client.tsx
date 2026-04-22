@@ -600,7 +600,7 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [lpIntelCachedAt, setLpIntelCachedAt] = useState<string | null>(null);
 
   // Intelligence tab — LP-specific alignment analysis
-  type AlignmentPick = { name: string; reason: string; sectors: string[]; stage: string | null; description: string | null };
+  type AlignmentPick = { id: string | null; name: string; reason: string; sectors: string[]; stage: string | null; description: string | null };
   type AlignmentResult = { alignment_summary: string; portfolio_picks: AlignmentPick[]; pipeline_picks: AlignmentPick[] };
   const [alignment,        setAlignment]        = useState<AlignmentResult | null>(null);
   const [alignmentLoading, setAlignmentLoading] = useState(false);
@@ -1985,19 +1985,32 @@ export function LpViewClient({ initialCompanies }: Props) {
                             <span className="text-[9px] font-normal text-slate-300 normal-case tracking-normal">· curated for {selected?.name}</span>
                           </p>
                           <div className="space-y-2">
-                            {alignment.portfolio_picks.map((c, i) => (
-                              <div key={i} className="border border-emerald-100 rounded-xl p-3 bg-white">
-                                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                  <p className="text-xs font-semibold text-slate-800">{c.name}</p>
-                                  {c.sectors.slice(0, 2).map(s => (
-                                    <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold capitalize">{s}</span>
-                                  ))}
-                                  {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
-                                </div>
-                                <p className="text-[11px] text-emerald-700 leading-snug font-medium">{c.reason}</p>
-                                {c.description && <p className="text-[10px] text-slate-400 leading-snug mt-1 line-clamp-2">{c.description}</p>}
-                              </div>
-                            ))}
+                            {alignment.portfolio_picks.map((c, i) => {
+                              const inner = (
+                                <>
+                                  <div className="flex items-center justify-between gap-2 mb-1">
+                                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                      <p className="text-xs font-semibold text-slate-800">{c.name}</p>
+                                      {c.sectors.slice(0, 2).map(s => (
+                                        <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold capitalize">{s}</span>
+                                      ))}
+                                      {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
+                                    </div>
+                                    {c.id && <ArrowUpRight size={12} className="flex-shrink-0 text-slate-300 group-hover:text-emerald-500 transition-colors" />}
+                                  </div>
+                                  <p className="text-[11px] text-emerald-700 leading-snug font-medium">{c.reason}</p>
+                                  {c.description && <p className="text-[10px] text-slate-400 leading-snug mt-1 line-clamp-2">{c.description}</p>}
+                                </>
+                              );
+                              return c.id ? (
+                                <a key={i} href={`/crm/companies/${c.id}`}
+                                  className="group block border border-emerald-100 rounded-xl p-3 bg-white hover:bg-emerald-50 hover:border-emerald-300 hover:shadow-sm transition-all cursor-pointer">
+                                  {inner}
+                                </a>
+                              ) : (
+                                <div key={i} className="border border-emerald-100 rounded-xl p-3 bg-white">{inner}</div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -2010,19 +2023,32 @@ export function LpViewClient({ initialCompanies }: Props) {
                             <span className="text-[9px] font-normal text-slate-300 normal-case tracking-normal">· curated for {selected?.name}</span>
                           </p>
                           <div className="space-y-2">
-                            {alignment.pipeline_picks.map((c, i) => (
-                              <div key={i} className="border border-blue-100 rounded-xl p-3 bg-white">
-                                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                  <p className="text-xs font-semibold text-slate-800">{c.name}</p>
-                                  {c.sectors.slice(0, 2).map(s => (
-                                    <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold capitalize">{s}</span>
-                                  ))}
-                                  {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
-                                </div>
-                                <p className="text-[11px] text-blue-700 leading-snug font-medium">{c.reason}</p>
-                                {c.description && <p className="text-[10px] text-slate-400 leading-snug mt-1 line-clamp-2">{c.description}</p>}
-                              </div>
-                            ))}
+                            {alignment.pipeline_picks.map((c, i) => {
+                              const inner = (
+                                <>
+                                  <div className="flex items-center justify-between gap-2 mb-1">
+                                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                      <p className="text-xs font-semibold text-slate-800">{c.name}</p>
+                                      {c.sectors.slice(0, 2).map(s => (
+                                        <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold capitalize">{s}</span>
+                                      ))}
+                                      {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
+                                    </div>
+                                    {c.id && <ArrowUpRight size={12} className="flex-shrink-0 text-slate-300 group-hover:text-blue-500 transition-colors" />}
+                                  </div>
+                                  <p className="text-[11px] text-blue-700 leading-snug font-medium">{c.reason}</p>
+                                  {c.description && <p className="text-[10px] text-slate-400 leading-snug mt-1 line-clamp-2">{c.description}</p>}
+                                </>
+                              );
+                              return c.id ? (
+                                <a key={i} href={`/crm/companies/${c.id}`}
+                                  className="group block border border-blue-100 rounded-xl p-3 bg-white hover:bg-blue-50 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer">
+                                  {inner}
+                                </a>
+                              ) : (
+                                <div key={i} className="border border-blue-100 rounded-xl p-3 bg-white">{inner}</div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}

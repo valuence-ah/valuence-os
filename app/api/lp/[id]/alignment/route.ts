@@ -82,13 +82,13 @@ export async function POST(
       .single(),
     supabase
       .from("companies")
-      .select("name, sectors, stage, description")
+      .select("id, name, sectors, stage, description")
       .eq("status", "portfolio")
       .order("name")
       .limit(10),
     supabase
       .from("companies")
-      .select("name, sectors, stage, description, status")
+      .select("id, name, sectors, stage, description, status")
       .not("status", "in", '("passed","exited","portfolio")')
       .not("status", "is", null)
       .order("updated_at", { ascending: false })
@@ -156,14 +156,18 @@ export async function POST(
       pipeline_picks?:  { name: string; reason: string }[];
     };
 
-    // Enrich picks with sector / stage / description from source lists
+    // Enrich picks with id/sector/stage/description.
+    // Uses case-insensitive trimmed match so Claude's slight casing
+    // differences ("TechBio" vs "techbio") don't silently drop picks.
     function enrich(
       picks: { name: string; reason: string }[] | undefined,
       source: typeof portfolio
     ) {
       return (picks ?? []).map(pick => {
-        const co = source?.find(c => c.name === pick.name);
+        const needle = pick.name.toLowerCase().trim();
+        const co = source?.find(c => c.name.toLowerCase().trim() === needle);
         return {
+          id:          co?.id          ?? null,
           name:        pick.name,
           reason:      pick.reason,
           sectors:     co?.sectors     ?? [],
