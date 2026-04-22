@@ -156,6 +156,27 @@ interface AiConfig {
   user_prompt: string;
 }
 
+// ── Per-tab defaults (used when the DB row doesn't exist yet) ─────────────────
+const SONNET = "claude-sonnet-4-6";
+const TAB_DEFAULTS: Record<string, Omit<AiConfig, "id" | "name" | "label">> = {
+  pipeline_assistant:  { model: SONNET, max_tokens: 2048,  temperature: 0.30, system_prompt: null, user_prompt: "" },
+  company_description: { model: SONNET, max_tokens: 500,   temperature: 0.50, system_prompt: null, user_prompt: "" },
+  ic_memo:             { model: SONNET, max_tokens: 12000, temperature: 0.30, system_prompt: null, user_prompt: "" },
+  lp_outreach_draft:   { model: SONNET, max_tokens: 800,   temperature: 0.50, system_prompt: null, user_prompt: "" },
+  lp_prep_brief:       { model: SONNET, max_tokens: 1500,  temperature: 0.30, system_prompt: null, user_prompt: "" },
+  lp_meeting_summary:  { model: SONNET, max_tokens: 800,   temperature: 0.30, system_prompt: null, user_prompt: "" },
+  sourcing_scorer:     { model: SONNET, max_tokens: 2048,  temperature: 0.10, system_prompt: null, user_prompt: "" },
+  exa_research:        { model: SONNET, max_tokens: 1024,  temperature: 0.20, system_prompt: null, user_prompt: "" },
+  company_intelligence:{ model: SONNET, max_tokens: 1024,  temperature: 0.20, system_prompt: "You are a VC intelligence analyst. Return only valid JSON arrays as instructed.", user_prompt: "" },
+  ma_intelligence:     { model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
+  pilot_intelligence:  { model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
+};
+
+function makeDefault(name: string, label: string): AiConfig {
+  const d = TAB_DEFAULTS[name] ?? TAB_DEFAULTS.pipeline_assistant;
+  return { id: "", name, label, ...d };
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export function AiConfigPanel() {
   const supabase = createClient();
@@ -172,6 +193,10 @@ export function AiConfigPanel() {
       .then(({ data }) => {
         const map: Record<string, AiConfig> = {};
         for (const row of (data ?? []) as AiConfig[]) map[row.name] = row;
+        // Fill in any tabs not yet in the DB with hardcoded defaults
+        for (const t of TABS) {
+          if (!map[t.name]) map[t.name] = makeDefault(t.name, t.label);
+        }
         setConfigs(map);
         setLoading(false);
       });
@@ -190,17 +215,19 @@ export function AiConfigPanel() {
     const cfg = configs[activeTab];
     if (!cfg) return;
     setSaving(true);
+    // upsert so it creates the row if it doesn't exist yet
     await supabase
       .from("ai_configs")
-      .update({
+      .upsert({
+        name:          activeTab,
+        label:         TABS.find(t => t.name === activeTab)?.label ?? activeTab,
         model:         cfg.model,
         max_tokens:    cfg.max_tokens,
         temperature:   cfg.temperature,
         system_prompt: cfg.system_prompt,
         user_prompt:   cfg.user_prompt,
         updated_at:    new Date().toISOString(),
-      })
-      .eq("name", activeTab);
+      }, { onConflict: "name" });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -244,11 +271,7 @@ export function AiConfigPanel() {
           <div className="flex items-center justify-center h-48 text-slate-400 gap-2 text-sm">
             <Loader2 size={16} className="animate-spin" /> Loading…
           </div>
-        ) : !cfg ? (
-          <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
-            Config not found in database. Run migration <code className="bg-slate-100 px-1 rounded">009_agent_configs.sql</code> first.
-          </div>
-        ) : (
+        ) : cfg ? (
           <div className="max-w-4xl space-y-6">
 
             {/* Header */}
