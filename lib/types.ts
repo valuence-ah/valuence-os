@@ -1,7 +1,9 @@
 // ─── TypeScript types mirroring the Supabase database schema ─────────────────
 // These are used throughout the app for type safety.
 
-export type CompanyType = "startup" | "lp" | "limited partner" | "investor" | "strategic partner" | "ecosystem_partner" | "fund" | "corporate" | "government" | "other";
+export type CompanyType = "startup" | "fund" | "lp" | "corporate" | "ecosystem_partner" | "government" | "other"
+  // legacy values kept for backward compat with existing DB rows
+  | "investor" | "limited partner" | "strategic partner";
 export type ContactType = "founder" | "lp" | "corporate" | "ecosystem_partner" | "fund_manager" | "government" | "advisor" | "other";
 export type ContactStatus = "active" | "pending" | "archived";
 export type DealStage = "sourced" | "first_meeting" | "deep_dive" | "ic_memo" | "term_sheet" | "due_diligence" | "closed" | "passed";
@@ -142,6 +144,7 @@ export interface Interaction {
   pending_resolutions: import("./meeting-resolution").PendingResolutions | null;
   ai_summary: string | null;
   archived: boolean;
+  meeting_type: string | null;
   // joined
   company?: Company;
 }
@@ -172,16 +175,33 @@ export interface IcMemo {
   company_id: string;
   deal_id: string | null;
   title: string;
-  executive_summary: string | null;
-  problem_solution: string | null;
+
+  // ── New columns (matching AI Config system prompt) ──────────────────────────
+  company_overview:     string | null;
+  problem_statement:    string | null;
+  technology:           string | null;
+  industry_sector:      string | null;
+  competitive_analysis: string | null;
+  team:                 string | null;
+  path_success:         string | null;
+  exit_analysis:        string | null;
+  risks_mitigation:     string | null;
+  financials:           string | null;
+  go_right:             string | null;
+  top_reasons_invest:   string | null;
+  top_reasons_pass:     string | null;
+  evaluation_score:     string | null;
+
+  // ── Legacy columns (kept for backward compat) ───────────────────────────────
+  executive_summary:  string | null;
+  problem_solution:   string | null;
   market_opportunity: string | null;
-  business_model: string | null;
-  traction: string | null;
-  team: string | null;
-  competition: string | null;
-  risks: string | null;
-  financials: string | null;
-  investment_thesis: string | null;
+  business_model:     string | null;
+  traction:           string | null;
+  competition:        string | null;
+  risks:              string | null;
+  investment_thesis:  string | null;
+
   recommendation: "invest" | "pass" | "more_diligence" | "pending" | null;
   status: "draft" | "in_review" | "approved" | "rejected";
   reviewed_by: string | null;

@@ -117,6 +117,38 @@ const STAGE_DOT: Record<string, string> = {
   exited:                 "bg-gray-400",
 };
 
+// ── Meeting type badge (mirrors meeting-panel constants) ─────────────────────
+
+const PIPELINE_MEETING_TYPE_LABELS: Record<string, string> = {
+  due_diligence:           "Due Diligence",
+  ecosystem:               "Ecosystem",
+  fundraising:             "Fundraising",
+  portfolio_management:    "Portfolio Mgmt",
+  relationship_management: "Relationship",
+  sourcing:                "Sourcing",
+  other:                   "Other",
+};
+const PIPELINE_MEETING_TYPE_STYLES: Record<string, string> = {
+  due_diligence:           "bg-amber-50 text-amber-700 border-amber-200",
+  ecosystem:               "bg-teal-50 text-teal-700 border-teal-200",
+  fundraising:             "bg-emerald-50 text-emerald-700 border-emerald-200",
+  portfolio_management:    "bg-violet-50 text-violet-700 border-violet-200",
+  relationship_management: "bg-sky-50 text-sky-700 border-sky-200",
+  sourcing:                "bg-blue-50 text-blue-700 border-blue-200",
+  other:                   "bg-slate-50 text-slate-500 border-slate-200",
+};
+
+function PipelineMeetingTypeBadge({ type }: { type: string | null | undefined }) {
+  if (!type) return null;
+  const label = PIPELINE_MEETING_TYPE_LABELS[type] ?? type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const style = PIPELINE_MEETING_TYPE_STYLES[type] ?? "bg-slate-50 text-slate-500 border-slate-200";
+  return (
+    <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border font-medium whitespace-nowrap", style)}>
+      {label}
+    </span>
+  );
+}
+
 // ── AI Notes parser (reused from meeting-panel) ──────────────────────────────
 function parseAINotes(raw: string | null | undefined): { summary: string; nextSteps: string[] } {
   if (!raw?.trim()) return { summary: "", nextSteps: [] };
@@ -2297,7 +2329,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </div>
               ) : (() => {
                 // Merge interactions + document uploads into a single timeline
-                type TEvent = { id: string; kind: string; title: string; body?: string | null; date: string; url?: string | null; meta?: string | null; contact_ids?: string[] | null };
+                type TEvent = { id: string; kind: string; title: string; body?: string | null; date: string; url?: string | null; meta?: string | null; contact_ids?: string[] | null; meeting_type?: string | null };
                 const events: TEvent[] = [
                   ...interactions.filter(i => i.type === "meeting").map(i => ({
                     id: i.id,
@@ -2308,6 +2340,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                     url: i.transcript_url ?? null,
                     meta: i.sentiment ?? null,
                     contact_ids: (i as { contact_ids?: string[] }).contact_ids ?? null,
+                    meeting_type: i.meeting_type ?? null,
                   })),
                 ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -2373,8 +2406,11 @@ export function PipelineClient({ initialCompanies }: Props) {
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{kindLabel[ev.kind] ?? ev.kind}</span>
+                                  {ev.kind === "meeting" && ev.meeting_type && (
+                                    <PipelineMeetingTypeBadge type={ev.meeting_type} />
+                                  )}
                                   <span className="text-xs font-medium text-slate-700 truncate">{ev.title}</span>
                                 </div>
                                 {ev.body && <p className={cn("text-xs text-slate-500 mt-1 leading-relaxed whitespace-pre-wrap", expandedEventId !== ev.id && "line-clamp-3")}>{ev.body}</p>}
@@ -2473,6 +2509,9 @@ export function PipelineClient({ initialCompanies }: Props) {
                             <span className="text-[11px] px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded font-medium">
                               {selected.name}
                             </span>
+                          )}
+                          {m.meeting_type && (
+                            <PipelineMeetingTypeBadge type={m.meeting_type} />
                           )}
                         </div>
                       </div>

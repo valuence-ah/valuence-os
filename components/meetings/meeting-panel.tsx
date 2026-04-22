@@ -12,9 +12,46 @@ import type { Interaction, Company } from "@/lib/types";
 import Link from "next/link";
 import { formatMeetingSummary } from "@/lib/format-meeting-summary";
 
-type MeetingRow = Interaction & { company: Pick<Company, "id" | "name" | "type"> | null };
+type MeetingRow = Interaction & {
+  company: Pick<Company, "id" | "name" | "type"> | null;
+  meeting_type?: string | null;
+};
 
 type Tab = "summary" | "transcript" | "links";
+
+// ── Meeting type constants ────────────────────────────────────────────────────
+
+const MEETING_TYPE_OPTIONS = [
+  { value: "due_diligence",           label: "Due Diligence" },
+  { value: "ecosystem",               label: "Ecosystem" },
+  { value: "fundraising",             label: "Fundraising" },
+  { value: "portfolio_management",    label: "Portfolio Mgmt" },
+  { value: "relationship_management", label: "Relationship" },
+  { value: "sourcing",                label: "Sourcing" },
+  { value: "other",                   label: "Other" },
+];
+
+const MEETING_TYPE_STYLES: Record<string, string> = {
+  due_diligence:           "bg-amber-50 text-amber-700 border-amber-200",
+  ecosystem:               "bg-teal-50 text-teal-700 border-teal-200",
+  fundraising:             "bg-emerald-50 text-emerald-700 border-emerald-200",
+  portfolio_management:    "bg-violet-50 text-violet-700 border-violet-200",
+  relationship_management: "bg-sky-50 text-sky-700 border-sky-200",
+  sourcing:                "bg-blue-50 text-blue-700 border-blue-200",
+  other:                   "bg-slate-50 text-slate-500 border-slate-200",
+};
+
+function MeetingTypeBadge({ type }: { type: string | null | undefined }) {
+  if (!type) return null;
+  const opt = MEETING_TYPE_OPTIONS.find(o => o.value === type);
+  const label = opt?.label ?? type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const style = MEETING_TYPE_STYLES[type] ?? "bg-slate-50 text-slate-500 border-slate-200";
+  return (
+    <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border font-medium whitespace-nowrap", style)}>
+      {label}
+    </span>
+  );
+}
 
 interface ContactResult {
   id: string;
@@ -105,9 +142,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function SummaryTab({
-  meeting, onSummarize, summarizing, summarizeError,
+  meeting, meetingType, onSummarize, summarizing, summarizeError,
 }: {
   meeting: MeetingRow;
+  meetingType: string | null;
   onSummarize: () => void;
   summarizing: boolean;
   summarizeError: string | null;
@@ -153,6 +191,12 @@ function SummaryTab({
             {meeting.source ?? "manual"}
           </span>
         </div>
+        {meetingType && (
+          <div>
+            <p className="text-[10px] font-semibold text-slate-400 mb-0.5">Type</p>
+            <MeetingTypeBadge type={meetingType} />
+          </div>
+        )}
       </div>
 
       {/* Summarize with Claude — only when transcript exists */}
@@ -613,6 +657,9 @@ export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
   const [titleValue, setTitleValue]     = useState(meeting.subject ?? "");
   const titleRef = useRef<HTMLInputElement>(null);
 
+  // Meeting type
+  const [meetingType, setMeetingType] = useState<string | null>(meeting.meeting_type ?? null);
+
   // Linked company/contacts local state
   const [linkedCompany, setLinkedCompany] = useState<CompanyResult | null>(
     meeting.company
@@ -651,6 +698,17 @@ export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
     onUpdate({ id: meeting.id, subject: trimmed });
     setEditingTitle(false);
   }, [titleValue, meeting.subject, meeting.id, onUpdate]);
+
+  const handleTypeChange = useCallback(async (newType: string) => {
+    const val = newType || null;
+    setMeetingType(val);
+    await fetch(`/api/meetings/${meeting.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ meeting_type: val }),
+    });
+    onUpdate({ id: meeting.id, meeting_type: val });
+  }, [meeting.id, onUpdate]);
 
   const handleSummarize = useCallback(async () => {
     setSummarizing(true);
@@ -744,10 +802,24 @@ export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
                 </button>
               </div>
             )}
-            <p className="text-xs text-slate-400 mt-0.5">
-              {formatDate(meeting.date)}
-              {meeting.duration_minutes ? ` · ${meeting.duration_minutes}m` : ""}
-            </p>
+            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+              <span className="text-xs text-slate-400">
+                {formatDate(meeting.date)}
+                {meeting.duration_minutes ? ` · ${meeting.duration_minutes}m` : ""}
+              </span>
+              {/* Meeting type selector */}
+              <select
+                value={meetingType ?? ""}
+                onChange={e => handleTypeChange(e.target.value)}
+                className="text-[10px] border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400/30 cursor-pointer hover:border-slate-300 transition-colors"
+              >
+                <option value="">— type —</option>
+                {MEETING_TYPE_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              {meetingType && <MeetingTypeBadge type={meetingType} />}
+            </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 flex-shrink-0">
             <X size={18} />
@@ -767,7 +839,8 @@ export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
         <div className="flex-1 overflow-y-auto px-5 py-5">
           {activeTab === "summary"    && (
             <SummaryTab
-              meeting={{ ...meeting, subject: titleValue }}
+              meeting={{ ...meeting, subject: titleValue, meeting_type: meetingType }}
+              meetingType={meetingType}
               onSummarize={handleSummarize}
               summarizing={summarizing}
               summarizeError={summarizeError}
