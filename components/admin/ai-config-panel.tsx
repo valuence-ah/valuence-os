@@ -383,7 +383,7 @@ export function AiConfigPanel() {
               )}
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
