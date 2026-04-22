@@ -19,13 +19,18 @@ import { formatMeetingSummary } from "@/lib/format-meeting-summary";
 
 // ── Contact title options ─────────────────────────────────────────────────────
 const CONTACT_TITLE_OPTIONS = [
-  "Founder / CEO", "Co-Founder / CTO", "Co-Founder / COO", "Co-Founder / CFO",
-  "CEO", "CTO", "COO", "CFO", "President",
+  // Founders / C-suite (most common in DB)
+  "CEO / Co-founder", "CTO / Co-founder", "Co-Founder", "CEO", "CTO", "COO", "CFO", "President", "Chairman",
+  // Directors & management
+  "Managing Director", "Senior Director", "Director", "General Manager", "Manager", "VP",
+  // Investment professionals
   "General Partner", "Managing Partner", "Partner", "Venture Partner",
-  "Principal", "Associate", "Analyst",
-  "Managing Director", "Director", "VP", "Head of Investments",
-  "Investment Manager", "Portfolio Manager", "Investor Relations",
-  "Head of Business Development", "Advisor", "Other",
+  "Principal", "Investment Associate", "Associate", "Analyst",
+  "Head of Investments", "Investor Relations",
+  // Other roles
+  "Business Development", "Corporate Development", "Board Member",
+  "Advisor", "Professor", "Admin", "Executive Assistant",
+  "Lawyer", "Other",
 ];
 
 // ── Strategic partnerships (portco ↔ strategic) ───────────────────────────────
@@ -617,7 +622,9 @@ export function PipelineClient({ initialCompanies }: Props) {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     const list = companies.filter(c => {
-      if (!includePassed && c.deal_status === "passed") return false;
+      // Hide passed companies by default — but never hide them when the user
+      // is actively searching (so searching "Westwood" still surfaces it).
+      if (!includePassed && !q && c.deal_status === "passed") return false;
       return (
         !q ||
         c.name.toLowerCase().includes(q) ||
