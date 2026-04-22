@@ -1,6 +1,34 @@
+// ─── POST /api/lp/outreach-draft ─────────────────────────────────────────────
+// Drafts a personalised LP outreach email.
+// Full prompt is loaded from Admin → AI Config → LP Outreach Email.
+// Template variables: {{sender_name}}, {{contact_name}}, {{contact_title}},
+//   {{lp_name}}, {{lp_type}}, {{stage}}, {{location}}, {{relationship_score}},
+//   {{ticket_score}}, {{geo_score}}, {{sector_score}}, {{last_interaction}}, {{ask}}
+
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { getAiConfig } from "@/lib/ai-config";
+
+/** Replace {{variable}} placeholders in a template string. */
+function interpolate(template: string, vars: Record<string, string>): string {
+  return Object.entries(vars).reduce(
+    (s, [k, v]) => s.replaceAll(`{{${k}}}`, v),
+    template
+  );
+}
+
+/** Returns a stage-appropriate suggested ask. */
+function suggestedAsk(stage: string | undefined): string {
+  switch (stage) {
+    case "Committed":            return "confirm the final commitment and wire timeline";
+    case "Due Diligence":        return "schedule a DDQ walkthrough call";
+    case "Discussion in Process":return "schedule a follow-up meeting to discuss terms and next steps";
+    case "Materials Sent":       return "share any questions on the materials so we can arrange a call";
+    case "Meeting Done":         return "set up a follow-up call to discuss mandate fit in detail";
+    case "Meeting Scheduled":    return "confirm the upcoming meeting agenda";
+    default:                     return "schedule a 30-minute introductory call";
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,43 +38,49 @@ export async function POST(req: NextRequest) {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const lastInteraction = interactions?.[0];
-    const contactName = contact
-      ? `${contact.first_name} ${contact.last_name}`
-      : "LP Contact";
-    const contactTitle = contact?.title ?? "";
+    const contactName  = contact ? `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim() : "LP Contact";
+    const contactTitle = contact?.title ? ` (${contact.title})` : "";
 
-    const prompt = `You are ${senderName ?? "a partner"} at Valuence, a VC fund focused on early-stage cleantech and techbio.
-Draft a personalized outreach email to ${contactName}${contactTitle ? ` (${contactTitle})` : ""} at ${company.name}.
+    const lastInteractionStr = lastInteraction
+      ? `${lastInteraction.date} — ${lastInteraction.subject ?? lastInteraction.type}${
+          lastInteraction.body ? `: "${lastInteraction.body.slice(0, 150)}"` : ""
+        }`
+      : "No prior interactions — this is a cold outreach";
 
-Context:
-- Stage: ${stage ?? "Initial Meeting"}
-- LP Type: ${company.lp_type ?? "Unknown"}
-- Location: ${[company.location_city, company.location_country].filter(Boolean).join(", ") || "Unknown"}
-- Mandate alignment: Relationship ${mandateScores?.stageScore ?? 20}%, Ticket size ${mandateScores?.ticketScore ?? 30}%, Geographic ${mandateScores?.geoScore ?? 50}%, Sector ${mandateScores?.sectorScore ?? 50}%
-- Last interaction: ${lastInteraction ? `${lastInteraction.date} — ${lastInteraction.subject ?? lastInteraction.type}${lastInteraction.body ? `: "${lastInteraction.body.slice(0, 150)}"` : ""}` : "No prior interactions — this is a cold outreach"}
+    const location = [company.location_city, company.location_country].filter(Boolean).join(", ") || "Unknown";
 
-Write a short, professional email that:
-1. Starts with a subject line: "Subject: [subject]"
-2. Opens with a warm, personal hook referencing prior context (if any) or a relevant observation about their mandate
-3. In 2-3 sentences, makes a specific connection between their investment mandate and Valuence Fund II (cleantech / techbio, $200M target, $2-5M checks)
-4. Makes a clear, stage-appropriate ask (${stage === "Committed" ? "confirm final commitment" : stage === "Due Diligence" ? "schedule DDQ walkthrough" : stage === "Discussion in Process" ? "schedule next meeting to discuss terms" : "schedule an introductory call"})
-5. Professional sign-off with name
+    const templateVars: Record<string, string> = {
+      sender_name:        senderName ?? "a partner",
+      contact_name:       contactName,
+      contact_title:      contactTitle,
+      lp_name:            company.name ?? "the LP",
+      lp_type:            company.lp_type ?? "Not set",
+      stage:              stage ?? "Initial Meeting",
+      location,
+      relationship_score: String(mandateScores?.stageScore  ?? 20),
+      ticket_score:       String(mandateScores?.ticketScore  ?? 30),
+      geo_score:          String(mandateScores?.geoScore     ?? 50),
+      sector_score:       String(mandateScores?.sectorScore  ?? 50),
+      last_interaction:   lastInteractionStr,
+      ask:                suggestedAsk(stage),
+    };
 
-Keep the total email under 180 words. Avoid generic VC language. Be specific and genuine.`;
+    const prompt       = interpolate(cfg.user_prompt, templateVars);
+    const systemPrompt = cfg.system_prompt ?? "You are an LP relations specialist. Write professional, concise, personalised emails.";
 
-    const fullPrompt = cfg.user_prompt ? `${prompt}\n\nAdditional instructions: ${cfg.user_prompt}` : prompt;
     const message = await anthropic.messages.create({
-      model: cfg.model,
+      model:      cfg.model,
       max_tokens: cfg.max_tokens,
       temperature: cfg.temperature,
-      ...(cfg.system_prompt ? { system: cfg.system_prompt } : {}),
-      messages: [{ role: "user", content: fullPrompt }],
+      system:     systemPrompt,
+      messages:   [{ role: "user", content: prompt }],
     });
 
     const draft = message.content[0].type === "text" ? message.content[0].text : "";
     return NextResponse.json({ draft });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("outreach-draft error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

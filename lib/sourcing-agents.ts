@@ -5,6 +5,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAiConfig } from "@/lib/ai-config";
 import type { SignalSource } from "@/lib/types";
 
 // ── Thesis keywords for Valuence Ventures ────────────────────────────────────
@@ -194,22 +195,21 @@ export interface ScoredSignal extends RawSignal {
   funding_stage: string | null;
 }
 
-// ── Claude summary generation (no scoring, summaries only) ───────────────────
+// ── Claude summary generation ─────────────────────────────────────────────────
+// Model, temperature, max_tokens, and system prompt are all read from
+// Admin → AI Config → Sourcing Scorer. No values are hardcoded here.
 
 interface SummaryItem {
   index: number;
   summary: string;
 }
 
-const SUMMARY_SYSTEM_PROMPT = `You are a VC analyst at Valuence Ventures focused on cleantech, techbio, and advanced materials.
-Generate a one-sentence summary for each research item that explains its relevance to deep tech investing.
-Return ONLY a JSON array. No markdown. No prose. Example:
-[{"index":0,"summary":"One sentence description of the signal."},...]`;
-
 async function generateSummaries(signals: RawSignal[]): Promise<Map<number, string>> {
   const summaryMap = new Map<number, string>();
   if (signals.length === 0) return summaryMap;
 
+  // Load config from Admin → AI Config → Sourcing Scorer
+  const cfg = await getAiConfig("sourcing_scorer");
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const items = signals.map((s, idx) => ({
@@ -220,15 +220,16 @@ async function generateSummaries(signals: RawSignal[]): Promise<Map<number, stri
 
   try {
     const message = await client.messages.create({
-      model: "claude-haiku-3-5",
-      max_tokens: 2048,
-      system: SUMMARY_SYSTEM_PROMPT,
+      model:       cfg.model,
+      max_tokens:  cfg.max_tokens,
+      temperature: cfg.temperature,
+      system:      cfg.system_prompt ?? undefined,
       messages: [
         { role: "user", content: `Summarize these ${signals.length} items:\n${JSON.stringify(items, null, 2)}` },
       ],
     });
 
-    const rawText = message.content[0].type === "text" ? message.content[0].text : "[]";
+    const rawText  = message.content[0].type === "text" ? message.content[0].text : "[]";
     const jsonText = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
 
     const parsed: SummaryItem[] = JSON.parse(jsonText);
