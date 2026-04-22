@@ -933,7 +933,16 @@ function IntelligenceTab({ companyId }: { companyId: string }) {
                   <p className="text-sm font-medium text-slate-800 leading-snug">{item.headline}</p>
                   <div className="flex items-center gap-1.5 flex-shrink-0 text-[10px] text-slate-400">
                     <Calendar size={10} />
-                    {item.date}
+                    {item.date ? (() => {
+                      try {
+                        const normalized = item.date.length === 4 ? `${item.date}-01-01` : item.date.length === 7 ? `${item.date}-01` : item.date;
+                        const d = new Date(normalized);
+                        if (isNaN(d.getTime())) return item.date;
+                        if (item.date.length === 4) return item.date;
+                        if (item.date.length === 7) return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+                        return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                      } catch { return item.date; }
+                    })() : ""}
                   </div>
                 </div>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">{item.summary}</p>
@@ -1711,14 +1720,15 @@ export function CompanyDetailClient({
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Documents</h3>
                   </div>
-                  {/* Pitch deck — from documents table (type="deck") */}
+                  {/* Pitch deck — from documents table (type="deck") + company.pitch_deck_url */}
                   <div className="mb-3">
                     <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide mb-1.5">Pitch Deck</p>
                     {(() => {
                       const decks = documents.filter(d => d.type === "deck");
-                      if (decks.length === 0) return <p className="text-xs text-slate-400 italic">No deck linked</p>;
+                      const hasDeckDocs = decks.some(d => d.file_url ?? d.google_drive_url ?? d.storage_path);
                       return (
                         <div className="space-y-1">
+                          {/* Documents table decks */}
                           {decks.map(d => {
                             const url = d.file_url ?? d.google_drive_url ?? d.storage_path;
                             if (!url) return null;
@@ -1734,33 +1744,72 @@ export function CompanyDetailClient({
                               </a>
                             );
                           })}
+                          {/* Fallback: company.pitch_deck_url if no docs-table deck */}
+                          {!hasDeckDocs && company.pitch_deck_url && (
+                            <a
+                              href={company.pitch_deck_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg font-medium mr-1"
+                            >
+                              <FileText size={12} /> View Pitch Deck
+                            </a>
+                          )}
+                          {!hasDeckDocs && !company.pitch_deck_url && (
+                            <p className="text-xs text-slate-400 italic">No deck linked</p>
+                          )}
                         </div>
                       );
                     })()}
                   </div>
-                  {/* Meeting transcripts */}
+                  {/* Meeting transcripts — from interactions + documents table */}
                   <div>
                     <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide mb-1.5">Meeting Transcripts</p>
-                    {interactions.filter(i => i.type === "meeting").length === 0 ? (
-                      <p className="text-xs text-slate-400 italic">No transcripts yet</p>
-                    ) : (
-                      <div className="space-y-1 max-h-[120px] overflow-y-auto">
-                        {interactions.filter(i => i.type === "meeting").slice(0, 5).map(i => (
-                          <div key={i.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5">
-                            <Mic size={11} className="text-violet-500 flex-shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs text-slate-700 truncate font-medium">{i.subject ?? "Meeting"}</p>
-                              <p className="text-[10px] text-slate-400">{formatDate(i.date)}</p>
+                    {(() => {
+                      const meetingInteractions = interactions.filter(i => i.type === "meeting").slice(0, 5);
+                      const transcriptDocs = documents.filter(d => d.type === "transcript" || d.type === "meeting_notes");
+                      const hasAnything = meetingInteractions.length > 0 || transcriptDocs.length > 0;
+                      if (!hasAnything) return <p className="text-xs text-slate-400 italic">No transcripts yet</p>;
+                      return (
+                        <div className="space-y-1 max-h-[140px] overflow-y-auto">
+                          {/* Meeting interactions */}
+                          {meetingInteractions.map(i => (
+                            <div key={i.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5">
+                              <Mic size={11} className="text-violet-500 flex-shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs text-slate-700 truncate font-medium">{i.subject ?? "Meeting"}</p>
+                                <p className="text-[10px] text-slate-400">{formatDate(i.date)}</p>
+                              </div>
+                              {i.transcript_url && (
+                                <a href={i.transcript_url} target="_blank" rel="noopener noreferrer"
+                                  className="text-[10px] text-blue-500 hover:text-blue-700 flex-shrink-0 flex items-center gap-0.5">
+                                  <ExternalLink size={10} /> View
+                                </a>
+                              )}
                             </div>
-                            {i.transcript_url && (
-                              <a href={i.transcript_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 flex-shrink-0">
-                                <ExternalLink size={10} />
-                              </a>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          ))}
+                          {/* Uploaded transcript documents */}
+                          {transcriptDocs.map(d => {
+                            const url = d.file_url ?? d.google_drive_url ?? d.storage_path;
+                            return (
+                              <div key={d.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5">
+                                <FileText size={11} className="text-violet-500 flex-shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs text-slate-700 truncate font-medium">{d.name || "Transcript"}</p>
+                                  <p className="text-[10px] text-slate-400">{formatDate(d.created_at)}</p>
+                                </div>
+                                {url && (
+                                  <a href={url} target="_blank" rel="noopener noreferrer"
+                                    className="text-[10px] text-blue-500 hover:text-blue-700 flex-shrink-0 flex items-center gap-0.5">
+                                    <ExternalLink size={10} /> View
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div className="border-t border-slate-100" />

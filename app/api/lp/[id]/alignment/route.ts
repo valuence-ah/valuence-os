@@ -84,14 +84,14 @@ export async function POST(
       .single(),
     supabase
       .from("companies")
-      .select("id, name, sectors, stage, description")
+      .select("id, name, sectors, stage, description, website")
       .eq("deal_status", "portfolio")
       .eq("type", "startup")
       .order("name")
       .limit(10),
     supabase
       .from("companies")
-      .select("id, name, sectors, stage, description, deal_status")
+      .select("id, name, sectors, stage, description, deal_status, website")
       .not("deal_status", "in", '("passed","exited","portfolio")')
       .not("deal_status", "is", null)
       .eq("type", "startup")
@@ -190,6 +190,7 @@ export async function POST(
           sectors:     co?.sectors     ?? [],
           stage:       co?.stage       ?? null,
           description: co?.description ?? null,
+          website:     (co as { website?: string | null } | undefined)?.website ?? null,
         };
       });
     }

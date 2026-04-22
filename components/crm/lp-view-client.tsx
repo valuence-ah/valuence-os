@@ -600,11 +600,13 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [lpIntelCachedAt, setLpIntelCachedAt] = useState<string | null>(null);
 
   // Intelligence tab — LP-specific alignment analysis
-  type AlignmentPick = { id: string | null; name: string; reason: string; sectors: string[]; stage: string | null; description: string | null };
+  type AlignmentPick = { id: string | null; name: string; reason: string; sectors: string[]; stage: string | null; description: string | null; website: string | null };
   type AlignmentResult = { alignment_summary: string; portfolio_picks: AlignmentPick[]; pipeline_picks: AlignmentPick[] };
-  const [alignment,        setAlignment]        = useState<AlignmentResult | null>(null);
-  const [alignmentLoading, setAlignmentLoading] = useState(false);
-  const [alignmentError,   setAlignmentError]   = useState<string | null>(null);
+  const [alignment,            setAlignment]            = useState<AlignmentResult | null>(null);
+  const [alignmentLoading,     setAlignmentLoading]     = useState(false);
+  const [alignmentError,       setAlignmentError]       = useState<string | null>(null);
+  const [alignmentGeneratedAt, setAlignmentGeneratedAt] = useState<string | null>(null);
+  const [alignmentPopup,       setAlignmentPopup]       = useState<(AlignmentPick & { pickType: "portfolio" | "pipeline" }) | null>(null);
 
   // LP Starred intel — persisted to localStorage
   const [lpStarredIntel, setLpStarredIntel] = useState<Record<string, string[]>>({});
@@ -827,16 +829,26 @@ export function LpViewClient({ initialCompanies }: Props) {
 
   const selected = companies.find(c => c.id === selectedId) ?? null;
 
-  // Reset Company News state when the selected LP changes; restore from cache if available
-  // Reset all tab state when the selected LP changes
+  // Reset Company News + Intelligence state when the selected LP changes; restore from cache if available
   // (must be after `selected` is declared — TypeScript requires declaration order)
   useEffect(() => {
     setLpIntelligence([]);
     setLpIntelError(null);
     setLpIntelCachedAt(null);
-    setAlignment(null);
     setAlignmentError(null);
     if (selected?.id) {
+      // Restore alignment from localStorage (keeps content between LP switches)
+      try {
+        const savedAlignment = localStorage.getItem(`lp_alignment_${selected.id}`);
+        if (savedAlignment) {
+          const { data, generatedAt } = JSON.parse(savedAlignment);
+          setAlignment(data ?? null);
+          setAlignmentGeneratedAt(generatedAt ?? null);
+        } else {
+          setAlignment(null);
+          setAlignmentGeneratedAt(null);
+        }
+      } catch { setAlignment(null); setAlignmentGeneratedAt(null); }
       try {
         const cached = localStorage.getItem(`lp_intel_${selected.id}`);
         if (cached) {
@@ -928,7 +940,10 @@ export function LpViewClient({ initialCompanies }: Props) {
       const res = await fetch(`/api/lp/${selected.id}/alignment`, { method: "POST" });
       if (res.ok) {
         const data = await res.json() as AlignmentResult;
+        const generatedAt = new Date().toISOString();
         setAlignment(data);
+        setAlignmentGeneratedAt(generatedAt);
+        try { localStorage.setItem(`lp_alignment_${selected.id}`, JSON.stringify({ data, generatedAt })); } catch {}
       } else {
         try {
           const errData = await res.json();
@@ -1831,10 +1846,32 @@ export function LpViewClient({ initialCompanies }: Props) {
                 });
               }
 
-              // All non-starred items, sorted newest first
+              // Format a date string like "2025-01-15" → "Jan 15, 2025"
+              function formatNewsDate(dateStr: string | undefined): string {
+                if (!dateStr) return "";
+                try {
+                  // Handle partial dates: "2025" → Jan 1 2025, "2025-03" → Mar 1 2025
+                  const normalized = dateStr.length === 4 ? `${dateStr}-01-01` : dateStr.length === 7 ? `${dateStr}-01` : dateStr;
+                  const d = new Date(normalized);
+                  if (isNaN(d.getTime())) return dateStr;
+                  if (dateStr.length === 4) return dateStr; // just year
+                  if (dateStr.length === 7) return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+                  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                } catch { return dateStr; }
+              }
+
+              // 180-day cutoff — non-starred items older than this are hidden
+              const cutoff180 = Date.now() - 180 * 24 * 60 * 60 * 1000;
+
+              // All non-starred items within 180 days, sorted newest first
               const recentItems = dedupe(
                 lpIntelligence
                   .filter(i => !starred.includes(i.headline))
+                  .filter(i => {
+                    if (!i.date) return true;
+                    const d = new Date(i.date).getTime();
+                    return isNaN(d) || d >= cutoff180;
+                  })
                   .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime())
               );
 
@@ -1860,7 +1897,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                       </button>
                     </div>
                     <div className="flex items-center justify-between mt-2 gap-2">
-                      <span className="text-[10px] text-slate-400">{item.source} · {item.date}</span>
+                      <span className="text-[10px] text-slate-400">{item.source}{item.date ? ` · ${formatNewsDate(item.date)}` : ""}</span>
                       {item.url && (
                         <a href={item.url} target="_blank" rel="noopener noreferrer"
                           className="text-[10px] text-blue-500 hover:underline flex items-center gap-0.5 flex-shrink-0">
@@ -1928,9 +1965,16 @@ export function LpViewClient({ initialCompanies }: Props) {
 
                 {/* Header — Generate/Regenerate button top-right */}
                 <div className="flex items-center justify-between px-5 pt-4 pb-2 flex-shrink-0">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles size={10} className="text-purple-500" /> LP Intelligence
-                  </p>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles size={10} className="text-purple-500" /> LP Intelligence
+                    </p>
+                    {alignmentGeneratedAt && (
+                      <p className="text-[9px] text-slate-300 mt-0.5">
+                        Generated {new Date(alignmentGeneratedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    )}
+                  </div>
                   <button
                     onClick={generateAlignment}
                     disabled={alignmentLoading}
@@ -1985,32 +2029,26 @@ export function LpViewClient({ initialCompanies }: Props) {
                             <span className="text-[9px] font-normal text-slate-300 normal-case tracking-normal">· curated for {selected?.name}</span>
                           </p>
                           <div className="space-y-2">
-                            {alignment.portfolio_picks.map((c, i) => {
-                              const inner = (
-                                <>
-                                  <div className="flex items-center justify-between gap-2 mb-1">
-                                    <div className="flex items-center gap-2 flex-wrap min-w-0">
-                                      <p className="text-xs font-semibold text-slate-800">{c.name}</p>
-                                      {c.sectors.slice(0, 2).map(s => (
-                                        <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold capitalize">{s}</span>
-                                      ))}
-                                      {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
-                                    </div>
-                                    {c.id && <ArrowUpRight size={12} className="flex-shrink-0 text-slate-300 group-hover:text-emerald-500 transition-colors" />}
+                            {alignment.portfolio_picks.map((c, i) => (
+                              <button
+                                key={i}
+                                onClick={() => setAlignmentPopup({ ...c, pickType: "portfolio" })}
+                                className="group w-full text-left border border-emerald-100 rounded-xl p-3 bg-white hover:bg-emerald-50 hover:border-emerald-300 hover:shadow-sm transition-all cursor-pointer"
+                              >
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                    <p className="text-xs font-semibold text-slate-800">{c.name}</p>
+                                    {c.sectors.slice(0, 2).map(s => (
+                                      <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold capitalize">{s}</span>
+                                    ))}
+                                    {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
                                   </div>
-                                  <p className="text-[11px] text-emerald-700 leading-snug font-medium">{c.reason}</p>
-                                  {c.description && <p className="text-[10px] text-slate-400 leading-snug mt-1 line-clamp-2">{c.description}</p>}
-                                </>
-                              );
-                              return c.id ? (
-                                <a key={i} href={`/crm/companies/${c.id}`}
-                                  className="group block border border-emerald-100 rounded-xl p-3 bg-white hover:bg-emerald-50 hover:border-emerald-300 hover:shadow-sm transition-all cursor-pointer">
-                                  {inner}
-                                </a>
-                              ) : (
-                                <div key={i} className="border border-emerald-100 rounded-xl p-3 bg-white">{inner}</div>
-                              );
-                            })}
+                                  <ArrowUpRight size={12} className="flex-shrink-0 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+                                </div>
+                                <p className="text-[11px] text-emerald-700 leading-snug font-medium">{c.reason}</p>
+                                {c.description && <p className="text-[10px] text-slate-400 leading-snug mt-1 line-clamp-2">{c.description}</p>}
+                              </button>
+                            ))}
                           </div>
                         </div>
                       )}
@@ -2023,32 +2061,26 @@ export function LpViewClient({ initialCompanies }: Props) {
                             <span className="text-[9px] font-normal text-slate-300 normal-case tracking-normal">· curated for {selected?.name}</span>
                           </p>
                           <div className="space-y-2">
-                            {alignment.pipeline_picks.map((c, i) => {
-                              const inner = (
-                                <>
-                                  <div className="flex items-center justify-between gap-2 mb-1">
-                                    <div className="flex items-center gap-2 flex-wrap min-w-0">
-                                      <p className="text-xs font-semibold text-slate-800">{c.name}</p>
-                                      {c.sectors.slice(0, 2).map(s => (
-                                        <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold capitalize">{s}</span>
-                                      ))}
-                                      {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
-                                    </div>
-                                    {c.id && <ArrowUpRight size={12} className="flex-shrink-0 text-slate-300 group-hover:text-blue-500 transition-colors" />}
+                            {alignment.pipeline_picks.map((c, i) => (
+                              <button
+                                key={i}
+                                onClick={() => setAlignmentPopup({ ...c, pickType: "pipeline" })}
+                                className="group w-full text-left border border-blue-100 rounded-xl p-3 bg-white hover:bg-blue-50 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
+                              >
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                    <p className="text-xs font-semibold text-slate-800">{c.name}</p>
+                                    {c.sectors.slice(0, 2).map(s => (
+                                      <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold capitalize">{s}</span>
+                                    ))}
+                                    {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
                                   </div>
-                                  <p className="text-[11px] text-blue-700 leading-snug font-medium">{c.reason}</p>
-                                  {c.description && <p className="text-[10px] text-slate-400 leading-snug mt-1 line-clamp-2">{c.description}</p>}
-                                </>
-                              );
-                              return c.id ? (
-                                <a key={i} href={`/crm/companies/${c.id}`}
-                                  className="group block border border-blue-100 rounded-xl p-3 bg-white hover:bg-blue-50 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer">
-                                  {inner}
-                                </a>
-                              ) : (
-                                <div key={i} className="border border-blue-100 rounded-xl p-3 bg-white">{inner}</div>
-                              );
-                            })}
+                                  <ArrowUpRight size={12} className="flex-shrink-0 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                </div>
+                                <p className="text-[11px] text-blue-700 leading-snug font-medium">{c.reason}</p>
+                                {c.description && <p className="text-[10px] text-slate-400 leading-snug mt-1 line-clamp-2">{c.description}</p>}
+                              </button>
+                            ))}
                           </div>
                         </div>
                       )}
@@ -2549,6 +2581,98 @@ export function LpViewClient({ initialCompanies }: Props) {
 
         {selected && <div className="fixed inset-0 bg-black/5 z-20 pointer-events-none" />}
       </div>
+
+      {/* ── Alignment Company Popup Modal ──────────────────────────────────── */}
+      {alignmentPopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setAlignmentPopup(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className={cn(
+              "px-5 pt-5 pb-4",
+              alignmentPopup.pickType === "portfolio" ? "bg-emerald-50" : "bg-blue-50"
+            )}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className={cn(
+                    "text-[10px] font-semibold uppercase tracking-wider mb-1",
+                    alignmentPopup.pickType === "portfolio" ? "text-emerald-600" : "text-blue-600"
+                  )}>
+                    {alignmentPopup.pickType === "portfolio" ? "Portfolio Highlight" : "Pipeline Interest"}
+                  </p>
+                  <h2 className="text-base font-bold text-slate-900">{alignmentPopup.name}</h2>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {alignmentPopup.sectors.slice(0, 3).map(s => (
+                      <span key={s} className={cn(
+                        "text-[9px] px-1.5 py-0.5 rounded-full font-semibold capitalize",
+                        alignmentPopup.pickType === "portfolio" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
+                      )}>{s}</span>
+                    ))}
+                    {alignmentPopup.stage && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{alignmentPopup.stage}</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAlignmentPopup(null)}
+                  className="flex-shrink-0 text-slate-400 hover:text-slate-600 transition-colors mt-0.5"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Why this LP</p>
+                <p className={cn(
+                  "text-sm leading-relaxed font-medium",
+                  alignmentPopup.pickType === "portfolio" ? "text-emerald-700" : "text-blue-700"
+                )}>{alignmentPopup.reason}</p>
+              </div>
+              {alignmentPopup.description && (
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">About</p>
+                  <p className="text-sm text-slate-600 leading-relaxed">{alignmentPopup.description}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer actions */}
+            <div className="px-5 pb-5 flex gap-2">
+              {alignmentPopup.id && (
+                <a
+                  href={`/crm/companies/${alignmentPopup.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 text-white text-xs font-medium hover:bg-slate-700 transition-colors"
+                >
+                  <ArrowUpRight size={12} /> Company Page
+                </a>
+              )}
+              {alignmentPopup.website && (
+                <a
+                  href={alignmentPopup.website.startsWith("http") ? alignmentPopup.website : `https://${alignmentPopup.website}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50 transition-colors"
+                >
+                  <Globe size={12} /> Website
+                </a>
+              )}
+              {!alignmentPopup.id && !alignmentPopup.website && (
+                <p className="text-xs text-slate-400 italic">No links available for this company</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Change Type dropdown — fixed so it escapes overflow containers */}
       {changeTypePos && (
