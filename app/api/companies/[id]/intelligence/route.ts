@@ -34,11 +34,13 @@ export async function POST(
 
   if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
 
-  // Pull saved Exa signals for this company (top 10 by relevance)
+  // Pull saved Exa signals for this company — last 180 days only
+  const cutoff180 = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const { data: signals } = await supabase
     .from("sourcing_signals")
     .select("title, summary, source, published_date, url")
     .eq("company_id", id)
+    .gte("published_date", cutoff180)
     .order("relevance_score", { ascending: false })
     .limit(10);
 
@@ -65,9 +67,9 @@ export async function POST(
 
   if (signals?.length) {
     contextLines.push(
-      "\nSaved signals from Exa:",
-      ...signals.map(s =>
-        `• ${s.title ?? "(no title)"}${s.published_date ? ` (${s.published_date})` : ""}${s.summary ? ` — ${s.summary.slice(0, 120)}` : ""}`
+      "\nRecent signals (use these as your primary source — include the exact url field):",
+      ...signals.map((s, idx) =>
+        `[${idx}] title: ${s.title ?? "(no title)"} | date: ${s.published_date ?? "unknown"} | source: ${s.source ?? "Exa"} | url: ${s.url ?? "null"} | summary: ${s.summary ? s.summary.slice(0, 150) : ""}`
       )
     );
   }
@@ -83,24 +85,29 @@ export async function POST(
 
   const context = contextLines.join("\n");
 
-  const basePrompt = `You are a VC intelligence analyst. Provide 5–7 intelligence items about "${company.name}"${company.website ? ` (${company.website})` : ""}.
+  const basePrompt = `You are a VC intelligence analyst. Provide up to 7 intelligence items about "${company.name}"${company.website ? ` (${company.website})` : ""}.
 
 ${context}
 
-Focus on: funding rounds, partnerships, product launches, scientific publications, grants, regulatory milestones, team changes, market developments, or competitive signals.
+STRICT RULES:
+1. Only include news/events from the last 180 days (on or after ${cutoff180}). Reject anything older.
+2. Prioritise the "Recent signals" listed above — use their exact url, source, and date.
+3. For signal-based items, copy the url exactly from the signal list. Do NOT set url to null if a url was provided.
+4. If you have no signals and cannot confirm an item is within the last 180 days from your knowledge, do NOT include it. Return fewer items rather than fabricating or including old news.
+5. Never invent dates or funding amounts.
+
+Focus on: funding rounds, partnerships, product launches, scientific publications, grants, regulatory milestones, team changes, market developments, competitive signals.
 
 Return a JSON array ONLY (no markdown, no explanation):
 [
   {
     "headline": "Short factual headline (max 12 words)",
-    "source": "Source name (e.g. TechCrunch, NIH, company blog, Exa signal)",
-    "date": "YYYY or YYYY-MM or YYYY-MM-DD",
+    "source": "Source name (e.g. TechCrunch, NIH, company blog)",
+    "date": "YYYY-MM-DD or YYYY-MM or YYYY",
     "summary": "1–2 sentence factual summary.",
-    "url": null
+    "url": "https://... or null"
   }
-]
-
-If you lack recent data, include items about known facts (founding, key technology, notable team members). Do not fabricate specific dates or funding amounts you are unsure of.`;
+]`;
 
   const finalPrompt = cfg.user_prompt
     ? `${basePrompt}\n\nAdditional instructions: ${cfg.user_prompt}`
