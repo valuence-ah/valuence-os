@@ -1,5 +1,6 @@
 "use client";
 // ─── New Contacts — compact single-row review queue ───────────────────────────
+// Investor type options: Venture Capital, Accelerator, Corporate, Family Office, HNW, Other
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { createClient } from "@/lib/supabase/client";

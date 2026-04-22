@@ -1,6 +1,7 @@
 "use client";
 // ─── Shared Add Company Modal ─────────────────────────────────────────────────
 // Used by: Pipeline page, Sourcing page, Feeds page.
+// Investor type options: Venture Capital, Accelerator, Corporate, Family Office, HNW, Other
 // Saves to `companies` table. Calls onSuccess(companyId) after saving.
 // Accepts prefill to pre-populate fields from signals/articles.
 
