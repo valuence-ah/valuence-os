@@ -490,6 +490,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   const [pipelineIntel, setPipelineIntel] = useState<PipelineIntelItem[]>([]);
   const [refreshingIntel, setRefreshingIntel] = useState<"competitor" | "ma_acquirer" | null>(null);
   const [intelError, setIntelError]       = useState<string | null>(null);
+  const [intelModal, setIntelModal]       = useState<"competitor" | "ma_acquirer" | null>(null);
 
   // Inline event adding
   const [addingNote, setAddingNote]         = useState(false);
@@ -2301,8 +2302,8 @@ export function PipelineClient({ initialCompanies }: Props) {
                 </button>
               </div>
 
-              {/* Content: Timeline (event form + scroll area) */}
-              <div className="h-[150px] overflow-y-auto bg-slate-50 rounded-xl p-3">
+              {/* Content: Timeline — no inner scroll, outer panel scrolls */}
+              <div className="bg-slate-50 rounded-xl p-3">
               {/* Add event form */}
               {addingNote && (
                 <div ref={addEventFormRef} className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
@@ -3201,73 +3202,123 @@ export function PipelineClient({ initialCompanies }: Props) {
               </section>
 
             {/* ── Competitor Landscape & M&A Acquirers ── */}
-            <section>
-              {(() => {
-                const competitors = pipelineIntel.filter(i => i.type === "competitor");
-                const acquirers   = pipelineIntel.filter(i => i.type === "ma_acquirer");
-                const THREAT: Record<string, string> = { high: "bg-red-100 text-red-700", medium: "bg-amber-100 text-amber-700", low: "bg-slate-100 text-slate-500" };
-                const THREAT_LABEL: Record<string, string> = { high: "Direct", medium: "Adjacent", low: "Indirect" };
-                const FIT: Record<string, string> = { high: "bg-emerald-100 text-emerald-700", medium: "bg-amber-100 text-amber-700", low: "bg-slate-100 text-slate-500" };
-                return (
-                  <div className="flex gap-4" style={{ height: "150px" }}>
+            {(() => {
+              const competitors = pipelineIntel.filter(i => i.type === "competitor");
+              const acquirers   = pipelineIntel.filter(i => i.type === "ma_acquirer");
+              const THREAT: Record<string, string> = { high: "bg-red-100 text-red-700", medium: "bg-amber-100 text-amber-700", low: "bg-slate-100 text-slate-500" };
+              const THREAT_LABEL: Record<string, string> = { high: "Direct", medium: "Adjacent", low: "Indirect" };
+              const FIT: Record<string, string> = { high: "bg-emerald-100 text-emerald-700", medium: "bg-amber-100 text-amber-700", low: "bg-slate-100 text-slate-500" };
+
+              const IntelCard = ({ item, badgeClass, badgeLabel }: { item: PipelineIntelItem; badgeClass: string; badgeLabel: string }) => (
+                <div className="flex items-start gap-1.5 py-1">
+                  <span className={`text-[8px] px-1 py-px rounded font-semibold flex-shrink-0 mt-0.5 ${badgeClass}`}>{badgeLabel}</span>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold text-slate-800 leading-tight">{item.entity_name}</p>
+                    {item.description && <p className="text-[10px] text-slate-500 leading-snug line-clamp-2 mt-0.5">{item.description}</p>}
+                  </div>
+                </div>
+              );
+
+              return (
+                <section>
+                  <div className="flex gap-4">
                     {/* Competitor Landscape */}
-                    <div style={{ flex: "0 0 50%", minWidth: 0 }} className="flex flex-col min-h-0">
-                      <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
+                    <div style={{ flex: "0 0 50%", minWidth: 0 }}>
+                      <div className="flex items-center justify-between mb-2">
                         <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Competitor Landscape</h2>
-                        <button onClick={() => handlePipelineIntelRefresh("competitor")} disabled={refreshingIntel !== null}
-                          className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1 disabled:opacity-40">
-                          <RefreshCw size={9} className={refreshingIntel === "competitor" ? "animate-spin" : ""} /> Refresh
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {competitors.length > 0 && (
+                            <button onClick={() => setIntelModal("competitor")}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-0.5" title="Expand">
+                              <Eye size={9} /> Expand
+                            </button>
+                          )}
+                          <button onClick={() => handlePipelineIntelRefresh("competitor")} disabled={refreshingIntel !== null}
+                            className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1 disabled:opacity-40">
+                            <RefreshCw size={9} className={refreshingIntel === "competitor" ? "animate-spin" : ""} /> Refresh
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex-1 min-h-0 overflow-y-auto space-y-1 pr-0.5">
+                      <div className="h-[150px] overflow-y-auto bg-slate-50 rounded-xl p-3 space-y-0.5">
                         {competitors.length === 0 ? (
                           <p className="text-[11px] text-slate-400 pt-1">{refreshingIntel === "competitor" ? "Generating…" : "Click Refresh to generate"}</p>
                         ) : competitors.slice(0, 4).map(c => (
-                          <div key={c.id} className="flex items-start gap-1.5 py-0.5">
-                            <span className={`text-[8px] px-1 py-px rounded font-semibold flex-shrink-0 mt-0.5 ${THREAT[c.fit_level] ?? "bg-slate-100 text-slate-500"}`}>
-                              {THREAT_LABEL[c.fit_level] ?? c.fit_level}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-[11px] font-semibold text-slate-800 leading-tight truncate">{c.entity_name}</p>
-                              {c.description && <p className="text-[10px] text-slate-500 leading-snug line-clamp-1">{c.description}</p>}
-                            </div>
-                          </div>
+                          <IntelCard key={c.id} item={c}
+                            badgeClass={THREAT[c.fit_level] ?? "bg-slate-100 text-slate-500"}
+                            badgeLabel={THREAT_LABEL[c.fit_level] ?? c.fit_level} />
                         ))}
                       </div>
                     </div>
 
                     {/* M&A Acquirers */}
-                    <div style={{ flex: "0 0 50%", minWidth: 0 }} className="flex flex-col min-h-0">
-                      <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
+                    <div style={{ flex: "0 0 50%", minWidth: 0 }}>
+                      <div className="flex items-center justify-between mb-2">
                         <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Potential M&A Acquirers</h2>
-                        <button onClick={() => handlePipelineIntelRefresh("ma_acquirer")} disabled={refreshingIntel !== null}
-                          className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1 disabled:opacity-40">
-                          <RefreshCw size={9} className={refreshingIntel === "ma_acquirer" ? "animate-spin" : ""} /> Refresh
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {acquirers.length > 0 && (
+                            <button onClick={() => setIntelModal("ma_acquirer")}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-0.5" title="Expand">
+                              <Eye size={9} /> Expand
+                            </button>
+                          )}
+                          <button onClick={() => handlePipelineIntelRefresh("ma_acquirer")} disabled={refreshingIntel !== null}
+                            className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1 disabled:opacity-40">
+                            <RefreshCw size={9} className={refreshingIntel === "ma_acquirer" ? "animate-spin" : ""} /> Refresh
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex-1 min-h-0 overflow-y-auto space-y-1 pr-0.5">
+                      <div className="h-[150px] overflow-y-auto bg-slate-50 rounded-xl p-3 space-y-0.5">
                         {acquirers.length === 0 ? (
                           <p className="text-[11px] text-slate-400 pt-1">{refreshingIntel === "ma_acquirer" ? "Generating…" : "Click Refresh to generate"}</p>
                         ) : acquirers.slice(0, 4).map(a => (
-                          <div key={a.id} className="flex items-start gap-1.5 py-0.5">
-                            <span className={`text-[8px] px-1 py-px rounded font-semibold flex-shrink-0 mt-0.5 ${FIT[a.fit_level] ?? "bg-slate-100 text-slate-500"}`}>
-                              {a.fit_level}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-[11px] font-semibold text-slate-800 leading-tight truncate">{a.entity_name}</p>
-                              {a.description && <p className="text-[10px] text-slate-500 leading-snug line-clamp-1">{a.description}</p>}
-                            </div>
-                          </div>
+                          <IntelCard key={a.id} item={a}
+                            badgeClass={FIT[a.fit_level] ?? "bg-slate-100 text-slate-500"}
+                            badgeLabel={a.fit_level} />
                         ))}
                       </div>
                     </div>
                   </div>
-                );
-              })()}
-              {intelError && (
-                <p className="text-[10px] text-red-500 mt-1">{intelError}</p>
-              )}
-            </section>
+                  {intelError && <p className="text-[10px] text-red-500 mt-1">{intelError}</p>}
+
+                  {/* ── Pop-out modal ── */}
+                  {intelModal && (() => {
+                    const isComp = intelModal === "competitor";
+                    const items  = isComp ? competitors : acquirers;
+                    const title  = isComp ? "Competitor Landscape" : "Potential M&A Acquirers";
+                    return (
+                      <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center p-4"
+                        onClick={e => { if (e.target === e.currentTarget) setIntelModal(null); }}>
+                        <div className="bg-white rounded-2xl w-[640px] max-h-[80vh] flex flex-col shadow-2xl">
+                          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 flex-shrink-0">
+                            <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+                            <div className="flex items-center gap-3">
+                              <button onClick={() => handlePipelineIntelRefresh(intelModal)} disabled={refreshingIntel !== null}
+                                className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 disabled:opacity-40">
+                                <RefreshCw size={11} className={refreshingIntel === intelModal ? "animate-spin" : ""} /> Refresh
+                              </button>
+                              <button onClick={() => setIntelModal(null)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+                            </div>
+                          </div>
+                          <div className="overflow-y-auto p-6 space-y-3">
+                            {items.map(item => (
+                              <div key={item.id} className="bg-slate-50 rounded-xl p-3.5">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <p className="text-sm font-semibold text-slate-900">{item.entity_name}</p>
+                                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${isComp ? (THREAT[item.fit_level] ?? "bg-slate-100 text-slate-500") : (FIT[item.fit_level] ?? "bg-slate-100 text-slate-500")}`}>
+                                    {isComp ? (THREAT_LABEL[item.fit_level] ?? item.fit_level) : item.fit_level}
+                                  </span>
+                                </div>
+                                {item.description && <p className="text-xs text-slate-600 leading-relaxed">{item.description}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </section>
+              );
+            })()}
 
             {/* ── IC Memo ── */}
             <section>
