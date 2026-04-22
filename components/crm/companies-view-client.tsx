@@ -883,10 +883,10 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
   if (!colsLoaded) return null;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden p-6 gap-4">
+    <div className="flex-1 flex flex-col overflow-hidden">
 
       {/* ── Toolbar ── */}
-      <div className="flex-shrink-0 flex flex-col gap-3">
+      <div className="flex-shrink-0 flex flex-col gap-3 px-5 py-4 bg-white border-b border-slate-200">
 
         {/* Row 1: search + customize + add */}
         <div className="flex items-center gap-2 justify-between flex-wrap">
@@ -999,8 +999,8 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
       </div>
 
       {/* ── Table — only the table body scrolls; toolbar + headers stay fixed ── */}
-      <div className="flex-1 min-h-0 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="overflow-auto h-full">
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="overflow-auto h-full bg-white">
           <table
             className="border-collapse"
             style={{
