@@ -24,7 +24,7 @@ const DEFAULTS: Record<string, AiConfig> = {
   lp_meeting_summary:  { model: SONNET, max_tokens: 800,  temperature: 0.30, system_prompt: null, user_prompt: "" },
   sourcing_scorer:     { model: SONNET, max_tokens: 2048, temperature: 0.10, system_prompt: null, user_prompt: "" },
   exa_research:          { model: SONNET, max_tokens: 1024, temperature: 0.20, system_prompt: null, user_prompt: "" },
-  company_intelligence:  { model: SONNET, max_tokens: 1024, temperature: 0.20, system_prompt: null, user_prompt: "" },
+  company_intelligence:  { model: SONNET, max_tokens: 2048, temperature: 0.20, system_prompt: null, user_prompt: "" },
   ma_intelligence:       { model: SONNET, max_tokens: 2500, temperature: 0.20, system_prompt: null, user_prompt: "" },
   pilot_intelligence:  { model: SONNET, max_tokens: 2500, temperature: 0.20, system_prompt: null, user_prompt: "" },
 };

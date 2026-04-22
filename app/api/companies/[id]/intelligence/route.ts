@@ -12,6 +12,8 @@ import { anthropic } from "@ai-sdk/anthropic";
 
 export const maxDuration = 45;
 
+type IntelItem = { headline: string; source: string; date: string; summary?: string; url?: string | null };
+
 /** Replace {{variable}} placeholders in a template string. */
 function interpolate(template: string, vars: Record<string, string>): string {
   return Object.entries(vars).reduce(
@@ -138,14 +140,19 @@ Return a JSON array ONLY (no markdown, no explanation):
   const systemPrompt = cfg.system_prompt ??
     "You are a VC intelligence analyst. Return only valid JSON arrays as instructed.";
 
+  // Use at least 2048 tokens — 1024 can truncate mid-JSON with 7 items
+  const maxTokens = Math.max(cfg.max_tokens, 2048);
+
   try {
     const { text } = await generateText({
       model: anthropic(cfg.model as Parameters<typeof anthropic>[0]),
-      maxTokens: cfg.max_tokens,
+      maxTokens,
       temperature: cfg.temperature,
       system: systemPrompt,
       messages: [{ role: "user", content: finalPrompt }],
     });
+
+    console.log("[intelligence] raw response:", text.slice(0, 400));
 
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
@@ -153,8 +160,21 @@ Return a JSON array ONLY (no markdown, no explanation):
       return NextResponse.json({ error: "Model returned unexpected format" }, { status: 500 });
     }
 
-    const items = JSON.parse(jsonMatch[0]);
-    return NextResponse.json({ items: Array.isArray(items) ? items : [] });
+    const parsed = JSON.parse(jsonMatch[0]);
+    const raw: IntelItem[] = Array.isArray(parsed) ? parsed : [];
+
+    // Sanitise: drop items with no headline; convert string "null" URLs to real null
+    const items = raw
+      .filter(item => item.headline?.trim())
+      .map(item => ({
+        ...item,
+        url: item.url && item.url !== "null" && item.url.startsWith("http")
+          ? item.url
+          : null,
+      }));
+
+    console.log(`[intelligence] returning ${items.length} items for company ${id}`);
+    return NextResponse.json({ items });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[intelligence] Error:", msg);
