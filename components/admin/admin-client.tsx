@@ -19,7 +19,7 @@ import {
 } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import { createClient } from "@/lib/supabase/client";
-import type { Company, Contact } from "@/lib/types";
+import type { Company, Contact, ContactStatus } from "@/lib/types";
 import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen, Download, Bell, ExternalLink, MapPin, Globe, Users, Building2, Calendar } from "lucide-react";
 import { formatDealStatus, normalizeSector } from "@/lib/constants";
 import { AiConfigPanel } from "@/components/admin/ai-config-panel";
@@ -2439,7 +2439,7 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           <StatusCell
             row={row}
             onSaved={(id, status) => {
-              setContacts(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+              setContacts(prev => prev.map(c => c.id === id ? { ...c, status: status as ContactStatus } : c));
             }}
           />
         ),
