@@ -144,7 +144,7 @@ export interface Interaction {
   pending_resolutions: import("./meeting-resolution").PendingResolutions | null;
   ai_summary: string | null;
   archived: boolean;
-  meeting_type: string | null;
+  meeting_type?: string | null;
   // joined
   company?: Company;
 }
