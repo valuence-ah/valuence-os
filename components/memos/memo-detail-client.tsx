@@ -74,6 +74,20 @@ function getSectionContent(memo: MemoWithCompany, key: string): string {
   return fallback[key] ?? "";
 }
 
+// ─── MemoContent ──────────────────────────────────────────────────────────────
+// Renders memo text with proper paragraph spacing.
+// Splits on double-newline for paragraphs, preserves single-newline line breaks.
+function MemoContent({ text }: { text: string }) {
+  const paragraphs = text.split(/\n{2,}/);
+  return (
+    <div className="space-y-3 text-sm text-gray-700 leading-relaxed">
+      {paragraphs.map((para, i) => (
+        <p key={i} className="whitespace-pre-wrap">{para.trim()}</p>
+      ))}
+    </div>
+  );
+}
+
 // ─── TechScoreCard ─────────────────────────────────────────────────────────────
 // Renders a visual score card if content is JSON array of {dimension, score, rationale}.
 // Otherwise renders plain text.
@@ -398,7 +412,7 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
                   key === "evaluation_score" ? (
                     <TechScoreCard content={content} />
                   ) : (
-                    <p className="whitespace-pre-wrap">{content}</p>
+                    <MemoContent text={content} />
                   )
                 ) : (
                   <span className="text-gray-400 italic text-sm">

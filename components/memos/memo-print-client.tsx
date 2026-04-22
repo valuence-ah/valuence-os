@@ -68,6 +68,19 @@ function getSectionContent(memo: MemoWithCompany, key: string): string {
   return fallback[key] ?? "";
 }
 
+// ── MemoContent — paragraph-aware renderer ────────────────────────────────────
+// Splits on double-newline → separate <p> blocks; preserves single-newline.
+function PrintMemoContent({ content }: { content: string }) {
+  const paragraphs = content.split(/\n{2,}/);
+  return (
+    <>
+      {paragraphs.map((para, i) => (
+        <p key={i} style={{ margin: "0 0 10px 0", whiteSpace: "pre-wrap" }}>{para.trim()}</p>
+      ))}
+    </>
+  );
+}
+
 // Render evaluation_score as a score card if it's a JSON array
 function EvalScoreContent({ content }: { content: string }) {
   let scores: Array<{ dimension: string; score: number; rationale: string }> | null = null;
@@ -129,12 +142,17 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+        @page {
+          size: A4 portrait;
+          margin: 18mm 20mm 18mm 20mm;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
           font-family: 'Inter', system-ui, sans-serif;
-          font-size: 12px;
-          line-height: 1.6;
+          font-size: 11.5px;
+          line-height: 1.65;
           color: #1e293b;
           background: white;
           -webkit-print-color-adjust: exact;
@@ -142,9 +160,9 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
         }
 
         .memo-container {
-          max-width: 820px;
+          max-width: 720px;
           margin: 0 auto;
-          padding: 40px 48px;
+          padding: 36px 40px;
         }
 
         /* ── Cover header ── */
@@ -219,9 +237,8 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
         .section-body {
           padding-left: 28px;
           color: #334155;
-          font-size: 12px;
+          font-size: 11.5px;
           line-height: 1.7;
-          white-space: pre-wrap;
         }
         .section-empty {
           padding-left: 28px;
@@ -258,12 +275,18 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
           color: #94a3b8;
         }
 
+        /* ── Section body paragraph spacing ── */
+        .section-body p:last-child { margin-bottom: 0; }
+
         /* ── Print-only tweaks ── */
         @media print {
           body { font-size: 11px; }
+          /* Let @page margins handle spacing — don't zero-out container padding */
           .memo-container { padding: 0; max-width: 100%; }
           .no-print { display: none !important; }
           .section { page-break-inside: avoid; }
+          /* Ensure nothing overflows the printed page width */
+          * { max-width: 100%; overflow-wrap: break-word; word-break: break-word; }
         }
 
         /* ── Screen: show a "close" button ── */
@@ -349,7 +372,9 @@ export function MemoPrintClient({ memo }: { memo: MemoWithCompany }) {
                     <EvalScoreContent content={content} />
                   </div>
                 ) : (
-                  <div className="section-body">{content}</div>
+                  <div className="section-body">
+                    <PrintMemoContent content={content} />
+                  </div>
                 )
               ) : (
                 <div className="section-empty">No content for this section.</div>
