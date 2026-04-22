@@ -253,7 +253,12 @@ function InlinePickerCell({
     e.stopPropagation();
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();
-    setPos({ top: rect.bottom + 4, left: rect.left });
+    const estimatedH = (options.length + 1) * 34;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const top = spaceBelow < estimatedH && rect.top > spaceBelow
+      ? Math.max(8, rect.top - estimatedH - 4)
+      : rect.bottom + 4;
+    setPos({ top, left: rect.left });
     setOpen(o => !o);
   }
 
@@ -628,7 +633,17 @@ export function StrategicViewClient({ initialCompanies }: Props) {
       location_city:    addCity.trim() || null,
       location_country: addCountry.trim() || null,
     }).select().single();
-    if (newCo) setCompanies(prev => [...prev, newCo as Company].sort((a, b) => a.name.localeCompare(b.name)));
+    if (newCo) {
+      setCompanies(prev => [...prev, newCo as Company].sort((a, b) => a.name.localeCompare(b.name)));
+      // Auto-run logo.dev for corporate / government types
+      if (newCo.website && (addType === "corporate" || addType === "government")) {
+        fetch("/api/logo-finder/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: newCo.id }),
+        }).catch(() => {});
+      }
+    }
     setAddName(""); setAddSector(""); setAddType("ecosystem_partner");
     setAddWebsite(""); setAddCity(""); setAddCountry("");
     setShowAddPartner(false);

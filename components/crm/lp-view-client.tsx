@@ -978,6 +978,14 @@ export function LpViewClient({ initialCompanies }: Props) {
           is_primary_contact: true, created_by: user?.id ?? null,
         });
       }
+      // Auto-run logo.dev if website provided
+      if (newCo.website) {
+        fetch("/api/logo-finder/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: newCo.id }),
+        }).catch(() => {});
+      }
       setCompanies(prev => [newCo as Company, ...prev]);
       setShowAddLP(false); setAddLPForm(EMPTY_ADD_LP); setAddLPContact(EMPTY_CONTACT); setShowAddLPContact(false);
       selectCompany(newCo.id);

@@ -177,6 +177,7 @@ const INVESTOR_TYPE_STYLES: Record<string, { background: string; color: string }
   "Accelerator":     { background: "#fef3c7", color: "#92400e" },
   "Corporate":       { background: "#fff7ed", color: "#c2410c" },
   "Family Office":   { background: "#f5f3ff", color: "#7c3aed" },
+  "Government":      { background: "#f0f9ff", color: "#0369a1" },
   "HNW":             { background: "#fdf4ff", color: "#86198f" },
   "Venture Capital": { background: "#eff6ff", color: "#1d4ed8" },
 };
@@ -305,7 +306,12 @@ function InlinePickerCell({
     e.stopPropagation();
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();
-    setPos({ top: rect.bottom + 4, left: rect.left });
+    const estimatedH = (options.length + 1) * 34;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const top = spaceBelow < estimatedH && rect.top > spaceBelow
+      ? Math.max(8, rect.top - estimatedH - 4)
+      : rect.bottom + 4;
+    setPos({ top, left: rect.left });
     setOpen(o => !o);
   }
 
@@ -379,9 +385,15 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [addFundStages, setAddFundStages]               = useState<string[]>([]);
   const [addFundOwner, setAddFundOwner]                 = useState("");
   const [showAddFundContact, setShowAddFundContact]     = useState(false);
+  const [addFundWebsite, setAddFundWebsite]             = useState("");
   const [addFundContactFirst, setAddFundContactFirst]   = useState("");
   const [addFundContactLast, setAddFundContactLast]     = useState("");
   const [addFundContactEmail, setAddFundContactEmail]   = useState("");
+  const [addFundContactMode, setAddFundContactMode]     = useState<"new" | "existing">("new");
+  const [addFundContactSearch, setAddFundContactSearch] = useState("");
+  const [addFundContactResults, setAddFundContactResults] = useState<Contact[]>([]);
+  const [addFundLinkedContact, setAddFundLinkedContact] = useState<Contact | null>(null);
+  const addFundContactAbort = useRef<AbortController | null>(null);
   const [savingFund, setSavingFund]                     = useState(false);
 
   // Tracks which fund IDs are currently having descriptions generated
@@ -437,6 +449,22 @@ export function FundsViewClient({ initialCompanies }: Props) {
     });
   }
 
+  // Debounced contact search for Add Fund modal
+  useEffect(() => {
+    const q = addFundContactSearch.trim();
+    if (!q || addFundContactMode !== "existing") { setAddFundContactResults([]); return; }
+    addFundContactAbort.current?.abort();
+    addFundContactAbort.current = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search/contacts?q=${encodeURIComponent(q)}`, { signal: addFundContactAbort.current!.signal });
+        const data = await res.json() as Contact[];
+        setAddFundContactResults(data);
+      } catch { /* aborted */ }
+    }, 250);
+    return () => { clearTimeout(timer); };
+  }, [addFundContactSearch, addFundContactMode]);
+
   // ── Add Fund ─────────────────────────────────────────────────────────────────
   async function handleAddFund() {
     if (!addFundName.trim()) return;
@@ -447,26 +475,44 @@ export function FundsViewClient({ initialCompanies }: Props) {
         name:             addFundName.trim(),
         type:             "fund",
         investor_type:    addFundType || null,
+        website:          addFundWebsite.trim() || null,
         location_city:    addFundCity.trim() || null,
         location_country: addFundCountry.trim() || null,
         fund_focus:       addFundStages.length > 0 ? addFundStages.join(", ") : null,
         created_by:       user?.id,
       }).select().single();
 
-      if (!error && newCo && showAddFundContact && addFundContactFirst.trim()) {
-        await supabase.from("contacts").insert({
-          first_name:  addFundContactFirst.trim(),
-          last_name:   addFundContactLast.trim() || null,
-          email:       addFundContactEmail.trim() || null,
-          company_id:  newCo.id,
-          created_by:  user?.id,
-        });
+      if (!error && newCo) {
+        // Auto-run logo.dev if website provided
+        if (newCo.website) {
+          fetch("/api/logo-finder/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ companyId: newCo.id }),
+          }).catch(() => {});
+        }
+        if (showAddFundContact) {
+          if (addFundContactMode === "existing" && addFundLinkedContact) {
+            // Link existing contact to the new fund
+            await supabase.from("contacts").update({ company_id: newCo.id }).eq("id", addFundLinkedContact.id);
+          } else if (addFundContactMode === "new" && addFundContactFirst.trim()) {
+            // Create new contact
+            await supabase.from("contacts").insert({
+              first_name:  addFundContactFirst.trim(),
+              last_name:   addFundContactLast.trim() || null,
+              email:       addFundContactEmail.trim() || null,
+              company_id:  newCo.id,
+              created_by:  user?.id,
+            });
+          }
+        }
       }
     } catch {}
     // Reset
-    setAddFundName(""); setAddFundType(""); setAddFundCity(""); setAddFundCountry("");
+    setAddFundName(""); setAddFundType(""); setAddFundWebsite(""); setAddFundCity(""); setAddFundCountry("");
     setAddFundStages([]); setAddFundOwner("");
     setAddFundContactFirst(""); setAddFundContactLast(""); setAddFundContactEmail("");
+    setAddFundContactMode("new"); setAddFundLinkedContact(null); setAddFundContactSearch(""); setAddFundContactResults([]);
     setShowAddFundContact(false);
     setShowAddFund(false);
     setSavingFund(false);
@@ -1311,7 +1357,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
                     <td className="px-3 py-2.5 min-w-[130px]" onClick={e => e.stopPropagation()}>
                       <InlinePickerCell
                         value={fund.investorType}
-                        options={["Accelerator","Corporate","Family Office","HNW","Venture Capital"]}
+                        options={["Accelerator","Corporate","Family Office","Government","HNW","Venture Capital"]}
                         styles={INVESTOR_TYPE_STYLES}
                         onPick={async (val) => {
                           setInvestorTypeMap(prev => ({ ...prev, [fund.id]: val }));
@@ -2907,10 +2953,20 @@ export function FundsViewClient({ initialCompanies }: Props) {
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   <option value="">Select type…</option>
-                  {["Venture Capital", "Corporate VC", "Family Office", "Fund of Fund", "Angel", "Accelerator", "Government", "Other"].map(t => (
+                  {["Venture Capital", "Accelerator", "Corporate", "Family Office", "Government", "HNW", "Other"].map(t => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
+              </div>
+              {/* Website */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Website</label>
+                <input
+                  value={addFundWebsite}
+                  onChange={e => setAddFundWebsite(e.target.value)}
+                  placeholder="e.g. lowercarbon.com"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
               {/* City + Country */}
               <div className="grid grid-cols-2 gap-2">
@@ -2951,18 +3007,80 @@ export function FundsViewClient({ initialCompanies }: Props) {
               ) : (
                 <div className="border border-blue-200 rounded-xl bg-blue-50 p-3 space-y-2">
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs font-semibold text-slate-700">Contact Details</p>
-                    <button type="button" onClick={() => { setShowAddFundContact(false); setAddFundContactFirst(""); setAddFundContactLast(""); setAddFundContactEmail(""); }}
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-semibold text-slate-700">Contact</p>
+                      <div className="flex text-[10px] border border-slate-200 rounded-md overflow-hidden bg-white">
+                        <button type="button"
+                          onClick={() => { setAddFundContactMode("new"); setAddFundLinkedContact(null); setAddFundContactSearch(""); setAddFundContactResults([]); }}
+                          className={cn("px-2 py-0.5 transition-colors", addFundContactMode === "new" ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-50")}>
+                          New
+                        </button>
+                        <button type="button"
+                          onClick={() => { setAddFundContactMode("existing"); setAddFundContactFirst(""); setAddFundContactLast(""); setAddFundContactEmail(""); }}
+                          className={cn("px-2 py-0.5 transition-colors", addFundContactMode === "existing" ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-50")}>
+                          Existing
+                        </button>
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => { setShowAddFundContact(false); setAddFundContactFirst(""); setAddFundContactLast(""); setAddFundContactEmail(""); setAddFundContactMode("new"); setAddFundLinkedContact(null); setAddFundContactSearch(""); setAddFundContactResults([]); }}
                       className="text-slate-400 hover:text-slate-600"><X size={12} /></button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                      placeholder="First name *" value={addFundContactFirst} onChange={e => setAddFundContactFirst(e.target.value)} />
-                    <input className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                      placeholder="Last name" value={addFundContactLast} onChange={e => setAddFundContactLast(e.target.value)} />
-                  </div>
-                  <input className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    type="email" placeholder="Email" value={addFundContactEmail} onChange={e => setAddFundContactEmail(e.target.value)} />
+                  {addFundContactMode === "new" ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                          placeholder="First name *" value={addFundContactFirst} onChange={e => setAddFundContactFirst(e.target.value)} />
+                        <input className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                          placeholder="Last name" value={addFundContactLast} onChange={e => setAddFundContactLast(e.target.value)} />
+                      </div>
+                      <input className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        type="email" placeholder="Email" value={addFundContactEmail} onChange={e => setAddFundContactEmail(e.target.value)} />
+                    </>
+                  ) : (
+                    <div className="relative">
+                      {addFundLinkedContact ? (
+                        <div className="flex items-center gap-2 bg-white rounded-lg px-2.5 py-2 border border-slate-200">
+                          <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center text-[9px] font-bold text-violet-700 flex-shrink-0">
+                            {(addFundLinkedContact.first_name[0] ?? "?").toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-slate-800 truncate">{addFundLinkedContact.first_name} {addFundLinkedContact.last_name ?? ""}</p>
+                            {addFundLinkedContact.email && <p className="text-[10px] text-slate-400 truncate">{addFundLinkedContact.email}</p>}
+                          </div>
+                          <button type="button" onClick={() => { setAddFundLinkedContact(null); setAddFundContactSearch(""); }} className="text-slate-300 hover:text-red-400 flex-shrink-0"><X size={12} /></button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="relative">
+                            <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                              className="w-full text-xs border border-slate-200 rounded-lg pl-7 pr-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                              placeholder="Search by name or email…"
+                              value={addFundContactSearch}
+                              onChange={e => setAddFundContactSearch(e.target.value)}
+                            />
+                          </div>
+                          {addFundContactResults.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto">
+                              {addFundContactResults.map(c => (
+                                <button key={c.id} type="button"
+                                  onClick={() => { setAddFundLinkedContact(c); setAddFundContactSearch(""); setAddFundContactResults([]); }}
+                                  className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-center gap-2 border-b border-slate-50 last:border-0 transition-colors">
+                                  <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center text-[9px] font-bold text-violet-700 flex-shrink-0">
+                                    {(c.first_name[0] ?? "?").toUpperCase()}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name ?? ""}</p>
+                                    {c.email && <p className="text-[10px] text-slate-400 truncate">{c.email}</p>}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
