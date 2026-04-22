@@ -51,17 +51,19 @@ export async function POST(
     return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
   }
 
-  // ── Build a clean file name ───────────────────────────────────────────────
+  // ── Build a clean file name — title: "MMM DD YYYY - Meeting Subject.pdf" ──
+  const meetingDate = meeting.date ? new Date(meeting.date as string) : new Date();
+  const datePretty = meetingDate.toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  }); // e.g. "Apr 16, 2026"
   const rawTitle  = ((meeting.subject as string | null) ?? "Meeting").trim();
   const safeTitle = rawTitle
     .replace(/[^a-zA-Z0-9\s\-]/g, "")
     .trim()
-    .replace(/\s+/g, "-")
+    .replace(/\s+/g, " ")
     .slice(0, 60) || "Meeting";
-  const dateStr   = meeting.date
-    ? new Date(meeting.date as string).toISOString().slice(0, 10)
-    : new Date().toISOString().slice(0, 10);
-  const fileName  = `${safeTitle}-${dateStr}.pdf`;
+  const safeDatePretty = datePretty.replace(/,/g, "").replace(/\s+/g, " ");
+  const fileName  = `${safeDatePretty} - ${safeTitle}.pdf`;
 
   // Unique path per export (timestamp prefix avoids collisions on re-export)
   const storagePath = `${company_id}/${id}/${Date.now()}-${fileName}`;

@@ -2571,15 +2571,17 @@ export function PipelineClient({ initialCompanies }: Props) {
 
                             // ── Trigger immediate browser download ──────────
                             const downloadUrl = URL.createObjectURL(blob);
+                            const meetingDate = m.date ? new Date(m.date) : new Date();
+                            const datePretty = meetingDate.toLocaleDateString("en-US", {
+                              month: "short", day: "numeric", year: "numeric",
+                            }); // e.g. "Apr 16, 2026"
                             const safeTitle = (m.subject ?? "Meeting")
                               .replace(/[^a-zA-Z0-9\s-]/g, "").trim()
-                              .replace(/\s+/g, "-").slice(0, 60) || "Meeting";
-                            const dateStr = m.date
-                              ? new Date(m.date).toISOString().slice(0, 10)
-                              : new Date().toISOString().slice(0, 10);
+                              .replace(/\s+/g, " ").slice(0, 60) || "Meeting";
+                            const safeDatePretty = datePretty.replace(/,/g, "").replace(/\s+/g, " ");
                             const anchor = document.createElement("a");
                             anchor.href = downloadUrl;
-                            anchor.download = `${safeTitle}-${dateStr}.pdf`;
+                            anchor.download = `${safeDatePretty} - ${safeTitle}.pdf`;
                             document.body.appendChild(anchor);
                             anchor.click();
                             document.body.removeChild(anchor);
@@ -2625,11 +2627,11 @@ export function PipelineClient({ initialCompanies }: Props) {
                         )}
                       >
                         {isExporting ? (
-                          <><Loader2 size={11} className="animate-spin" /> Exporting…</>
+                          <><Loader2 size={11} className="animate-spin" /> Saving…</>
                         ) : justExported ? (
-                          <><Check size={11} /> Saved to Transcripts</>
+                          <><Check size={11} /> Logged in Transcripts</>
                         ) : (
-                          "Export PDF"
+                          "Log in Meeting Transcripts"
                         )}
                       </button>
                     </div>

@@ -38,10 +38,27 @@ export interface DriveFile {
 // ── Parse folder ID from URL ───────────────────────────────────────────────────
 
 export function parseFolderId(url: string): string | null {
-  // https://drive.google.com/drive/folders/FOLDER_ID?usp=sharing
+  const u = url.trim();
+
+  // https://drive.google.com/drive/folders/FOLDER_ID
   // https://drive.google.com/drive/u/0/folders/FOLDER_ID
-  const match = url.match(/\/folders\/([a-zA-Z0-9_-]{10,})/);
-  return match?.[1] ?? null;
+  // https://drive.google.com/drive/u/0/folders/FOLDER_ID?usp=sharing
+  const folderMatch = u.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch) return folderMatch[1];
+
+  // https://drive.google.com/file/d/FILE_ID/view
+  // https://docs.google.com/document/d/DOC_ID/edit
+  // https://docs.google.com/spreadsheets/d/SHEET_ID/edit
+  // https://docs.google.com/presentation/d/PRES_ID/edit
+  const fileMatch = u.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+  if (fileMatch) return fileMatch[1];
+
+  // https://drive.google.com/open?id=FOLDER_ID
+  // https://drive.google.com/folderview?id=FOLDER_ID
+  const idMatch = u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idMatch) return idMatch[1];
+
+  return null;
 }
 
 // ── List subfolders in folder ─────────────────────────────────────────────────
