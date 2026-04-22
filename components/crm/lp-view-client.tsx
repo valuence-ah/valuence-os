@@ -592,23 +592,19 @@ export function LpViewClient({ initialCompanies }: Props) {
   // Contact pop-out panel
   const [viewingContact, setViewingContact] = useState<Contact | null>(null);
 
-  // LP Company News feed (renamed from "Intelligence")
+  // LP Company News feed
   type LpIntelItem = { headline: string; source: string; date: string; summary?: string; url?: string };
   const [lpIntelligence, setLpIntelligence] = useState<LpIntelItem[]>([]);
   const [lpIntelLoading, setLpIntelLoading] = useState(false);
   const [lpIntelError, setLpIntelError]     = useState<string | null>(null);
   const [lpIntelCachedAt, setLpIntelCachedAt] = useState<string | null>(null);
 
-  // Intelligence tab — fund portfolio & pipeline snapshot
-  type FundCompany = { id: string; name: string; sectors: string[] | null; status: string | null; description: string | null; stage: string | null };
-  const [portfolioItems, setPortfolioItems] = useState<FundCompany[]>([]);
-  const [pipelineItems,  setPipelineItems]  = useState<FundCompany[]>([]);
-  const [fundLoaded,     setFundLoaded]     = useState(false);
-  const [fundLoading,    setFundLoading]    = useState(false);
-  // AI-generated narrative for Intelligence tab
-  const [fundNarrative,        setFundNarrative]        = useState<string | null>(null);
-  const [fundNarrativeLoading, setFundNarrativeLoading] = useState(false);
-  const [fundNarrativeError,   setFundNarrativeError]   = useState<string | null>(null);
+  // Intelligence tab — LP-specific alignment analysis
+  type AlignmentPick = { name: string; reason: string; sectors: string[]; stage: string | null; description: string | null };
+  type AlignmentResult = { alignment_summary: string; portfolio_picks: AlignmentPick[]; pipeline_picks: AlignmentPick[] };
+  const [alignment,        setAlignment]        = useState<AlignmentResult | null>(null);
+  const [alignmentLoading, setAlignmentLoading] = useState(false);
+  const [alignmentError,   setAlignmentError]   = useState<string | null>(null);
 
   // LP Starred intel — persisted to localStorage
   const [lpStarredIntel, setLpStarredIntel] = useState<Record<string, string[]>>({});
@@ -832,11 +828,14 @@ export function LpViewClient({ initialCompanies }: Props) {
   const selected = companies.find(c => c.id === selectedId) ?? null;
 
   // Reset Company News state when the selected LP changes; restore from cache if available
+  // Reset all tab state when the selected LP changes
   // (must be after `selected` is declared — TypeScript requires declaration order)
   useEffect(() => {
     setLpIntelligence([]);
     setLpIntelError(null);
     setLpIntelCachedAt(null);
+    setAlignment(null);
+    setAlignmentError(null);
     if (selected?.id) {
       try {
         const cached = localStorage.getItem(`lp_intel_${selected.id}`);
@@ -896,7 +895,8 @@ export function LpViewClient({ initialCompanies }: Props) {
     setLpIntelLoading(true);
     setLpIntelError(null);
     try {
-      const res = await fetch(`/api/companies/${selected.id}/intelligence`, { method: "POST" });
+      // Use the LP-specific news route (no strict 180-day cutoff — tuned for institutional investors)
+      const res = await fetch(`/api/lp/${selected.id}/news`, { method: "POST" });
       if (res.ok) {
         const data = await res.json() as { items?: LpIntelItem[] };
         const items = data.items ?? [];
@@ -919,52 +919,28 @@ export function LpViewClient({ initialCompanies }: Props) {
     }
   }
 
-  // Fetch portfolio (status=portfolio, limit 2) + active pipeline (not passed/exited, limit 6)
-  async function fetchFundSnapshot() {
-    if (fundLoaded || fundLoading) return;
-    setFundLoading(true);
+  // Generate LP-specific alignment intelligence for the Intelligence tab
+  async function generateAlignment() {
+    if (!selected || alignmentLoading) return;
+    setAlignmentLoading(true);
+    setAlignmentError(null);
     try {
-      const [{ data: portfolio }, { data: pipeline }] = await Promise.all([
-        supabase.from("companies")
-          .select("id, name, sectors, status, description, stage")
-          .eq("status", "portfolio")
-          .order("name").limit(2),
-        supabase.from("companies")
-          .select("id, name, sectors, status, description, stage")
-          .not("status", "in", '("passed","exited","portfolio")')
-          .not("status", "is", null)
-          .order("updated_at", { ascending: false }).limit(6),
-      ]);
-      setPortfolioItems(portfolio ?? []);
-      setPipelineItems(pipeline ?? []);
-      setFundLoaded(true);
-    } catch { /* silent */ } finally {
-      setFundLoading(false);
-    }
-  }
-
-  // Generate AI narrative for Intelligence tab via /api/lp/intelligence-snapshot
-  async function generateFundNarrative() {
-    if (fundNarrativeLoading) return;
-    setFundNarrativeLoading(true);
-    setFundNarrativeError(null);
-    try {
-      const res = await fetch("/api/lp/intelligence-snapshot", { method: "POST" });
+      const res = await fetch(`/api/lp/${selected.id}/alignment`, { method: "POST" });
       if (res.ok) {
-        const data = await res.json() as { narrative?: string };
-        setFundNarrative(data.narrative ?? null);
+        const data = await res.json() as AlignmentResult;
+        setAlignment(data);
       } else {
         try {
           const errData = await res.json();
-          setFundNarrativeError(errData.error ?? `Error ${res.status}`);
+          setAlignmentError(errData.error ?? `Error ${res.status}`);
         } catch {
-          setFundNarrativeError(`Error ${res.status} — failed to generate narrative`);
+          setAlignmentError(`Error ${res.status} — failed to generate intelligence`);
         }
       }
     } catch {
-      setFundNarrativeError("Network error — check your connection");
+      setAlignmentError("Network error — check your connection");
     } finally {
-      setFundNarrativeLoading(false);
+      setAlignmentLoading(false);
     }
   }
 
@@ -1830,9 +1806,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                 <button key={key}
                   onClick={() => {
                     setLpDetailTab(key);
-                    // Intelligence tab: lazy-load fund snapshot on first open
-                    if (key === "intelligence") fetchFundSnapshot();
-                    // Company News: never auto-fetch — user clicks Refresh
+                    // Company News and Intelligence: never auto-fetch — user clicks the button
                   }}
                   className={cn("px-3 py-2.5 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5",
                     lpDetailTab === key ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"
@@ -1844,7 +1818,6 @@ export function LpViewClient({ initialCompanies }: Props) {
 
             {/* Company News tab */}
             {lpDetailTab === "company_news" && (() => {
-              const sixMonthsAgo = new Date(Date.now() - 180 * 86_400_000);
               const starred = (lpStarredIntel[selected?.id ?? ""] ?? []);
 
               // Deduplicate by first 40 chars of headline
@@ -1858,15 +1831,10 @@ export function LpViewClient({ initialCompanies }: Props) {
                 });
               }
 
-              // Updates: items within 6 months, OR starred (even if old) — but only show non-starred recent ones here
+              // All non-starred items, sorted newest first
               const recentItems = dedupe(
                 lpIntelligence
-                  .filter(i => {
-                    const isStarredItem = starred.includes(i.headline);
-                    const isRecent = !i.date || new Date(i.date) >= sixMonthsAgo;
-                    return isRecent || isStarredItem; // keep starred regardless of age
-                  })
-                  .filter(i => !starred.includes(i.headline)) // exclude starred from Updates (shown in Saved)
+                  .filter(i => !starred.includes(i.headline))
                   .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime())
               );
 
@@ -1910,7 +1878,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                   <div className="flex-1 overflow-y-auto px-5 pt-4 pb-2 space-y-3 border-b border-slate-200" style={{ minHeight: 0 }}>
                     <div className="flex items-center justify-between flex-shrink-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Updates · Past 6 Months</p>
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Recent News</p>
                         {lpIntelCachedAt && !lpIntelLoading && (
                           <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(lpIntelCachedAt).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
                         )}
@@ -1929,11 +1897,9 @@ export function LpViewClient({ initialCompanies }: Props) {
                     ) : lpIntelligence.length === 0 ? (
                       <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl">
                         <Sparkles size={24} className="mx-auto mb-2 text-slate-300" />
-                        <p className="text-xs text-slate-400 mb-1">No intelligence loaded</p>
-                        <p className="text-[11px] text-slate-300">Click Refresh to fetch latest signals</p>
+                        <p className="text-xs text-slate-400 mb-1">No news loaded yet</p>
+                        <p className="text-[11px] text-slate-300">Click Refresh to fetch recent news</p>
                       </div>
-                    ) : recentItems.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic">No updates in the past 6 months</p>
                     ) : (
                       <div className="space-y-2.5">
                         {recentItems.map((item, i) => <IntelCard key={i} item={item} />)}
@@ -1960,113 +1926,107 @@ export function LpViewClient({ initialCompanies }: Props) {
             {lpDetailTab === "intelligence" && (
               <div className="flex-1 overflow-hidden flex flex-col">
 
-                {/* Tab header — Generate button top-right, identical to Company News */}
+                {/* Header — Generate/Regenerate button top-right */}
                 <div className="flex items-center justify-between px-5 pt-4 pb-2 flex-shrink-0">
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles size={10} className="text-purple-500" /> AI Fund Narrative
+                    <Sparkles size={10} className="text-purple-500" /> LP Intelligence
                   </p>
                   <button
-                    onClick={generateFundNarrative}
-                    disabled={fundNarrativeLoading}
+                    onClick={generateAlignment}
+                    disabled={alignmentLoading}
                     className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
                   >
-                    {fundNarrativeLoading
+                    {alignmentLoading
                       ? <><Loader2 size={10} className="animate-spin" />Generating…</>
-                      : <><Sparkles size={10} />{fundNarrative ? "Regenerate" : "Generate"}</>
+                      : <><Sparkles size={10} />{alignment ? "Regenerate" : "Generate"}</>
                     }
                   </button>
                 </div>
-                {fundNarrativeError && (
-                  <p className="text-xs text-red-400 italic px-5 mb-1">{fundNarrativeError}</p>
+                {alignmentError && (
+                  <p className="text-xs text-red-400 italic px-5 mb-1">{alignmentError}</p>
                 )}
 
                 {/* Scrollable content */}
                 <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-4" style={{ minHeight: 0 }}>
 
-                  {/* AI Narrative — shown at top so it's the first thing the user sees */}
-                  {fundNarrative ? (
-                    <div className="bg-purple-50 border border-purple-100 rounded-xl p-3.5 space-y-2.5">
-                      {fundNarrative.split(/\n{2,}/).map((para, i) => (
-                        <p key={i} className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">{para.trim()}</p>
-                      ))}
-                    </div>
-                  ) : !fundNarrativeLoading && (
-                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center">
-                      <p className="text-xs text-slate-400">Click Generate to create an LP-ready fund narrative</p>
-                      <p className="text-[10px] text-slate-300 mt-1">Configurable in Admin → AI Config → LP Intelligence Snapshot</p>
+                  {/* Empty / loading state */}
+                  {!alignment && !alignmentLoading && (
+                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center mt-2">
+                      <Briefcase size={20} className="mx-auto mb-2 text-slate-300" />
+                      <p className="text-xs text-slate-400 font-medium">LP-specific intelligence</p>
+                      <p className="text-[11px] text-slate-300 mt-1">
+                        Click Generate to see how Valuence aligns with {selected?.name ?? "this LP"} and which portfolio &amp; pipeline companies to highlight.
+                      </p>
                     </div>
                   )}
-                  {fundNarrativeLoading && (
-                    <div className="space-y-2">
-                      {[1, 2, 3].map(i => <div key={i} className="h-4 bg-purple-50 rounded animate-pulse" />)}
+                  {alignmentLoading && (
+                    <div className="space-y-3 mt-2">
+                      <div className="h-16 bg-purple-50 rounded-xl animate-pulse" />
+                      <div className="h-14 bg-slate-50 rounded-xl animate-pulse" />
+                      <div className="h-14 bg-slate-50 rounded-xl animate-pulse" />
                     </div>
                   )}
 
-                  {/* Portfolio section */}
-                  <div>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                      <CheckSquare size={10} className="text-emerald-500" /> Our Portfolio
-                    </p>
-                    {fundLoading ? (
-                      <div className="space-y-2">{[1, 2].map(i => <div key={i} className="h-16 bg-slate-50 rounded-xl animate-pulse" />)}</div>
-                    ) : portfolioItems.length === 0 ? (
-                      <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center">
-                        <p className="text-xs text-slate-400 italic">No portfolio companies yet</p>
+                  {alignment && (
+                    <>
+                      {/* Fund–LP Alignment narrative */}
+                      <div className="bg-purple-50 border border-purple-100 rounded-xl p-3.5">
+                        <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                          <Sparkles size={9} /> Fund–LP Alignment
+                        </p>
+                        <p className="text-[11px] text-slate-700 leading-relaxed">{alignment.alignment_summary}</p>
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {portfolioItems.map(c => (
-                          <div key={c.id} className="border border-slate-200 rounded-xl p-3 bg-white">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <p className="text-xs font-semibold text-slate-800">{c.name}</p>
-                              {c.sectors?.slice(0, 2).map(s => (
-                                <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold capitalize">{s}</span>
-                              ))}
-                              {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
-                            </div>
-                            {c.description && <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">{c.description}</p>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Active Pipeline section */}
-                  <div>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                      <TrendingUp size={10} className="text-blue-500" /> Active Pipeline
-                      <span className="text-[9px] font-normal text-slate-300 normal-case tracking-normal">· status ≠ Passed</span>
-                    </p>
-                    {fundLoading ? (
-                      <div className="space-y-2">{[1, 2, 3, 4].map(i => <div key={i} className="h-14 bg-slate-50 rounded-xl animate-pulse" />)}</div>
-                    ) : pipelineItems.length === 0 ? (
-                      <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center">
-                        <p className="text-xs text-slate-400 italic">No active pipeline companies</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {pipelineItems.map(c => (
-                          <div key={c.id} className="border border-slate-200 rounded-xl p-3 bg-white">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <p className="text-xs font-semibold text-slate-800">{c.name}</p>
-                              {c.sectors?.slice(0, 2).map(s => (
-                                <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold capitalize">{s}</span>
-                              ))}
-                              {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
-                            </div>
-                            {c.description && <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">{c.description}</p>}
+                      {/* Portfolio picks */}
+                      {alignment.portfolio_picks.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            <CheckSquare size={10} className="text-emerald-500" /> Portfolio Highlight{alignment.portfolio_picks.length > 1 ? "s" : ""}
+                            <span className="text-[9px] font-normal text-slate-300 normal-case tracking-normal">· curated for {selected?.name}</span>
+                          </p>
+                          <div className="space-y-2">
+                            {alignment.portfolio_picks.map((c, i) => (
+                              <div key={i} className="border border-emerald-100 rounded-xl p-3 bg-white">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <p className="text-xs font-semibold text-slate-800">{c.name}</p>
+                                  {c.sectors.slice(0, 2).map(s => (
+                                    <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold capitalize">{s}</span>
+                                  ))}
+                                  {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
+                                </div>
+                                <p className="text-[11px] text-emerald-700 leading-snug font-medium">{c.reason}</p>
+                                {c.description && <p className="text-[10px] text-slate-400 leading-snug mt-1 line-clamp-2">{c.description}</p>}
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                        </div>
+                      )}
 
-                  {/* Refresh company data link */}
-                  {fundLoaded && (
-                    <button onClick={() => { setFundLoaded(false); fetchFundSnapshot(); }}
-                      className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1 mx-auto">
-                      <RefreshCw size={9} /> Refresh company data
-                    </button>
+                      {/* Pipeline picks */}
+                      {alignment.pipeline_picks.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            <TrendingUp size={10} className="text-blue-500" /> Pipeline Interest
+                            <span className="text-[9px] font-normal text-slate-300 normal-case tracking-normal">· curated for {selected?.name}</span>
+                          </p>
+                          <div className="space-y-2">
+                            {alignment.pipeline_picks.map((c, i) => (
+                              <div key={i} className="border border-blue-100 rounded-xl p-3 bg-white">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <p className="text-xs font-semibold text-slate-800">{c.name}</p>
+                                  {c.sectors.slice(0, 2).map(s => (
+                                    <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold capitalize">{s}</span>
+                                  ))}
+                                  {c.stage && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{c.stage}</span>}
+                                </div>
+                                <p className="text-[11px] text-blue-700 leading-snug font-medium">{c.reason}</p>
+                                {c.description && <p className="text-[10px] text-slate-400 leading-snug mt-1 line-clamp-2">{c.description}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
