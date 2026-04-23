@@ -805,7 +805,6 @@ export function LpViewClient({ initialCompanies }: Props) {
     setContactsManaging(false);
     setShowAddContactForm(false);
     setAddingActivity(false);
-    setFfSummary(null); setFfError(null); setFfCount(0);
     setBriefContent(""); setBriefError("");
     setOutreachContent(""); setOutreachError("");
     setLpDetailTab("overview");
@@ -1074,24 +1073,6 @@ export function LpViewClient({ initialCompanies }: Props) {
       selectCompany(newCo.id);
     }
     setSavingLP(false);
-  }
-
-  // Fireflies summary
-  async function loadFirefliesSummary() {
-    if (!selected) return;
-    setFfLoading(true); setFfError(null); setFfSummary(null);
-    const contactEmails = contacts.map(c => c.email).filter(Boolean);
-    try {
-      const res = await fetch("/api/lp/fireflies-summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactEmails, companyName: selected.name }),
-      });
-      const data = await res.json();
-      if (data.error && !data.summary) { setFfError(data.error); }
-      else { setFfSummary(data.summary); setFfCount(data.transcriptCount ?? 0); }
-    } catch (e: any) { setFfError(e.message); }
-    setFfLoading(false);
   }
 
   // AI Prep Brief
