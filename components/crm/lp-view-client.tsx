@@ -1860,18 +1860,13 @@ export function LpViewClient({ initialCompanies }: Props) {
                 } catch { return dateStr; }
               }
 
-              // 180-day cutoff — non-starred items older than this are hidden
-              const cutoff180 = Date.now() - 180 * 24 * 60 * 60 * 1000;
-
-              // All non-starred items within 180 days, sorted newest first
+              // No hard client-side date cutoff — Claude's knowledge cutoff predates
+              // "180 days ago" so filtering here would silently hide all items.
+              // The API prompt already instructs Claude to prefer the most recent news it can confirm.
+              // Items are just sorted newest-first; starred items are exempt regardless.
               const recentItems = dedupe(
                 lpIntelligence
                   .filter(i => !starred.includes(i.headline))
-                  .filter(i => {
-                    if (!i.date) return true;
-                    const d = new Date(i.date).getTime();
-                    return isNaN(d) || d >= cutoff180;
-                  })
                   .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime())
               );
 
