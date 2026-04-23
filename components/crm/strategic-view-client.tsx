@@ -1652,10 +1652,10 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         )}
                       </div>
                     </div>
-                  </div>
-                  {/* Meeting Transcripts — inside Overview only */}
-                  <div className="border-t border-slate-100 pt-3">
-                    <MeetingTranscripts companyId={selected?.id} />
+                    {/* Meeting Transcripts */}
+                    <div className="border-t border-slate-100 pt-3">
+                      <MeetingTranscripts companyId={selected?.id} />
+                    </div>
                   </div>
                 );
               })()}
