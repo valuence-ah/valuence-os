@@ -6,6 +6,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const maxDuration = 60;
 
@@ -69,13 +70,14 @@ export async function POST(req: Request) {
 
   // ── Fetch all data in parallel ─────────────────────────────────────────────
   const [
+    aiConfig,
     { data: allCompanies },
     { data: contacts },
     { data: deals },
     { data: documents },
     { data: recentInteractions },
-    { data: aiConfigRows },
   ] = await Promise.all([
+    getAiConfig("pipeline_assistant"),
     // All companies — filter by type in JS for flexibility
     supabase
       .from("companies")
@@ -114,15 +116,7 @@ export async function POST(req: Request) {
       .order("date", { ascending: false })
       .limit(300) as unknown as Promise<{ data: InteractionRow[] | null }>,
 
-    // AI config
-    supabase
-      .from("ai_configs")
-      .select("model, max_tokens, temperature, system_prompt, user_prompt")
-      .eq("name", "pipeline_assistant")
-      .maybeSingle() as unknown as Promise<{ data: AiConfigRow | null }>,
   ]);
-
-  const aiConfig = aiConfigRows as AiConfigRow | null;
 
   // ── Categorise companies ───────────────────────────────────────────────────
   const isLP = (c: CompanyRow) =>
@@ -305,18 +299,18 @@ Valuence Ventures is an early-stage deeptech fund focused on cleantech, techbio,
 - Draft VC-quality emails, IC memos, LP updates, and meeting prep on request
 - Never fabricate internal data — only use what's in context
 - Be sharp, concise, and actionable — not generic
-${aiConfig?.user_prompt ? `\n## Additional Instructions\n${aiConfig.user_prompt}` : ""}
+${aiConfig.user_prompt ? `\n## Additional Instructions\n${aiConfig.user_prompt}` : ""}
 
 ## Live CRM Data
 
 ${fullContext}`;
 
-  const systemPrompt = aiConfig?.system_prompt
+  const systemPrompt = aiConfig.system_prompt
     ? `${aiConfig.system_prompt}\n\n${aiConfig.user_prompt ? `Additional Instructions:\n${aiConfig.user_prompt}\n\n` : ""}Live CRM Data:\n${fullContext}`
     : defaultSystemPrompt;
 
   // ── Stream response ────────────────────────────────────────────────────────
-  const modelId = aiConfig?.model ?? "claude-sonnet-4-6";
+  const modelId = aiConfig.model;
   console.log(`[pipeline-chat] model=${modelId} promptChars=${systemPrompt.length} msgs=${messages.length}`);
 
   // Trim system prompt if it exceeds ~400k chars (~100k tokens) to stay safe
@@ -327,14 +321,14 @@ ${fullContext}`;
   let result;
   try {
     result = streamText({
-      model: anthropic(modelId),
+      model: anthropic(modelId as Parameters<typeof anthropic>[0]),
       system: trimmedPrompt,
       messages: messages.map((m: { role: string; content: unknown }) => ({
         role: m.role,
         content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
       })),
-      temperature: aiConfig?.temperature ?? 0.25,
-      maxTokens: aiConfig?.max_tokens ?? 4096,
+      temperature: aiConfig.temperature,
+      maxTokens: aiConfig.max_tokens,
     });
   } catch (err) {
     console.error("[pipeline-chat] streamText setup error:", err);

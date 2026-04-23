@@ -626,11 +626,8 @@ export function LpViewClient({ initialCompanies }: Props) {
     });
   }
 
-  // Fireflies summary state per selected company
-  const [ffLoading, setFfLoading]   = useState(false);
-  const [ffSummary, setFfSummary]   = useState<string | null>(null);
-  const [ffCount, setFfCount]       = useState<number>(0);
-  const [ffError, setFfError]       = useState<string | null>(null);
+  // Email events from Microsoft Graph (for LP email counter)
+  const [emailEvents, setEmailEvents] = useState<Array<{ id: string; date: string }>>([]);
 
   // AI Prep Brief
   const [showPrepBrief, setShowPrepBrief]   = useState(false);
@@ -770,10 +767,9 @@ export function LpViewClient({ initialCompanies }: Props) {
     return list;
   }, [companies, search, activeFilter, lastTouchMap, coinvestMap, filterCity, filterCountry, sortCol, sortDir, ownerMap]);
 
-  // Load detail — also auto-fires Fireflies summary when contacts are available
+  // Load detail — loads contacts, interactions, and Graph emails for activity tiles
   const loadDetail = useCallback(async (id: string) => {
     setLoadingDetail(true);
-    const co = companies.find(c => c.id === id);
     const [{ data: ctcts }, { data: ints }] = await Promise.all([
       supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }),
       supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(30),
@@ -782,24 +778,18 @@ export function LpViewClient({ initialCompanies }: Props) {
     setInteractions(ints ?? []);
     setLoadingDetail(false);
 
-    // Auto-load Fireflies summary when switching to a new company
-    if (co) {
-      const contactEmails = (ctcts ?? []).map((c: { email: string | null }) => c.email).filter(Boolean) as string[];
-      setFfLoading(true); setFfError(null); setFfSummary(null);
-      try {
-        const res = await fetch("/api/lp/fireflies-summary", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contactEmails, companyName: co.name }),
-        });
-        const data = await res.json();
-        if (data.error && !data.summary) { setFfError(data.error); }
-        else { setFfSummary(data.summary); setFfCount(data.transcriptCount ?? 0); }
-      } catch { /* Fireflies unavailable */ }
-      setFfLoading(false);
-    }
+    // Load Graph emails for email counter (silently skips if Graph not configured)
+    try {
+      const res = await fetch(`/api/companies/emails?company_id=${id}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (!json.graphError) {
+          setEmailEvents((json.emails ?? []).map((e: { id: string; date: string }) => ({ id: e.id, date: e.date })));
+        }
+      }
+    } catch { /* Graph not configured — silently skip */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, companies]);
+  }, [supabase]);
 
   function selectCompany(id: string) {
     const co = companies.find(c => c.id === id);
@@ -1176,9 +1166,11 @@ export function LpViewClient({ initialCompanies }: Props) {
     await saveField(selectedId, { lp_stage: stage });
   }
 
-  // 90-day stats from interactions
+  // 90-day stats from interactions + Graph emails
   const ninetyDaysAgo = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
-  const emails90d   = interactions.filter(i => i.type === "email"   && i.date >= ninetyDaysAgo).length;
+  const interactionEmails90d = interactions.filter(i => i.type === "email" && i.date >= ninetyDaysAgo).length;
+  const graphEmails90d       = emailEvents.filter(e => e.date >= ninetyDaysAgo).length;
+  const emails90d   = interactionEmails90d + graphEmails90d;
   const meetings90d = interactions.filter(i => (i.type === "meeting" || i.type === "call") && i.date >= ninetyDaysAgo).length;
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -2437,8 +2429,8 @@ export function LpViewClient({ initialCompanies }: Props) {
                 {/* Scrollable activity content */}
                 <div className="h-[300px] overflow-y-auto pr-1 space-y-3">
 
-                {/* 3 Activity Tiles */}
-                <div className="grid grid-cols-3 gap-2">
+                {/* 2 Activity Tiles — Emails + Meetings */}
+                <div className="grid grid-cols-2 gap-2">
                   <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
                     <Mail size={14} className="text-blue-500 mx-auto mb-1" />
                     <p className="text-lg font-bold text-blue-700">{emails90d}</p>
@@ -2451,24 +2443,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                     <p className="text-[10px] text-violet-500 font-medium">Meetings</p>
                     <p className="text-[10px] text-slate-400">past 90 days</p>
                   </div>
-                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center cursor-pointer hover:bg-amber-100 transition-colors" onClick={ffLoading ? undefined : loadFirefliesSummary}>
-                    <FileText size={14} className="text-amber-500 mx-auto mb-1" />
-                    {ffLoading
-                      ? <Loader2 size={14} className="animate-spin text-amber-500 mx-auto" />
-                      : <p className="text-lg font-bold text-amber-700">{ffCount > 0 ? ffCount : "—"}</p>}
-                    <p className="text-[10px] text-amber-600 font-medium">Fireflies</p>
-                    <p className="text-[10px] text-slate-400">{ffLoading ? "loading…" : ffSummary ? "click to refresh" : "auto-loading"}</p>
-                  </div>
                 </div>
-
-                {/* Fireflies summary */}
-                {ffError && <div className="mb-3 p-2.5 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{ffError.includes("not configured") ? "Fireflies API key not configured (FIREFLIES_API_KEY missing)." : ffError}</div>}
-                {ffSummary && (
-                  <div className="mb-3 p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                    <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide mb-2">AI Meeting Summary (Fireflies + Claude)</p>
-                    <div className="text-xs text-slate-700 space-y-1 leading-relaxed">{ffSummary.split("\n").filter(Boolean).map((line, i) => <p key={i}>{line}</p>)}</div>
-                  </div>
-                )}
 
                 {/* Add Activity form */}
                 {addingActivity && (

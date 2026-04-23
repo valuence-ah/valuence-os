@@ -1,31 +1,31 @@
-// ─── Cron: Check Team Inboxes → New Contacts ─────────────────────────────────
+﻿// â”€â”€â”€ Cron: Check Team Inboxes â†’ New Contacts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Runs every hour via Vercel Cron (see vercel.json). Requires Pro plan.
 // Parameters are read live from agent_configs (agent_name = 'outlook') in Supabase,
-// so any changes in Admin → API Config → Outlook take effect on the next run.
+// so any changes in Admin â†’ API Config â†’ Outlook take effect on the next run.
 //
 // Callable manually: POST /api/cron/check-inbox
 // Required env vars:
-//   MICROSOFT_GRAPH_TENANT_ID      — Azure AD Directory (tenant) ID
-//   MICROSOFT_GRAPH_CLIENT_ID      — App registration client ID
-//   MICROSOFT_GRAPH_CLIENT_SECRET  — App registration client secret
+//   MICROSOFT_GRAPH_TENANT_ID      â€” Azure AD Directory (tenant) ID
+//   MICROSOFT_GRAPH_CLIENT_ID      â€” App registration client ID
+//   MICROSOFT_GRAPH_CLIENT_SECRET  â€” App registration client secret
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getRecentEmails } from "@/lib/microsoft-graph";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-// ── Config defaults (overridden by agent_configs DB row) ─────────────────────
+// â”€â”€ Config defaults (overridden by agent_configs DB row) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const DEFAULT_MAILBOXES  = (process.env.OUTLOOK_MAILBOXES ?? "andrew@valuence.vc")
   .split(",").map(m => m.trim().toLowerCase()).filter(Boolean);
-const DEFAULT_LOOKBACK   = 25;   // hours — covers a full daily run + 1-hour buffer
+const DEFAULT_LOOKBACK   = 25;   // hours â€” covers a full daily run + 1-hour buffer
 const DEFAULT_MAX        = 50;   // emails per mailbox per folder
 const DEFAULT_AUTO_CO    = true; // auto-create company stubs
 
-// Internal domain — never create contacts for @valuence.vc addresses
+// Internal domain â€” never create contacts for @valuence.vc addresses
 const INTERNAL_DOMAIN = "valuence.vc";
 
-// Noise patterns — newsletters, automated senders, no-reply addresses
+// Noise patterns â€” newsletters, automated senders, no-reply addresses
 const SKIP_PATTERNS = [
   /no.?reply/i,
   /noreply/i,
@@ -50,7 +50,7 @@ function shouldSkip(email: string): boolean {
   return SKIP_PATTERNS.some((p) => p.test(lower));
 }
 
-// ── Contact extraction ────────────────────────────────────────────────────────
+// â”€â”€ Contact extraction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface ExtractedContact {
   first_name: string;
@@ -86,7 +86,7 @@ Return JSON:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-haiku-3-5",
+    model: "claude-haiku-4-5",
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
@@ -98,7 +98,7 @@ Return JSON:
   return JSON.parse(match[0]) as ExtractedContact;
 }
 
-// ── Candidate type ────────────────────────────────────────────────────────────
+// â”€â”€ Candidate type â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface EmailCandidate {
   email: string;
@@ -107,7 +107,7 @@ interface EmailCandidate {
   bodyPreview: string;
   seenInMailbox: string;
   direction: "inbound" | "outbound";
-  emailDate: string; // ISO — used to update last_contact_date on existing contacts
+  emailDate: string; // ISO â€” used to update last_contact_date on existing contacts
 }
 
 // Generic/placeholder names Claude sometimes hallucinates when sender name is empty
@@ -118,7 +118,7 @@ function isValidName(first: string, last: string): boolean {
   return full.length > 0 && !GENERIC_NAMES.has(full) && !GENERIC_NAMES.has(first.toLowerCase());
 }
 
-// ── Route handler ─────────────────────────────────────────────────────────────
+// â”€â”€ Route handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function POST(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  // ── Load live config from DB (falls back to defaults if row doesn't exist) ──
+  // â”€â”€ Load live config from DB (falls back to defaults if row doesn't exist) â”€â”€
   const { data: configRow } = await supabase
     .from("agent_configs")
     .select("config")
@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
     perMailbox[mailbox] = { inbox: 0, errors: [] };
     const candidates: EmailCandidate[] = [];
 
-    // Inbox — contact is the sender (inbound only)
+    // Inbox â€” contact is the sender (inbound only)
     try {
       console.log(`[check-inbox] fetching inbox for ${mailbox} since ${since}`);
       const inbox = await getRecentEmails(mailbox, since, maxPerMailbox, "inbox");
@@ -213,7 +213,7 @@ export async function POST(req: NextRequest) {
       if (processedThisRun.has(candidate.email)) continue;
       processedThisRun.add(candidate.email);
 
-      // Skip if already in DB — but update last_contact_date
+      // Skip if already in DB â€” but update last_contact_date
       const { data: existing } = await supabase
         .from("contacts")
         .select("id, last_contact_date, company_id")
@@ -313,7 +313,7 @@ export async function POST(req: NextRequest) {
         `Sourced from ${mailbox} (${candidate.direction})`,
       ]
         .filter(Boolean)
-        .join(" · ");
+        .join(" Â· ");
 
       const { error: insertError } = await supabase.from("contacts").insert({
         first_name: contact.first_name  ?? "",
@@ -359,3 +359,4 @@ export async function POST(req: NextRequest) {
     results: contactResults,
   });
 }
+

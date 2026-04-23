@@ -1105,14 +1105,16 @@ export function PipelineClient({ initialCompanies }: Props) {
     const { data: { user } } = await supabase.auth.getUser();
     const typeLabel = eventType.charAt(0).toUpperCase() + eventType.slice(1);
     await supabase.from("interactions").insert({
-      company_id:  selected.id,
-      type:        eventType,
-      subject:     typeLabel,
-      body:        noteText.trim() || null,
-      date:        new Date(eventDate).toISOString(),
-      sentiment:   "neutral",
-      created_by:  user?.id,
-      contact_ids: noteContactIds.length > 0 ? noteContactIds : null,
+      company_id:        selected.id,
+      type:              eventType,
+      subject:           typeLabel,
+      body:              noteText.trim() || null,
+      date:              new Date(eventDate).toISOString(),
+      sentiment:         "neutral",
+      created_by:        user?.id,
+      contact_ids:       noteContactIds.length > 0 ? noteContactIds : null,
+      // Meetings logged here are considered resolved — they appear in Meetings page under "Resolved"
+      resolution_status: eventType === "meeting" ? "resolved" : null,
     });
     // Update last_contact_date on the company and any tagged contacts
     const contactDateISO = new Date(eventDate).toISOString();

@@ -313,7 +313,16 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [loadingDetail, setLoadingDetail] = useState(false);
 
   // Panel tab
-  const [panelTab, setPanelTab] = useState<"overview" | "opportunities" | "intelligence">("overview");
+  const [panelTab, setPanelTab] = useState<"overview" | "opportunities" | "company_news" | "intelligence">("overview");
+  // Company News (Exa-powered)
+  const [newsItems, setNewsItems]           = useState<{ headline: string; source: string; date: string; summary: string; url: string | null }[]>([]);
+  const [newsLoading, setNewsLoading]       = useState(false);
+  const [newsCachedAt, setNewsCachedAt]     = useState<string | null>(null);
+  const [newsSource, setNewsSource]         = useState<"exa" | "claude" | null>(null);
+  // Partnership Intelligence (alignment-style)
+  const [partnerAlign, setPartnerAlign]     = useState<{ alignment_summary: string; portfolio_picks: { id: string | null; name: string; reason: string; sectors: string[]; stage: string | null; description: string | null; website: string | null }[]; pipeline_picks: { id: string | null; name: string; reason: string; sectors: string[]; stage: string | null; description: string | null; website: string | null }[] } | null>(null);
+  const [partnerAlignLoading, setPartnerAlignLoading] = useState(false);
+  const [partnerAlignGeneratedAt, setPartnerAlignGeneratedAt] = useState<string | null>(null);
   // Remove company confirm
   const [confirmRemoveCompanyId, setConfirmRemoveCompanyId] = useState<string | null>(null);
   // Change type
@@ -718,16 +727,44 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     setLoadingIntel(false);
   }
 
+  // ── Company News (Exa-powered) ───────────────────────────────────────────
+  async function loadCompanyNews() {
+    if (!selected) return;
+    setNewsLoading(true);
+    try {
+      const res = await fetch(`/api/lp/${selected.id}/news`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      const data = await res.json() as { items?: typeof newsItems; source?: "exa" | "claude" };
+      if (data.items) { setNewsItems(data.items); setNewsCachedAt(new Date().toISOString()); setNewsSource(data.source ?? null); }
+    } catch {}
+    setNewsLoading(false);
+  }
+
+  // ── Partnership Intelligence ──────────────────────────────────────────────
+  async function generatePartnerAlignment() {
+    if (!selected) return;
+    setPartnerAlignLoading(true);
+    try {
+      const res = await fetch(`/api/lp/${selected.id}/alignment`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ configName: "partnership_intelligence" }),
+      });
+      const data = await res.json();
+      if (!data.error) { setPartnerAlign(data); setPartnerAlignGeneratedAt(new Date().toISOString()); }
+    } catch {}
+    setPartnerAlignLoading(false);
+  }
+
   // ── Add Activity ──────────────────────────────────────────────────────────
   async function handleAddActivity() {
     if (!selected) return;
     setSavingActivity(true);
     const { data: { user } } = await supabase.auth.getUser();
     const { data: newInt } = await supabase.from("interactions").insert({
-      company_id: selected.id, type: activityType, date: activityDate,
-      subject: { call: "Call", meeting: "Meeting", email: "Email" }[activityType],
-      body: activityNote.trim() || null, created_by: user?.id ?? null,
-      contact_ids: activityContactIds.length > 0 ? activityContactIds : null,
+      company_id:        selected.id, type: activityType, date: activityDate,
+      subject:           { call: "Call", meeting: "Meeting", email: "Email" }[activityType],
+      body:              activityNote.trim() || null, created_by: user?.id ?? null,
+      contact_ids:       activityContactIds.length > 0 ? activityContactIds : null,
+      resolution_status: activityType === "meeting" ? "resolved" : null,
     }).select().single();
     setSavingActivity(false);
     if (newInt) setInteractions(prev => [newInt as Interaction, ...prev]);
@@ -1183,11 +1220,16 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
             {/* Tabs */}
             <div className="flex border-b border-slate-200 flex-shrink-0">
-              {(["overview", "opportunities", "intelligence"] as const).map(tab => (
-                <button key={tab} onClick={() => setPanelTab(tab)}
-                  className={cn("flex-1 text-xs font-medium py-2 capitalize transition-colors",
-                    panelTab === tab ? "text-blue-600 border-b-2 border-blue-600" : "text-slate-500 hover:text-slate-700")}>
-                  {tab}
+              {([
+                { key: "overview",      label: "Overview" },
+                { key: "opportunities", label: "Opportunities" },
+                { key: "company_news",  label: "Company News" },
+                { key: "intelligence",  label: "Intelligence" },
+              ] as const).map(({ key, label }) => (
+                <button key={key} onClick={() => setPanelTab(key)}
+                  className={cn("flex-1 text-xs font-medium py-2 transition-colors",
+                    panelTab === key ? "text-blue-600 border-b-2 border-blue-600" : "text-slate-500 hover:text-slate-700")}>
+                  {label}
                 </button>
               ))}
             </div>
@@ -1555,16 +1597,13 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                             <p className="text-[10px] text-slate-400">past 90 days</p>
                           </div>
                           <div
-                            className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center cursor-pointer hover:bg-amber-100 transition-colors"
-                            onClick={() => loadIntelligence()}
+                            className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center cursor-pointer hover:bg-emerald-100 transition-colors"
+                            onClick={() => { setPanelTab("company_news"); if (newsItems.length === 0) loadCompanyNews(); }}
                           >
-                            <FileText size={14} className="text-amber-500 mx-auto mb-1" />
-                            {loadingIntel
-                              ? <Loader2 size={14} className="animate-spin text-amber-500 mx-auto" />
-                              : <p className="text-lg font-bold text-amber-700">{selectedExt.intel.length > 0 ? selectedExt.intel.length : "—"}</p>
-                            }
-                            <p className="text-[10px] text-amber-600 font-medium">Intelligence</p>
-                            <p className="text-[10px] text-slate-400">click to load</p>
+                            <FileText size={14} className="text-emerald-500 mx-auto mb-1" />
+                            <p className="text-lg font-bold text-emerald-700">{newsItems.length > 0 ? newsItems.length : "—"}</p>
+                            <p className="text-[10px] text-emerald-600 font-medium">Company News</p>
+                            <p className="text-[10px] text-slate-400">click to view</p>
                           </div>
                         </div>
 
@@ -1613,6 +1652,10 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         )}
                       </div>
                     </div>
+                  </div>
+                  {/* Meeting Transcripts — inside Overview only */}
+                  <div className="border-t border-slate-100 pt-3">
+                    <MeetingTranscripts companyId={selected?.id} />
                   </div>
                 );
               })()}
@@ -1752,102 +1795,112 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                 </div>
               )}
 
-              {/* ── INTELLIGENCE TAB ─────────────────────────────────────── */}
-              {panelTab === "intelligence" && (
-                <div className="space-y-4">
-                  {/* Refresh button */}
+              {/* ── COMPANY NEWS TAB (Exa-powered) ───────────────────────── */}
+              {panelTab === "company_news" && (
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Intel Feed</h3>
-                      {selectedExt.intelCachedAt && !loadingIntel && (
-                        <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(selectedExt.intelCachedAt!).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Recent News</h3>
+                      {newsSource && !newsLoading && (
+                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", newsSource === "exa" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500")}>
+                          {newsSource === "exa" ? "⚡ Live · Exa" : "AI · Claude"}
+                        </span>
+                      )}
+                      {newsCachedAt && !newsLoading && (
+                        <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(newsCachedAt).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
                       )}
                     </div>
-                    <button
-                      onClick={loadIntelligence}
-                      disabled={loadingIntel}
-                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      {loadingIntel ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
-                      {loadingIntel ? "Loading…" : "Refresh Intelligence"}
+                    <button onClick={loadCompanyNews} disabled={newsLoading}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+                      {newsLoading ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                      {newsLoading ? "Loading…" : "Refresh"}
                     </button>
                   </div>
-
-                  {/* Signal alert based on intel */}
-                  {(() => {
-                    const signalItems = selectedExt.intel.filter(i => i.is_signal);
-                    if (signalItems.length > 0) {
-                      return (
-                        <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
-                          <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-0.5">Signal Detected</p>
-                          <p className="text-xs text-emerald-700">{signalItems[0].headline}</p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-
-                  {/* Add intel form */}
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-slate-400">Manually add intel</p>
-                    <button onClick={() => setShowIntelForm(v => !v)} className="text-blue-600 hover:text-blue-700">
-                      <Plus size={14} />
-                    </button>
-                  </div>
-
-                  {showIntelForm && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3 space-y-2">
-                      <input value={intelHeadline} onChange={e => setIntelHeadline(e.target.value)} placeholder="Headline"
-                        className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                      <div className="flex gap-2">
-                        <input value={intelSource} onChange={e => setIntelSource(e.target.value)} placeholder="Source"
-                          className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                        <input value={intelDate} onChange={e => setIntelDate(e.target.value)} type="date"
-                          className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
-                      </div>
-                      <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-                        <input type="checkbox" checked={intelSignal} onChange={e => setIntelSignal(e.target.checked)} className="rounded" />
-                        Mark as signal
-                      </label>
-                      <div className="flex gap-2">
-                        <button onClick={addIntel} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
-                        <button onClick={() => setShowIntelForm(false)} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
-                      </div>
+                  {newsLoading && <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />)}</div>}
+                  {!newsLoading && newsItems.length === 0 && (
+                    <div className="text-center py-8 text-slate-400">
+                      <FileText size={20} className="mx-auto mb-2 opacity-40" />
+                      <p className="text-xs">Click Refresh to fetch live news via Exa</p>
                     </div>
                   )}
-
-                  {selectedExt.intel.length === 0 && !showIntelForm && !loadingIntel && (
-                    <p className="text-xs text-slate-400">No intel yet — click &quot;Refresh Intelligence&quot; to load</p>
-                  )}
-                  <div className="space-y-2.5">
-                    {selectedExt.intel.map(item => (
-                      <div key={item.id} className="border border-slate-200 rounded-lg p-2.5 bg-white">
-                        {item.is_signal && (
-                          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide bg-emerald-50 px-1.5 py-0.5 rounded mb-1 inline-block">SIGNAL</span>
+                  {!newsLoading && newsItems.map((item, i) => (
+                    <div key={i} className="border border-slate-200 rounded-lg p-2.5 bg-white">
+                      <p className="text-xs font-medium text-slate-800 leading-snug">{item.headline}</p>
+                      {item.summary && <p className="text-xs text-slate-500 mt-1 leading-relaxed">{item.summary}</p>}
+                      <div className="flex items-center justify-between mt-1.5">
+                        <span className="text-[10px] text-slate-400">{item.source}{item.date ? ` · ${item.date}` : ""}</span>
+                        {item.url && (
+                          <a href={item.url} target="_blank" rel="noopener noreferrer"
+                            className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5">
+                            View <ExternalLink size={9} />
+                          </a>
                         )}
-                        <p className="text-xs font-medium text-slate-800">{item.headline}</p>
-                        {item.summary && <p className="text-xs text-slate-500 mt-0.5">{item.summary}</p>}
-                        <div className="flex items-center gap-2 mt-1">
-                          {item.source && item.url ? (
-                            <a href={item.url} target="_blank" rel="noopener noreferrer"
-                              className="text-[10px] text-blue-600 hover:underline">{item.source}</a>
-                          ) : item.source ? (
-                            <span className="text-[10px] text-slate-400">{item.source}</span>
-                          ) : null}
-                          <span className="text-[10px] text-slate-400">{formatDate(item.date)}</span>
-                        </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
               )}
 
+              {/* ── INTELLIGENCE TAB (Partnership alignment) ──────────────── */}
+              {panelTab === "intelligence" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Partnership Intelligence</h3>
+                      {partnerAlignGeneratedAt && !partnerAlignLoading && (
+                        <p className="text-[10px] text-slate-400 mt-0.5">Generated {new Date(partnerAlignGeneratedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
+                      )}
+                    </div>
+                    <button onClick={generatePartnerAlignment} disabled={partnerAlignLoading}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+                      {partnerAlignLoading ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                      {partnerAlignLoading ? "Generating…" : partnerAlign ? "Regenerate" : "Generate"}
+                    </button>
+                  </div>
+                  {partnerAlignLoading && <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />)}</div>}
+                  {!partnerAlignLoading && !partnerAlign && (
+                    <div className="text-center py-8 text-slate-400">
+                      <Target size={20} className="mx-auto mb-2 opacity-40" />
+                      <p className="text-xs">Generate a partnership brief — portfolio &amp; pipeline alignment for this partner</p>
+                    </div>
+                  )}
+                  {partnerAlign && !partnerAlignLoading && (<>
+                    {partnerAlign.alignment_summary && (
+                      <div className="p-3 bg-teal-50 border border-teal-100 rounded-xl">
+                        <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wide mb-1">Partnership Fit</p>
+                        <p className="text-xs text-teal-800 leading-relaxed">{partnerAlign.alignment_summary}</p>
+                      </div>
+                    )}
+                    {partnerAlign.portfolio_picks.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Portfolio Highlights</p>
+                        <div className="space-y-2">
+                          {partnerAlign.portfolio_picks.map((p, i) => (
+                            <div key={i} className="border border-emerald-100 rounded-lg p-2.5 bg-emerald-50">
+                              <p className="text-xs font-semibold text-slate-800">{p.name}</p>
+                              <p className="text-xs text-slate-600 mt-0.5">{p.reason}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {partnerAlign.pipeline_picks.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Pipeline Interest</p>
+                        <div className="space-y-2">
+                          {partnerAlign.pipeline_picks.map((p, i) => (
+                            <div key={i} className="border border-blue-100 rounded-lg p-2.5 bg-blue-50">
+                              <p className="text-xs font-semibold text-slate-800">{p.name}</p>
+                              <p className="text-xs text-slate-600 mt-0.5">{p.reason}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>)}
+                </div>
+              )}
 
-            </div>
-
-            {/* Meeting Transcripts */}
-            <div className="px-4 py-3 border-t border-slate-100">
-              <MeetingTranscripts companyId={selected?.id} />
             </div>
 
             {/* Panel footer */}

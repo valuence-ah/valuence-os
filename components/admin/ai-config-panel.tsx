@@ -164,6 +164,28 @@ const TABS = [
     promptLabel: "Prompt Template",
     hint: "Leave blank to use the built-in default. Variables: {{lp_name}} = LP company name, {{lp_profile}} = LP type/description/sectors/location block, {{portfolio}} = bullet list of our portfolio companies, {{pipeline}} = bullet list of active pipeline (status ≠ passed/exited). Must return JSON with fields: alignment_summary (string), portfolio_picks (array of {name, reason}), pipeline_picks (array of {name, reason}). Names must match exactly — they are looked up to attach sector/stage/description data.",
   },
+  {
+    name: "partnership_intelligence",
+    label: "Partnership Intelligence",
+    icon: Handshake,
+    color: "text-teal-600",
+    bg: "bg-teal-50",
+    description: "Powers the Intelligence tab in CRM/Strategic Partners. Generates a partnership brief: (1) why Valuence's portfolio aligns with this strategic partner, (2) 1–2 portfolio companies to highlight for partnership, (3) 2–5 pipeline companies that could benefit. Identical structure to LP Intelligence but framed for partnerships.",
+    variables: ["{{partner_name}}", "{{partner_profile}}", "{{portfolio}}", "{{pipeline}}"],
+    promptLabel: "Prompt Template",
+    hint: "Leave blank to use the built-in default. Variables: {{partner_name}} = strategic partner name, {{partner_profile}} = partner type/description/sectors/location, {{portfolio}} = our portfolio companies, {{pipeline}} = active pipeline. Must return JSON with: alignment_summary, portfolio_picks [{name, reason}], pipeline_picks [{name, reason}].",
+  },
+  {
+    name: "fund_intelligence",
+    label: "Fund Intelligence",
+    icon: Building2,
+    color: "text-cyan-600",
+    bg: "bg-cyan-50",
+    description: "Powers the Fund Intelligence tab in CRM/Funds. Determines a fund's key investment focus from their thesis and recent investments, and identifies portfolio/pipeline overlap opportunities.",
+    variables: ["{{fund_name}}", "{{fund_profile}}", "{{recent_investments}}", "{{portfolio}}", "{{pipeline}}"],
+    promptLabel: "Prompt Template",
+    hint: "Leave blank to use the built-in default. Variables: {{fund_name}} = fund name, {{fund_profile}} = fund description/stage/sectors, {{recent_investments}} = Exa-sourced recent investments (past 180 days), {{portfolio}} = our portfolio companies, {{pipeline}} = our active pipeline. Returns a structured analysis of the fund's focus and co-invest/overlap opportunities.",
+  },
 ] as const;
 
 type TabName = typeof TABS[number]["name"];
@@ -183,7 +205,7 @@ interface AiConfig {
 // ── Per-tab defaults (used when the DB row doesn't exist yet) ─────────────────
 // These mirror the server-side DEFAULTS in lib/ai-config.ts exactly.
 const SONNET = "claude-sonnet-4-6";
-const HAIKU  = "claude-haiku-3-5";
+const HAIKU  = "claude-haiku-4-5";
 
 const LP_OUTREACH_PROMPT = `You are {{sender_name}}, a partner at Valuence Ventures — an early-stage deeptech VC fund investing at the intersection of science and capital. We back founders commercialising breakthrough research in cleantech (energy transition, sustainable materials, carbon capture), techbio (synthetic biology, diagnostics, bioprocessing, ag-bio), and advanced materials (specialty polymers, composites, semiconductors). We write $500K–$2M checks at pre-seed and seed stage.
 
@@ -285,11 +307,13 @@ const TAB_DEFAULTS: Record<string, Omit<AiConfig, "id" | "name" | "label">> = {
   lp_meeting_summary:  { model: SONNET, max_tokens: 1000,  temperature: 0.30, system_prompt: "You are a VC analyst summarising LP meeting transcripts. Be factual and concise.", user_prompt: LP_MEETING_SUMMARY_PROMPT },
   sourcing_scorer:     { model: HAIKU,  max_tokens: 2048,  temperature: 0.10, system_prompt: SOURCING_SCORER_SYSTEM, user_prompt: "" },
   exa_research:        { model: SONNET, max_tokens: 1024,  temperature: 0.20, system_prompt: null, user_prompt: "" },
-  company_intelligence:{ model: SONNET, max_tokens: 1024,  temperature: 0.20, system_prompt: "You are a VC intelligence analyst. Return only valid JSON arrays as instructed.", user_prompt: "" },
+  company_intelligence:{ model: SONNET, max_tokens: 2048,  temperature: 0.20, system_prompt: "You are a VC intelligence analyst. Return only valid JSON arrays as instructed.", user_prompt: "" },
   ma_intelligence:        { model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
   pilot_intelligence:     { model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
   competitor_intelligence:{ model: SONNET, max_tokens: 2500,  temperature: 0.20, system_prompt: null, user_prompt: "" },
   lp_intelligence:        { model: SONNET, max_tokens: 1500,  temperature: 0.30, system_prompt: "You are an LP relations specialist. Return only valid JSON as instructed.", user_prompt: "" },
+  partnership_intelligence: { model: SONNET, max_tokens: 1500,  temperature: 0.30, system_prompt: "You are a strategic partnerships analyst. Return only valid JSON as instructed.", user_prompt: "" },
+  fund_intelligence:        { model: SONNET, max_tokens: 2000,  temperature: 0.30, system_prompt: "You are a VC fund analyst. Return only valid JSON as instructed.", user_prompt: "" },
 };
 
 function makeDefault(name: string, label: string): AiConfig {

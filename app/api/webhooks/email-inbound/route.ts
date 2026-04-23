@@ -1,16 +1,16 @@
-// ─── Inbound Email Webhook (Postmark) ────────────────────────────────────────
+﻿// â”€â”€â”€ Inbound Email Webhook (Postmark) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Handles emails forwarded through Postmark Inbound Parsing.
 // Routes by recipient:
-//   → andrew@valuence.vc   → extract contact, save as pending
-//   → deals@valuence.vc    → parse pitch, create/update company + deck
+//   â†’ andrew@valuence.vc   â†’ extract contact, save as pending
+//   â†’ deals@valuence.vc    â†’ parse pitch, create/update company + deck
 //
 // Setup:
-//   1. Sign up at postmarkapp.com → Servers → Inbound
+//   1. Sign up at postmarkapp.com â†’ Servers â†’ Inbound
 //   2. Copy your inbound address (e.g. xyz@inbound.postmarkapp.com)
-//   3. In Outlook: Settings → Rules → forward all mail to that address
+//   3. In Outlook: Settings â†’ Rules â†’ forward all mail to that address
 //   4. In Postmark: set Webhook URL to:
 //      https://your-app.vercel.app/api/webhooks/email-inbound
-//      (optionally protect with: Settings → Webhook → Basic Auth)
+//      (optionally protect with: Settings â†’ Webhook â†’ Basic Auth)
 //
 // No env vars required beyond ANTHROPIC_API_KEY (already set).
 
@@ -18,7 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient, validateWebhookSecret } from "@/lib/supabase/admin";
 
-// ── Postmark payload shape ────────────────────────────────────────────────────
+// â”€â”€ Postmark payload shape â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface PostmarkEmail {
   From: string;
   FromName: string;
@@ -32,7 +32,7 @@ interface PostmarkEmail {
   Attachments?: { Name: string; Content: string; ContentType: string }[];
 }
 
-// ── Noise filter (skip newsletters, no-reply, etc.) ────────────────────────
+// â”€â”€ Noise filter (skip newsletters, no-reply, etc.) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SKIP_RE = /no.?reply|noreply|donotreply|newsletter|notifications?@|updates?@|alerts?@|marketing@|bounce@/i;
 function isNoise(email: string, name: string) {
   return SKIP_RE.test(email) || SKIP_RE.test(name);
@@ -40,7 +40,7 @@ function isNoise(email: string, name: string) {
 
 const client = new Anthropic();
 
-// ── Contact extraction (andrew@valuence.vc emails) ────────────────────────
+// â”€â”€ Contact extraction (andrew@valuence.vc emails) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function extractContactInfo(msg: PostmarkEmail) {
   const prompt = `Extract contact info from this email. Return ONLY valid JSON.
 
@@ -59,7 +59,7 @@ JSON:
 }`;
 
   const res = await client.messages.create({
-    model: "claude-haiku-3-5",
+    model: "claude-haiku-4-5",
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
@@ -78,7 +78,7 @@ JSON:
   };
 }
 
-// ── Deal extraction (deals@valuence.vc emails) ────────────────────────────
+// â”€â”€ Deal extraction (deals@valuence.vc emails) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function extractDealInfo(msg: PostmarkEmail) {
   const prompt = `Parse this pitch email. Return ONLY valid JSON.
 
@@ -118,7 +118,7 @@ JSON:
   };
 }
 
-// ── Main handler ──────────────────────────────────────────────────────────────
+// â”€â”€ Main handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function POST(req: NextRequest) {
   if (!validateWebhookSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  // ── Route: andrew@valuence.vc → New Contact ────────────────────────────
+  // â”€â”€ Route: andrew@valuence.vc â†’ New Contact â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (recipient.includes("andrew@valuence")) {
     if (isNoise(fromEmail, fromName)) {
       return NextResponse.json({ skipped: true, reason: "noise" });
@@ -225,7 +225,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, contact_id: contact?.id });
   }
 
-  // ── Route: deals@valuence.vc → Deal Flow Parser ───────────────────────
+  // â”€â”€ Route: deals@valuence.vc â†’ Deal Flow Parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (recipient.includes("deals@valuence")) {
     let parsed;
     try {
@@ -330,3 +330,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ skipped: true, reason: "Unrecognised recipient" });
 }
+

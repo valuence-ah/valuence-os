@@ -13,6 +13,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { embedText } from "@/lib/embeddings";
+import { getAiConfig } from "@/lib/ai-config";
 
 // Allow streaming responses up to 60 seconds
 export const maxDuration = 60;
@@ -51,6 +52,9 @@ export async function POST(req: Request) {
   // ── 1. Auth ───────────────────────────────────────────────────────────────
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
+
+  // ── AI Config (Admin → Valuence Assistant) ────────────────────────────────
+  const aiCfg = await getAiConfig("pipeline_assistant");
 
   const lastUserMessage = getLastUserMessage(messages);
 
@@ -215,12 +219,17 @@ INSTRUCTIONS:
 - Speak like a sharp, knowledgeable VC analyst/partner`;
 
   // ── 6. Stream ─────────────────────────────────────────────────────────────
+  // Append any Admin-level additional instructions to the system prompt
+  const finalSystem = aiCfg.user_prompt?.trim()
+    ? `${systemPrompt}\n\nAdditional Instructions:\n${aiCfg.user_prompt}`
+    : systemPrompt;
+
   const result = streamText({
-    model: anthropic("claude-sonnet-4-6"),
-    system: systemPrompt,
+    model: anthropic(aiCfg.model as Parameters<typeof anthropic>[0]),
+    system: finalSystem,
     messages,
-    temperature: 0.3,
-    maxTokens: 2048,
+    temperature: aiCfg.temperature,
+    maxTokens: aiCfg.max_tokens,
   });
 
   return result.toDataStreamResponse();

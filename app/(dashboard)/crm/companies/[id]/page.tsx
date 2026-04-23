@@ -77,7 +77,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
   const companyId = company.id;
 
   const [{ data: contacts }, { data: interactions }, { data: deals }, { data: memos }, { data: documents }] = await Promise.all([
-    supabase.from("contacts").select("*").eq("company_id", companyId).order("is_primary_contact", { ascending: false }) as unknown as Promise<{ data: Contact[] | null }>,
+    supabase.from("contacts").select("*").eq("company_id", companyId).order("last_contact_date", { ascending: false, nullsFirst: false }) as unknown as Promise<{ data: Contact[] | null }>,
     supabase.from("interactions").select("*").eq("company_id", companyId).order("date", { ascending: false }).limit(50) as unknown as Promise<{ data: import("@/lib/types").Interaction[] | null }>,
     supabase.from("deals").select("*").eq("company_id", companyId).order("created_at", { ascending: false }) as unknown as Promise<{ data: Deal[] | null }>,
     supabase.from("ic_memos").select("id, title, recommendation, status, created_at").eq("company_id", companyId).order("created_at", { ascending: false }) as unknown as Promise<{ data: Pick<IcMemo, "id" | "title" | "recommendation" | "status" | "created_at">[] | null }>,

@@ -417,7 +417,7 @@ export function MeetingsClient({
   const [showArchived, setShowArchived]             = useState(false);
   const [search, setSearch]                         = useState("");
   const [sourceFilter, setSourceFilter]             = useState<"all" | "fireflies" | "manual">("all");
-  const [resolutionFilter, setResolutionFilter]     = useState<"all" | "resolved" | "review" | "unresolved" | "internal">("all");
+  const [resolutionFilter, setResolutionFilter]     = useState<"all" | "resolved" | "review" | "unresolved" | "internal">("review");
   const [companyFilter, setCompanyFilter]           = useState("all");
   const [dateFrom, setDateFrom]                     = useState("");
   const [dateTo, setDateTo]                         = useState("");

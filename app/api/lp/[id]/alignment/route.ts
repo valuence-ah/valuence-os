@@ -64,7 +64,7 @@ Return ONLY valid JSON (no markdown, no explanation):
 }`;
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authClient = await createClient();
@@ -72,11 +72,14 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+  // Optional configName lets other CRM views (e.g. Strategic) use a different AI config
+  const body = await req.json().catch(() => ({})) as { configName?: string };
+  const configName = body.configName ?? "lp_intelligence";
   const supabase = createAdminClient();
 
   // Load AI config + LP details + portfolio + pipeline in parallel
   const [cfg, { data: lp }, { data: portfolio }, { data: pipeline }] = await Promise.all([
-    getAiConfig("lp_intelligence"),
+    getAiConfig(configName),
     supabase
       .from("companies")
       .select("name, type, sub_type, description, sectors, website, location_city, location_country, tags")

@@ -1,20 +1,20 @@
-// ─── Contact Company Matcher /api/contacts/match-company ─────────────────────
+﻿// â”€â”€â”€ Contact Company Matcher /api/contacts/match-company â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // Matching pipeline (3 steps, in order):
 //
-//   STEP 1 — Domain lookup
+//   STEP 1 â€” Domain lookup
 //     Check whether the email domain (e.g. "mpa.gov.sg") is already stored
 //     against any company in the database via website / website_domain fields.
-//     No guessing, no substring tricks — exact domain substring match only.
+//     No guessing, no substring tricks â€” exact domain substring match only.
 //
-//   STEP 2 — Claude identifies the company (only if step 1 found nothing)
+//   STEP 2 â€” Claude identifies the company (only if step 1 found nothing)
 //     Ask Claude Haiku what organisation owns that domain. Claude has broad
 //     knowledge of corporate and government domains worldwide.
 //
-//   STEP 3 — DB name match on Claude's answer (only if step 2 returned a name)
+//   STEP 3 â€” DB name match on Claude's answer (only if step 2 returned a name)
 //     Search the database for a company whose name starts with the first word
-//     of Claude's answer. If found → return that company as the match.
-//     If not found → return the Claude suggestion so the UI can offer
+//     of Claude's answer. If found â†’ return that company as the match.
+//     If not found â†’ return the Claude suggestion so the UI can offer
 //     "Create company: Maritime Port Authority of Singapore".
 
 import { NextRequest, NextResponse } from "next/server";
@@ -36,7 +36,7 @@ const PERSONAL_DOMAINS = new Set([
   "msn.com",
 ]);
 
-// ── STEP 0: Peer-contact lookup ────────────────────────────────────────────────
+// â”€â”€ STEP 0: Peer-contact lookup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Finds an existing contact with the same email domain that is already assigned
 // to a company. When several colleagues share the same domain (e.g. @nabacoinc.com)
 // and at least one is already linked, this is the most reliable signal.
@@ -64,9 +64,9 @@ async function findCompanyByPeerContact(
   return company ? { id: company.id, name: company.name } : null;
 }
 
-// ── STEP 1: Domain lookup ─────────────────────────────────────────────────────
+// â”€â”€ STEP 1: Domain lookup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Checks whether any company in the DB has this domain in their website or
-// website_domain field. No name guessing — only domain-based matching.
+// website_domain field. No name guessing â€” only domain-based matching.
 async function findCompanyByDomain(
   supabase: Awaited<ReturnType<typeof createClient>>,
   domain: string
@@ -81,7 +81,7 @@ async function findCompanyByDomain(
   return data ? { id: data.id, name: data.name } : null;
 }
 
-// ── STEP 3: DB name lookup using Claude's answer ───────────────────────────────
+// â”€â”€ STEP 3: DB name lookup using Claude's answer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Called only after Claude has identified the company name. Searches by name
 // using a starts-with match (more precise than contains).
 async function findCompanyByName(
@@ -107,7 +107,7 @@ async function findCompanyByName(
   return null;
 }
 
-// ── Main handler ──────────────────────────────────────────────────────────────
+// â”€â”€ Main handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -122,33 +122,33 @@ export async function POST(req: NextRequest) {
 
   const domain = email.split("@")[1]?.toLowerCase() ?? "";
 
-  // Skip personal / freemail domains — no company affiliation possible
+  // Skip personal / freemail domains â€” no company affiliation possible
   if (PERSONAL_DOMAINS.has(domain)) {
     return NextResponse.json({ match: null, suggestion: null, source: "personal_domain" });
   }
 
-  // ── STEP 0: Peer-contact lookup (most reliable — same domain already linked) ─
+  // â”€â”€ STEP 0: Peer-contact lookup (most reliable â€” same domain already linked) â”€
   const peerMatch = await findCompanyByPeerContact(supabase, domain);
   if (peerMatch) {
     return NextResponse.json({ match: peerMatch, suggestion: null, source: "peer_contact" });
   }
 
-  // ── STEP 1: Domain lookup ──────────────────────────────────────────────────
+  // â”€â”€ STEP 1: Domain lookup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const domainMatch = await findCompanyByDomain(supabase, domain);
   if (domainMatch) {
     return NextResponse.json({ match: domainMatch, suggestion: null, source: "domain_match" });
   }
 
-  // ── STEP 2: Claude identifies the organisation that owns this domain ────────
+  // â”€â”€ STEP 2: Claude identifies the organisation that owns this domain â”€â”€â”€â”€â”€â”€â”€â”€
   let suggestion: string | null = null;
   try {
     const { text } = await generateText({
-      model: anthropic("claude-haiku-3-5"),
+      model: anthropic("claude-haiku-4-5"),
       maxTokens: 60,
       messages: [
         {
           role: "user",
-          content: `What organisation or company owns the email domain "${domain}"? Reply with just the organisation name — no punctuation, no explanation. If you don't know, reply "unknown".`,
+          content: `What organisation or company owns the email domain "${domain}"? Reply with just the organisation name â€” no punctuation, no explanation. If you don't know, reply "unknown".`,
         },
       ],
     });
@@ -157,19 +157,20 @@ export async function POST(req: NextRequest) {
       suggestion = cleaned;
     }
   } catch {
-    // Claude unavailable — continue without suggestion
+    // Claude unavailable â€” continue without suggestion
   }
 
   if (!suggestion) {
     return NextResponse.json({ match: null, suggestion: null, source: "no_match" });
   }
 
-  // ── STEP 3: Search DB for the company Claude named ─────────────────────────
+  // â”€â”€ STEP 3: Search DB for the company Claude named â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const nameMatch = await findCompanyByName(supabase, suggestion);
   if (nameMatch) {
     return NextResponse.json({ match: nameMatch, suggestion, source: "claude_then_db" });
   }
 
-  // No DB match — return Claude's suggestion so the UI can offer "Create company"
+  // No DB match â€” return Claude's suggestion so the UI can offer "Create company"
   return NextResponse.json({ match: null, suggestion, source: "claude_suggestion" });
 }
+

@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const maxDuration = 60;
 
@@ -18,7 +19,8 @@ export async function POST(req: NextRequest) {
   if (!company_id) return NextResponse.json({ error: "company_id required" }, { status: 400 });
 
   // Fetch config + company + deck and transcript documents
-  const [{ data: company }, { data: docs }, { data: ints }, { data: aiConfig }] = await Promise.all([
+  const [cfg, { data: company }, { data: docs }, { data: ints }] = await Promise.all([
+    getAiConfig("company_description"),
     supabase.from("companies").select("*").eq("id", company_id).single(),
     supabase
       .from("documents")
@@ -34,7 +36,6 @@ export async function POST(req: NextRequest) {
       .not("body", "is", null)
       .order("date", { ascending: false })
       .limit(5),
-    supabase.from("ai_configs").select("*").eq("name", "company_description").single(),
   ]);
 
   if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
@@ -50,8 +51,8 @@ export async function POST(req: NextRequest) {
     ...(ints ?? []).map(i => i.body?.slice(0, 2000)).filter(Boolean),
   ].join("\n\n---\n\n");
 
-  // Use DB prompt template, fall back to hardcoded default
-  const promptTemplate = (aiConfig as { user_prompt?: string } | null)?.user_prompt ||
+  // Use Admin AI Config prompt template, fall back to hardcoded default
+  const promptTemplate = cfg.user_prompt?.trim() ||
     `You are a senior analyst at Valuence Ventures. Produce a precise company overview of no more than 100 words. Single paragraph, strictly under 130 words. Cover: HQ city, founding year, core technology, differentiation, markets, significance. Factual, no marketing language.`;
 
   const prompt = `INPUTS
@@ -91,12 +92,11 @@ ${promptTemplate}`
   content.push({ type: "text", text: prompt });
 
   try {
-    const cfg = aiConfig as { model: string; max_tokens: number; temperature: number; system_prompt: string | null } | null;
     const { text } = await generateText({
-      model: anthropic((cfg?.model ?? "claude-sonnet-4-6") as Parameters<typeof anthropic>[0]),
-      maxTokens: cfg?.max_tokens ?? 400,
-      temperature: cfg?.temperature ?? 0.3,
-      ...(cfg?.system_prompt ? { system: cfg.system_prompt } : {}),
+      model: anthropic(cfg.model as Parameters<typeof anthropic>[0]),
+      maxTokens: cfg.max_tokens,
+      temperature: cfg.temperature,
+      ...(cfg.system_prompt ? { system: cfg.system_prompt } : {}),
       messages: [{ role: "user", content }],
     });
 

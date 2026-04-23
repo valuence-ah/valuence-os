@@ -1,4 +1,4 @@
-// ─── Company Emails /api/companies/emails?company_id=xxx ───────────────────────
+﻿// â”€â”€â”€ Company Emails /api/companies/emails?company_id=xxx â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Fetches Outlook emails involving a company's contacts via Microsoft Graph.
 // Filters out trivial / automated emails.
 // Returns emails with a 5-word Claude summary, date, and Outlook link.
@@ -11,7 +11,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 
 export const maxDuration = 30;
 
-// All configured mailboxes — same env var as check-inbox cron
+// All configured mailboxes â€” same env var as check-inbox cron
 const MAILBOXES = (process.env.OUTLOOK_MAILBOXES ?? process.env.OUTLOOK_MAILBOX ?? "andrew@valuence.vc")
   .split(",").map(m => m.trim()).filter(Boolean);
 
@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
     }));
 
     const { text } = await generateText({
-      model: anthropic("claude-haiku-3-5"),
+      model: anthropic("claude-haiku-4-5"),
       maxTokens: 600,
       messages: [{
         role: "user",
@@ -133,3 +133,4 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ emails: result });
 }
+

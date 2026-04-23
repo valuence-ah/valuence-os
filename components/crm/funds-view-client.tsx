@@ -371,7 +371,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [visible, setVisible] = useState(false);
 
   // Panel tab
-  const [fundTab, setFundTab] = useState<"overview" | "opportunities" | "intelligence">("overview");
+  const [fundTab, setFundTab] = useState<"overview" | "opportunities" | "fund_news" | "intelligence" | "fund_intelligence">("overview");
 
   // Live contacts from Supabase — keyed by fund id
   const [fundContacts, setFundContacts] = useState<Record<string, Contact[]>>({});
@@ -433,6 +433,15 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [fundIntelCachedAt, setFundIntelCachedAt] = useState<Record<string, string>>({});
   const [fundIntelLoading, setFundIntelLoading] = useState(false);
   const [fundIntelError, setFundIntelError]   = useState<string | null>(null);
+  // Fund News (Exa-powered) — keyed by fund id
+  const [fundNewsMap, setFundNewsMap]         = useState<Record<string, FundIntelItem[]>>({});
+  const [fundNewsCachedAt, setFundNewsCachedAt] = useState<Record<string, string>>({});
+  const [fundNewsLoading, setFundNewsLoading] = useState(false);
+  const [fundNewsSource, setFundNewsSource]   = useState<Record<string, "exa" | "claude">>({});
+  // Fund Intelligence (AI analysis tab) — keyed by fund id
+  const [fundAiIntel, setFundAiIntel]         = useState<Record<string, string>>({});
+  const [fundAiIntelLoading, setFundAiIntelLoading] = useState(false);
+  const [fundAiIntelGeneratedAt, setFundAiIntelGeneratedAt] = useState<Record<string, string>>({});
 
   // Fund starred intel — persisted to localStorage
   const [fundStarredIntel, setFundStarredIntel] = useState<Record<string, string[]>>({});
@@ -540,6 +549,51 @@ export function FundsViewClient({ initialCompanies }: Props) {
     } finally {
       setFundIntelLoading(false);
     }
+  }
+
+  // ── Fund News (Exa) ────────────────────────────────────────────────────────
+  async function fetchFundNews() {
+    if (!selectedId || fundNewsLoading) return;
+    setFundNewsLoading(true);
+    try {
+      const res = await fetch(`/api/lp/${selectedId}/news`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      if (res.ok) {
+        const data = await res.json() as { items?: FundIntelItem[]; source?: "exa" | "claude" };
+        const items = data.items ?? [];
+        setFundNewsMap(prev => ({ ...prev, [selectedId]: items }));
+        setFundNewsCachedAt(prev => ({ ...prev, [selectedId]: new Date().toISOString() }));
+        if (data.source) setFundNewsSource(prev => ({ ...prev, [selectedId]: data.source! }));
+      }
+    } catch {}
+    setFundNewsLoading(false);
+  }
+
+  // ── Fund AI Intelligence (thesis + focus analysis) ─────────────────────────
+  async function fetchFundAiIntel() {
+    if (!selectedId || fundAiIntelLoading) return;
+    setFundAiIntelLoading(true);
+    try {
+      const fund = companies.find(c => c.id === selectedId);
+      const recentInvest = fundExtMap[selectedId]?.recentInvest ?? [];
+      const res = await fetch("/api/funds/generate-descriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_id: selectedId,
+          name: fund?.name,
+          sectors: fund?.sectors,
+          recentInvestments: recentInvest,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { description?: string };
+        if (data.description) {
+          setFundAiIntel(prev => ({ ...prev, [selectedId]: data.description! }));
+          setFundAiIntelGeneratedAt(prev => ({ ...prev, [selectedId]: new Date().toISOString() }));
+        }
+      }
+    } catch {}
+    setFundAiIntelLoading(false);
   }
 
   // Double-click field editing in overview
@@ -1640,23 +1694,27 @@ export function FundsViewClient({ initialCompanies }: Props) {
               </div>
 
               {/* Tabs */}
-              <div className="flex border-b border-slate-200 flex-shrink-0">
-                {(["overview", "opportunities", "intelligence"] as const).map(tab => (
+              <div className="flex border-b border-slate-200 flex-shrink-0 overflow-x-auto">
+                {([
+                  { key: "overview",          label: "Overview" },
+                  { key: "opportunities",     label: "Opportunities" },
+                  { key: "fund_news",         label: "Fund News" },
+                  { key: "intelligence",      label: "Intelligence" },
+                  { key: "fund_intelligence", label: "Fund Intel" },
+                ] as const).map(({ key, label }) => (
                   <button
-                    key={tab}
+                    key={key}
                     onClick={() => {
-                      setFundTab(tab);
-                      if (tab === "intelligence" && selectedId && !fundIntelMap[selectedId]?.length && !fundIntelLoading) {
-                        fetchFundIntelligence();
-                      }
+                      setFundTab(key);
+                      if (key === "intelligence" && selectedId && !fundIntelMap[selectedId]?.length && !fundIntelLoading) fetchFundIntelligence();
+                      if (key === "fund_news"    && selectedId && !fundNewsMap[selectedId]?.length   && !fundNewsLoading)   fetchFundNews();
                     }}
                     className={cn(
-                      "flex-1 text-xs font-medium py-2 transition-colors flex items-center justify-center gap-1",
-                      fundTab === tab ? "text-blue-600 border-b-2 border-blue-600" : "text-slate-500 hover:text-slate-700"
+                      "flex-shrink-0 text-xs font-medium py-2 px-3 transition-colors",
+                      fundTab === key ? "text-blue-600 border-b-2 border-blue-600" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
-                    {tab === "intelligence" && <Sparkles size={10} />}
-                    {tab === "overview" ? "Overview" : tab === "opportunities" ? "Opportunities / Tasks" : "Intelligence"}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -2673,7 +2731,44 @@ export function FundsViewClient({ initialCompanies }: Props) {
                   </div>
                 )}
 
-                {/* ── INTELLIGENCE TAB ─────────────────────────────────────── */}
+                {/* ── FUND NEWS TAB (Exa-powered) ──────────────────────────── */}
+                {fundTab === "fund_news" && (
+                  <div className="px-4 py-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Recent News · 180 Days</p>
+                        {selectedId && fundNewsSource[selectedId] && !fundNewsLoading && (
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", fundNewsSource[selectedId] === "exa" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500")}>
+                            {fundNewsSource[selectedId] === "exa" ? "⚡ Live · Exa" : "AI · Claude"}
+                          </span>
+                        )}
+                      </div>
+                      <button onClick={fetchFundNews} disabled={fundNewsLoading}
+                        className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1">
+                        {fundNewsLoading ? <><Loader2 size={10} className="animate-spin" />Loading…</> : <><RefreshCw size={10} />Refresh</>}
+                      </button>
+                    </div>
+                    {fundNewsLoading && <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-16 bg-slate-50 rounded-lg animate-pulse" />)}</div>}
+                    {!fundNewsLoading && !(fundNewsMap[selectedId ?? ""]?.length) && (
+                      <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl">
+                        <Sparkles size={24} className="mx-auto mb-2 text-slate-300" />
+                        <p className="text-xs text-slate-400">Click Refresh to fetch live news via Exa</p>
+                      </div>
+                    )}
+                    {!fundNewsLoading && (fundNewsMap[selectedId ?? ""] ?? []).map((item, i) => (
+                      <div key={i} className="border border-slate-200 rounded-xl p-3 bg-white">
+                        <p className="text-xs font-semibold text-slate-800 leading-snug mb-1">{item.headline}</p>
+                        {item.summary && <p className="text-[11px] text-slate-500 leading-relaxed">{item.summary}</p>}
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-[10px] text-slate-400">{item.source}{item.date ? ` · ${item.date}` : ""}</span>
+                          {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={9} className="text-blue-400" /></a>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── INTELLIGENCE TAB (kept for manual/saved intel) ─────────── */}
                 {fundTab === "intelligence" && (
                   <div className="px-4 py-4 space-y-4 flex-1 overflow-y-auto">
                     <div className="flex items-center justify-between">
@@ -2761,6 +2856,68 @@ export function FundsViewClient({ initialCompanies }: Props) {
                         </>
                       );
                     })()}
+                  </div>
+                )}
+
+                {/* ── FUND INTELLIGENCE TAB ───────────────────────────────────── */}
+                {fundTab === "fund_intelligence" && (
+                  <div className="px-4 py-4 space-y-4">
+                    {/* Investment Focus Analysis */}
+                    <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Investment Focus Analysis</p>
+                        <button onClick={fetchFundAiIntel} disabled={fundAiIntelLoading}
+                          className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1">
+                          {fundAiIntelLoading ? <><Loader2 size={10} className="animate-spin" />Analysing…</> : <><Sparkles size={10} />{fundAiIntel[selectedId ?? ""] ? "Regenerate" : "Analyse"}</>}
+                        </button>
+                      </div>
+                      {selectedId && fundAiIntelGeneratedAt[selectedId] && (
+                        <p className="text-[10px] text-slate-400">Generated {new Date(fundAiIntelGeneratedAt[selectedId]).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
+                      )}
+                      {fundAiIntelLoading && <div className="h-24 bg-slate-50 rounded-lg animate-pulse" />}
+                      {!fundAiIntelLoading && selectedId && fundAiIntel[selectedId] ? (
+                        <p className="text-xs text-slate-700 leading-relaxed">{fundAiIntel[selectedId]}</p>
+                      ) : !fundAiIntelLoading && (
+                        <p className="text-xs text-slate-400 italic">Click Analyse to determine this fund&apos;s key investment focus based on their thesis and recent investments.</p>
+                      )}
+                    </div>
+
+                    {/* Recent Investments */}
+                    {selectedId && (fundExtMap[selectedId]?.recentInvest ?? []).length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Recent Investments (180 days)</p>
+                        <div className="space-y-2">
+                          {(fundExtMap[selectedId]?.recentInvest ?? []).map((inv, i) => (
+                            <div key={i} className="border border-slate-200 rounded-lg p-2.5 bg-white">
+                              <p className="text-xs font-semibold text-slate-800">{inv.name}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {inv.round && <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{inv.round}</span>}
+                                {inv.sector && <span className="text-[10px] text-slate-400">{inv.sector}</span>}
+                                {inv.date && <span className="text-[10px] text-slate-400">{inv.date}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Portfolio / Pipeline overlap */}
+                    {selectedId && (getCurrentOverlap?.() ?? []).length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Portfolio / Pipeline Overlap</p>
+                        <div className="space-y-1.5">
+                          {(getCurrentOverlap?.() ?? []).map((p, i) => (
+                            <div key={i} className="flex items-center gap-2 p-2 border border-slate-200 rounded-lg bg-white">
+                              <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0", overlapAvatarColor(i))}>{p.initials}</div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-slate-800 truncate">{p.name}</p>
+                                <p className="text-[10px] text-slate-400">{p.role}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -827,7 +827,7 @@ interface IntelItem {
   url: string | null;
 }
 
-function IntelligenceTab({ companyId }: { companyId: string }) {
+function IntelligenceTab({ companyId, autoLoad }: { companyId: string; autoLoad?: boolean }) {
   const supabase = createClient();
   const [items, setItems]         = useState<IntelItem[]>([]);
   const [signals, setSignals]     = useState<{ id: string; title: string; summary: string | null; source: string | null; url: string | null; relevance_score: number | null; created_at: string }[]>([]);
@@ -835,6 +835,13 @@ function IntelligenceTab({ companyId }: { companyId: string }) {
   const [exaStatus, setExaStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [exaMsg, setExaMsg]       = useState<string | null>(null);
   const [loadingSignals, setLoadingSignals] = useState(true);
+
+  useEffect(() => {
+    if (autoLoad && status === "idle") {
+      runIntelligence();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoad]);
 
   useEffect(() => {
     supabase
@@ -1420,7 +1427,14 @@ export function CompanyDetailClient({
 
       {/* ── Back button ── */}
       <button
-        onClick={() => router.back()}
+        onClick={() => {
+          const typeRoutes: Record<string, string> = {
+            startup: "/crm/companies", lp: "/crm/lps", investor: "/crm/funds",
+            "limited partner": "/crm/lps", "strategic partner": "/crm/strategic",
+          };
+          const dest = typeRoutes[company.type ?? ""] ?? "/crm/companies";
+          if (window.history.length > 1) { router.back(); } else { router.push(dest); }
+        }}
         className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-700 transition-colors mb-1 group"
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="group-hover:-translate-x-0.5 transition-transform">
@@ -1588,9 +1602,9 @@ export function CompanyDetailClient({
         {/* Action strip */}
         <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 flex-wrap">
           {typeGroup === "startup" && (
-            <button onClick={generateMemo} disabled={memoGenerating} className={primaryBtn}>
-              {memoGenerating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-              {memoGenerating ? "Generating…" : "Generate IC Memo"}
+            <button onClick={() => setTab("Memos")} className={primaryBtn}>
+              <FileText size={11} />
+              IC Memos
             </button>
           )}
           {typeGroup === "investor" && (
@@ -1621,7 +1635,7 @@ export function CompanyDetailClient({
 
       {/* ── Tabs ── */}
       <div className="flex gap-1 border-b border-slate-200">
-        {TABS.map(t => (
+        {TABS.filter(t => !(typeGroup === "startup" && t === "Interactions")).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -1633,7 +1647,13 @@ export function CompanyDetailClient({
             )}
           >
             {t}
-            {t === "Contacts" && contacts.length > 0 && <span className="ml-1.5 badge bg-slate-100 text-slate-500">{contacts.length}</span>}
+            {t === "Contacts" && (contacts.length > 0 || (typeGroup === "startup" && interactions.length > 0)) && (
+                <span className="ml-1.5 badge bg-slate-100 text-slate-500">
+                  {typeGroup === "startup" && interactions.length > 0
+                    ? `${contacts.length} · ${interactions.length}`
+                    : contacts.length}
+                </span>
+              )}
             {t === "Interactions" && interactions.length > 0 && <span className="ml-1.5 badge bg-slate-100 text-slate-500">{interactions.length}</span>}
             {t === "Memos" && memos.length > 0 && <span className="ml-1.5 badge bg-slate-100 text-slate-500">{memos.length}</span>}
           </button>
@@ -1643,7 +1663,232 @@ export function CompanyDetailClient({
       {/* ── OVERVIEW TAB ── */}
       {tab === "Overview" && (
         <>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* STARTUP: 3-row box layout */}
+        {typeGroup === "startup" && (
+          <>
+            {/* Row 1: Contacts | Recent Activity */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="card p-5 flex flex-col" style={{height: "260px"}}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Contacts</h3>
+                  <button onClick={() => setTab("Contacts")} className="text-xs text-blue-600 hover:text-blue-700">
+                    {contacts.length > 0 ? `All ${contacts.length} →` : "+ Add"}
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {contacts.length === 0 ? (
+                    <p className="text-sm text-slate-400 italic">No contacts yet.</p>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {contacts.slice(0, 5).map(c => (
+                        <div key={c.id} className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-semibold text-slate-600 flex-shrink-0">
+                            {getInitials(`${c.first_name ?? ""} ${c.last_name ?? ""}`)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
+                            <p className="text-xs text-slate-400 truncate">{c.title ?? c.type}</p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {c.email && <a href={`mailto:${c.email}`} className="text-slate-400 hover:text-blue-600"><Mail size={13} /></a>}
+                            {c.last_contact_date && <span className="text-xs text-slate-400">{timeAgo(c.last_contact_date)}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="card p-5 flex flex-col" style={{height: "260px"}}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Recent Activity</h3>
+                  <button onClick={() => setTab("Contacts")} className="text-xs text-blue-600 hover:text-blue-700">
+                    {interactions.length > 0 ? `All ${interactions.length} →` : "+ Log"}
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {interactions.length === 0 ? (
+                    <p className="text-sm text-slate-400 italic">No interactions logged yet.</p>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {interactions.slice(0, 6).map(i => (
+                        <div key={i.id} className="flex items-start gap-2.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-slate-700 truncate">{i.subject ?? i.type}</p>
+                            <p className="text-xs text-slate-400">{timeAgo(i.date)}</p>
+                          </div>
+                          <span className="text-[10px] text-slate-400 capitalize flex-shrink-0">{i.type}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Documents | Company Intelligence */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="card p-5 flex flex-col" style={{height: "280px"}}>
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Documents</h3>
+                <div className="flex-1 overflow-y-auto space-y-4">
+                  <div>
+                    <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide mb-1.5">Pitch Deck</p>
+                    {(() => {
+                      const decks = documents.filter(d => d.type === "deck");
+                      const hasDeckDocs = decks.some(d => d.file_url ?? d.google_drive_url ?? d.storage_path);
+                      return (
+                        <div className="space-y-1">
+                          {decks.map(d => {
+                            const url = d.file_url ?? d.google_drive_url ?? d.storage_path;
+                            if (!url) return null;
+                            return (
+                              <a key={d.id} href={url} target="_blank" rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg font-medium mr-1">
+                                <FileText size={12} /> {d.name || "Open Deck"}
+                              </a>
+                            );
+                          })}
+                          {!hasDeckDocs && company.pitch_deck_url && (
+                            <a href={company.pitch_deck_url} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg font-medium mr-1">
+                              <FileText size={12} /> View Pitch Deck
+                            </a>
+                          )}
+                          {!hasDeckDocs && !company.pitch_deck_url && (
+                            <p className="text-xs text-slate-400 italic">No deck linked</p>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide mb-1.5">Meeting Transcripts</p>
+                    {(() => {
+                      const meetingInteractions = interactions.filter(i => i.type === "meeting").slice(0, 5);
+                      const transcriptDocs = documents.filter(d => d.type === "transcript" || d.type === "meeting_notes");
+                      const hasAnything = meetingInteractions.length > 0 || transcriptDocs.length > 0;
+                      if (!hasAnything) return <p className="text-xs text-slate-400 italic">No transcripts yet</p>;
+                      return (
+                        <div className="space-y-1">
+                          {meetingInteractions.map(i => (
+                            <div key={i.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5">
+                              <Mic size={11} className="text-violet-500 flex-shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs text-slate-700 truncate font-medium">{i.subject ?? "Meeting"}</p>
+                                <p className="text-[10px] text-slate-400">{formatDate(i.date)}</p>
+                              </div>
+                              {i.transcript_url && (
+                                <a href={i.transcript_url} target="_blank" rel="noopener noreferrer"
+                                  className="text-[10px] text-blue-500 hover:text-blue-700 flex-shrink-0 flex items-center gap-0.5">
+                                  <ExternalLink size={10} /> View
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                          {transcriptDocs.map(d => {
+                            const url = d.file_url ?? d.google_drive_url ?? d.storage_path;
+                            return (
+                              <div key={d.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5">
+                                <FileText size={11} className="text-violet-500 flex-shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs text-slate-700 truncate font-medium">{d.name || "Transcript"}</p>
+                                  <p className="text-[10px] text-slate-400">{formatDate(d.created_at)}</p>
+                                </div>
+                                {url && (
+                                  <a href={url} target="_blank" rel="noopener noreferrer"
+                                    className="text-[10px] text-blue-500 hover:text-blue-700 flex-shrink-0 flex items-center gap-0.5">
+                                    <ExternalLink size={10} /> View
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="card p-5 flex flex-col" style={{height: "280px"}}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Company Intelligence</h3>
+                  <button onClick={() => setTab("Intelligence")} className="text-xs text-blue-600 hover:text-blue-700">Full view →</button>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-3">
+                  <button onClick={() => setTab("Intelligence")}
+                    className="w-full flex items-center gap-2 text-left bg-blue-50 hover:bg-blue-100 transition-colors rounded-lg px-3 py-2.5">
+                    <Sparkles size={13} className="text-blue-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-medium text-blue-800">AI Intelligence &amp; Signals</p>
+                      <p className="text-[11px] text-blue-600 mt-0.5">View news, research signals &amp; AI insights</p>
+                    </div>
+                  </button>
+                  {memos.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide">Recent IC Memos</p>
+                        <button onClick={() => setTab("Memos")} className="text-[10px] text-blue-600 hover:text-blue-700">All {memos.length} →</button>
+                      </div>
+                      <div className="space-y-0.5">
+                        {memos.slice(0, 2).map(m => (
+                          <Link key={m.id} href={`/memos/${m.id}`} className="block text-xs text-blue-600 hover:text-blue-700 truncate">
+                            {m.title}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Row 3: Investment Memos */}
+            <div className="card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Investment Memos</h3>
+                <div className="flex items-center gap-2">
+                  <button onClick={generateMemo} disabled={memoGenerating}
+                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors font-medium">
+                    {memoGenerating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                    {memoGenerating ? "Generating…" : "Generate Memo"}
+                  </button>
+                  {memos.length > 0 && (
+                    <button onClick={() => setTab("Memos")} className="text-xs text-blue-600 hover:text-blue-700">
+                      All {memos.length} →
+                    </button>
+                  )}
+                </div>
+              </div>
+              {memos.length === 0 ? (
+                <p className="text-sm text-slate-400 italic">No investment memos yet. Generate one using the button above.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {memos.map(m => (
+                    <Link key={m.id} href={`/memos/${m.id}`}
+                      className="flex flex-col gap-2 p-3 rounded-xl border border-slate-200 hover:border-blue-200 hover:bg-blue-50/30 transition-colors">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-800 leading-tight line-clamp-2">{m.title}</p>
+                        {m.recommendation && (
+                          <span className={cn("badge text-xs flex-shrink-0", REC_COLORS[m.recommendation] ?? "bg-slate-100 text-slate-500")}>
+                            {m.recommendation.replace(/_/g, " ")}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400">{formatDate(m.created_at)}</p>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ALL OTHER TYPES: 2-col layout */}
+        {typeGroup !== "startup" && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
           {/* LEFT — shared: contacts · activity · notes */}
           <div className="card p-5 space-y-5">
@@ -1711,143 +1956,6 @@ export function CompanyDetailClient({
 
           {/* RIGHT — type-specific */}
           <div className="card p-5">
-
-            {/* STARTUP */}
-            {typeGroup === "startup" && (
-              <div className="space-y-4">
-                {/* Documents */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Documents</h3>
-                  </div>
-                  {/* Pitch deck — from documents table (type="deck") + company.pitch_deck_url */}
-                  <div className="mb-3">
-                    <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide mb-1.5">Pitch Deck</p>
-                    {(() => {
-                      const decks = documents.filter(d => d.type === "deck");
-                      const hasDeckDocs = decks.some(d => d.file_url ?? d.google_drive_url ?? d.storage_path);
-                      return (
-                        <div className="space-y-1">
-                          {/* Documents table decks */}
-                          {decks.map(d => {
-                            const url = d.file_url ?? d.google_drive_url ?? d.storage_path;
-                            if (!url) return null;
-                            return (
-                              <a
-                                key={d.id}
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg font-medium mr-1"
-                              >
-                                <FileText size={12} /> {d.name || "Open Deck"}
-                              </a>
-                            );
-                          })}
-                          {/* Fallback: company.pitch_deck_url if no docs-table deck */}
-                          {!hasDeckDocs && company.pitch_deck_url && (
-                            <a
-                              href={company.pitch_deck_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg font-medium mr-1"
-                            >
-                              <FileText size={12} /> View Pitch Deck
-                            </a>
-                          )}
-                          {!hasDeckDocs && !company.pitch_deck_url && (
-                            <p className="text-xs text-slate-400 italic">No deck linked</p>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                  {/* Meeting transcripts — from interactions + documents table */}
-                  <div>
-                    <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide mb-1.5">Meeting Transcripts</p>
-                    {(() => {
-                      const meetingInteractions = interactions.filter(i => i.type === "meeting").slice(0, 5);
-                      const transcriptDocs = documents.filter(d => d.type === "transcript" || d.type === "meeting_notes");
-                      const hasAnything = meetingInteractions.length > 0 || transcriptDocs.length > 0;
-                      if (!hasAnything) return <p className="text-xs text-slate-400 italic">No transcripts yet</p>;
-                      return (
-                        <div className="space-y-1 max-h-[140px] overflow-y-auto">
-                          {/* Meeting interactions */}
-                          {meetingInteractions.map(i => (
-                            <div key={i.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5">
-                              <Mic size={11} className="text-violet-500 flex-shrink-0" />
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs text-slate-700 truncate font-medium">{i.subject ?? "Meeting"}</p>
-                                <p className="text-[10px] text-slate-400">{formatDate(i.date)}</p>
-                              </div>
-                              {i.transcript_url && (
-                                <a href={i.transcript_url} target="_blank" rel="noopener noreferrer"
-                                  className="text-[10px] text-blue-500 hover:text-blue-700 flex-shrink-0 flex items-center gap-0.5">
-                                  <ExternalLink size={10} /> View
-                                </a>
-                              )}
-                            </div>
-                          ))}
-                          {/* Uploaded transcript documents */}
-                          {transcriptDocs.map(d => {
-                            const url = d.file_url ?? d.google_drive_url ?? d.storage_path;
-                            return (
-                              <div key={d.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5">
-                                <FileText size={11} className="text-violet-500 flex-shrink-0" />
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs text-slate-700 truncate font-medium">{d.name || "Transcript"}</p>
-                                  <p className="text-[10px] text-slate-400">{formatDate(d.created_at)}</p>
-                                </div>
-                                {url && (
-                                  <a href={url} target="_blank" rel="noopener noreferrer"
-                                    className="text-[10px] text-blue-500 hover:text-blue-700 flex-shrink-0 flex items-center gap-0.5">
-                                    <ExternalLink size={10} /> View
-                                  </a>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-                <div className="border-t border-slate-100" />
-                {/* Company Intelligence */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Company Intelligence</h3>
-                    <button onClick={() => setTab("Intelligence")} className="text-xs text-blue-600 hover:text-blue-700">Full view →</button>
-                  </div>
-                  <button
-                    onClick={() => setTab("Intelligence")}
-                    className="w-full flex items-center gap-2 text-left bg-blue-50 hover:bg-blue-100 transition-colors rounded-lg px-3 py-2.5"
-                  >
-                    <Sparkles size={13} className="text-blue-600 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs font-medium text-blue-800">AI Intelligence &amp; Signals</p>
-                      <p className="text-[11px] text-blue-600 mt-0.5">View news, research signals &amp; AI insights</p>
-                    </div>
-                  </button>
-                  {/* IC Memos link */}
-                  {memos.length > 0 && (
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide">IC Memos</p>
-                        <button onClick={() => setTab("Memos")} className="text-[10px] text-blue-600 hover:text-blue-700">All {memos.length} →</button>
-                      </div>
-                      <div className="space-y-0.5">
-                        {memos.slice(0, 2).map(m => (
-                          <Link key={m.id} href={`/memos/${m.id}`} className="block text-xs text-blue-600 hover:text-blue-700 truncate">
-                            {m.title}
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* INVESTOR / FUND */}
             {typeGroup === "investor" && (
@@ -1990,129 +2098,186 @@ export function CompanyDetailClient({
 
           </div>
         </div>
-
-        {/* ── Full-width IC Memos section (startups only) ── */}
-        {typeGroup === "startup" && (
-          <div className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Investment Memos</h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={generateMemo}
-                  disabled={memoGenerating}
-                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors font-medium"
-                >
-                  {memoGenerating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                  {memoGenerating ? "Generating…" : "Generate Memo"}
-                </button>
-                {memos.length > 0 && (
-                  <button onClick={() => setTab("Memos")} className="text-xs text-blue-600 hover:text-blue-700">
-                    All {memos.length} →
-                  </button>
-                )}
-              </div>
-            </div>
-            {memos.length === 0 ? (
-              <p className="text-sm text-slate-400 italic">No investment memos yet. Generate one using the button above.</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {memos.map(m => (
-                  <Link
-                    key={m.id}
-                    href={`/memos/${m.id}`}
-                    className="flex flex-col gap-2 p-3 rounded-xl border border-slate-200 hover:border-blue-200 hover:bg-blue-50/30 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-slate-800 leading-tight line-clamp-2">{m.title}</p>
-                      {m.recommendation && (
-                        <span className={cn("badge text-xs flex-shrink-0", REC_COLORS[m.recommendation] ?? "bg-slate-100 text-slate-500")}>
-                          {m.recommendation.replace(/_/g, " ")}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-400">{formatDate(m.created_at)}</p>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
         )}
         </>
       )}
 
       {/* ── CONTACTS TAB ── */}
       {tab === "Contacts" && (
-        <div className="card">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-800">Contacts at {company.name}</h3>
-            <button onClick={() => setShowContactForm(!showContactForm)} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
-              <Plus size={12} /> Add contact
-            </button>
+        <div className={cn(typeGroup === "startup" ? "grid grid-cols-1 lg:grid-cols-2 gap-4" : "")}>
+          {/* Contacts list */}
+          <div className="card">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-800">Contacts at {company.name}</h3>
+              <button onClick={() => setShowContactForm(!showContactForm)} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                <Plus size={12} /> Add contact
+              </button>
+            </div>
+
+            {showContactForm && (
+              <form onSubmit={saveContact} className="p-5 bg-slate-50 border-b border-slate-200 grid grid-cols-2 gap-3">
+                <input required className="input" placeholder="First name *" value={contactForm.first_name ?? ""} onChange={e => setContactForm(p => ({ ...p, first_name: e.target.value }))} />
+                <input required className="input" placeholder="Last name *" value={contactForm.last_name ?? ""} onChange={e => setContactForm(p => ({ ...p, last_name: e.target.value }))} />
+                <input className="input" placeholder="Email" type="email" value={contactForm.email ?? ""} onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))} />
+                <input className="input" placeholder="Title / Role" value={contactForm.title ?? ""} onChange={e => setContactForm(p => ({ ...p, title: e.target.value }))} />
+                <select className="select" value={contactForm.type} onChange={e => setContactForm(p => ({ ...p, type: e.target.value as Contact["type"] }))}>
+                  <option value="Founder / Mgmt">Founder / Mgmt</option>
+                  <option value="Investor">Investor</option>
+                  <option value="Limited Partner">Limited Partner</option>
+                  <option value="Strategic">Strategic</option>
+                  <option value="Ecosystem">Ecosystem</option>
+                  <option value="Advisor / KOL">Advisor / KOL</option>
+                  <option value="Employee">Employee</option>
+                  <option value="Lawyer">Lawyer</option>
+                  <option value="Government/Academic">Government/Academic</option>
+                  <option value="Other">Other</option>
+                </select>
+                <select className="select" value={contactForm.relationship_strength ?? ""} onChange={e => setContactForm(p => ({ ...p, relationship_strength: e.target.value as Contact["relationship_strength"] }))}>
+                  <option value="">Relationship strength</option>
+                  <option value="strong">Strong</option>
+                  <option value="medium">Medium</option>
+                  <option value="weak">Weak</option>
+                  <option value="new">New</option>
+                </select>
+                <div className="col-span-2 flex gap-2">
+                  <button type="button" onClick={() => setShowContactForm(false)} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+                  <button type="submit" disabled={savingContact} className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg disabled:opacity-50">
+                    {savingContact ? "Saving…" : "Add contact"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="divide-y divide-slate-100">
+              {contacts.length === 0 ? (
+                <p className="px-5 py-8 text-sm text-slate-400 text-center">No contacts yet.</p>
+              ) : (
+                contacts.map(c => (
+                  <div key={c.id} className="px-5 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-semibold text-slate-600">
+                        {getInitials(`${c.first_name} ${c.last_name}`)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{c.first_name} {c.last_name}</p>
+                        <p className="text-xs text-slate-400">{c.title ?? c.type}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {c.email && <a href={`mailto:${c.email}`} className="text-slate-400 hover:text-blue-600"><Mail size={14} /></a>}
+                      {c.phone && <a href={`tel:${c.phone}`} className="text-slate-400 hover:text-blue-600"><Phone size={14} /></a>}
+                      {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-blue-600"><Linkedin size={14} /></a>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
-          {showContactForm && (
-            <form onSubmit={saveContact} className="p-5 bg-slate-50 border-b border-slate-200 grid grid-cols-2 gap-3">
-              <input required className="input" placeholder="First name *" value={contactForm.first_name ?? ""} onChange={e => setContactForm(p => ({ ...p, first_name: e.target.value }))} />
-              <input required className="input" placeholder="Last name *" value={contactForm.last_name ?? ""} onChange={e => setContactForm(p => ({ ...p, last_name: e.target.value }))} />
-              <input className="input" placeholder="Email" type="email" value={contactForm.email ?? ""} onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))} />
-              <input className="input" placeholder="Title / Role" value={contactForm.title ?? ""} onChange={e => setContactForm(p => ({ ...p, title: e.target.value }))} />
-              <select className="select" value={contactForm.type} onChange={e => setContactForm(p => ({ ...p, type: e.target.value as Contact["type"] }))}>
-                <option value="Founder / Mgmt">Founder / Mgmt</option>
-                <option value="Investor">Investor</option>
-                <option value="Limited Partner">Limited Partner</option>
-                <option value="Strategic">Strategic</option>
-                <option value="Ecosystem">Ecosystem</option>
-                <option value="Advisor / KOL">Advisor / KOL</option>
-                <option value="Employee">Employee</option>
-                <option value="Lawyer">Lawyer</option>
-                <option value="Government/Academic">Government/Academic</option>
-                <option value="Other">Other</option>
-              </select>
-              <select className="select" value={contactForm.relationship_strength ?? ""} onChange={e => setContactForm(p => ({ ...p, relationship_strength: e.target.value as Contact["relationship_strength"] }))}>
-                <option value="">Relationship strength</option>
-                <option value="strong">Strong</option>
-                <option value="medium">Medium</option>
-                <option value="weak">Weak</option>
-                <option value="new">New</option>
-              </select>
-              <div className="col-span-2 flex gap-2">
-                <button type="button" onClick={() => setShowContactForm(false)} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
-                <button type="submit" disabled={savingContact} className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg disabled:opacity-50">
-                  {savingContact ? "Saving…" : "Add contact"}
+          {/* Right column: Interaction history (startups only) */}
+          {typeGroup === "startup" && (
+            <div className="card">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-800">Interaction History</h3>
+                <button
+                  onClick={() => setShowInteractionForm(!showInteractionForm)}
+                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  <Plus size={12} /> Log
                 </button>
               </div>
-            </form>
-          )}
 
-          <div className="divide-y divide-slate-100">
-            {contacts.length === 0 ? (
-              <p className="px-5 py-8 text-sm text-slate-400 text-center">No contacts yet.</p>
-            ) : (
-              contacts.map(c => (
-                <div key={c.id} className="px-5 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-semibold text-slate-600">
-                      {getInitials(`${c.first_name} ${c.last_name}`)}
+              {showInteractionForm && (
+                <div className="p-5 bg-slate-50 border-b border-slate-200">
+                  <form onSubmit={saveInteraction} className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1.5">Type</label>
+                        <select
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                          value={interactionForm.type}
+                          onChange={e => setInteractionForm(p => ({ ...p, type: e.target.value as typeof p.type }))}
+                        >
+                          <option value="meeting">Meeting</option>
+                          <option value="call">Call</option>
+                          <option value="email">Email</option>
+                          <option value="note">Note</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1.5">Date</label>
+                        <input
+                          type="date"
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                          value={interactionForm.date}
+                          onChange={e => setInteractionForm(p => ({ ...p, date: e.target.value }))}
+                        />
+                      </div>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-800">{c.first_name} {c.last_name}</p>
-                      <p className="text-xs text-slate-400">{c.title ?? c.type}</p>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1.5">Subject / Title</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Intro call with CEO"
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        value={interactionForm.subject}
+                        onChange={e => setInteractionForm(p => ({ ...p, subject: e.target.value }))}
+                      />
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {c.email && <a href={`mailto:${c.email}`} className="text-slate-400 hover:text-blue-600"><Mail size={14} /></a>}
-                    {c.phone && <a href={`tel:${c.phone}`} className="text-slate-400 hover:text-blue-600"><Phone size={14} /></a>}
-                    {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-blue-600"><Linkedin size={14} /></a>}
-                  </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1.5">Notes / Summary</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Key points, next steps, context…"
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                        value={interactionForm.body}
+                        onChange={e => setInteractionForm(p => ({ ...p, body: e.target.value }))}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button type="button" onClick={() => setShowInteractionForm(false)} className="px-3 py-2 text-xs text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
+                        Cancel
+                      </button>
+                      <button type="submit" disabled={savingInteraction} className="px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+                        {savingInteraction ? "Saving…" : "Log Interaction"}
+                      </button>
+                    </div>
+                  </form>
                 </div>
-              ))
-            )}
-          </div>
+              )}
+
+              <InteractionsTab interactions={interactions} />
+
+              {interactions.length >= 50 && (
+                <div className="flex justify-center pt-2 pb-3">
+                  <button
+                    onClick={async () => {
+                      setLoadingMoreInteractions(true);
+                      const { data } = await supabase
+                        .from("interactions")
+                        .select("*")
+                        .eq("company_id", company.id)
+                        .order("date", { ascending: false })
+                        .range(interactions.length, interactions.length + 49);
+                      if (data && data.length > 0) {
+                        setInteractions(prev => [...prev, ...(data as typeof interactions)]);
+                      }
+                      setLoadingMoreInteractions(false);
+                    }}
+                    disabled={loadingMoreInteractions}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {loadingMoreInteractions ? "Loading…" : "Load more interactions"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* ── INTERACTIONS TAB ── */}
-      {tab === "Interactions" && (
+      {typeGroup !== "startup" && tab === "Interactions" && (
         <div className="space-y-4">
           <div className="flex justify-end">
             <button
@@ -2313,7 +2478,7 @@ export function CompanyDetailClient({
 
       {/* ── INTELLIGENCE TAB ── */}
       {tab === "Intelligence" && (
-        <IntelligenceTab companyId={company.id} />
+        <IntelligenceTab companyId={company.id} autoLoad={typeGroup === "startup"} />
       )}
 
       {/* ── Edit Modal ── */}

@@ -14,6 +14,7 @@ import { createAdminClient }   from "@/lib/supabase/admin";
 import { generateText }        from "ai";
 import { anthropic }           from "@ai-sdk/anthropic";
 import { firefliesGetMeeting } from "@/lib/fireflies";
+import { getAiConfig }         from "@/lib/ai-config";
 
 export const maxDuration = 60;
 
@@ -146,13 +147,16 @@ ${isFullTranscript ? "TRANSCRIPT" : "MEETING NOTES"}:
 ${content.slice(0, 14000)}`;
 
   // ── Call Claude ───────────────────────────────────────────────────────────
+  // Model/temperature follow Admin → AI Config → Company Intelligence
+  const meetingCfg = await getAiConfig("company_intelligence");
+
   let summaryText: string;
   try {
     const { text } = await generateText({
-      model:       anthropic("claude-haiku-3-5"),
+      model:       anthropic(meetingCfg.model as Parameters<typeof anthropic>[0]),
       prompt,
-      maxTokens:   600,
-      temperature: 0.3,
+      maxTokens:   Math.max(meetingCfg.max_tokens, 600),
+      temperature: meetingCfg.temperature,
     });
     summaryText = text.trim();
   } catch (err) {
