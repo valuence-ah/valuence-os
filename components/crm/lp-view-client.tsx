@@ -594,10 +594,12 @@ export function LpViewClient({ initialCompanies }: Props) {
 
   // LP Company News feed
   type LpIntelItem = { headline: string; source: string; date: string; summary?: string; url?: string };
-  const [lpIntelligence, setLpIntelligence] = useState<LpIntelItem[]>([]);
-  const [lpIntelLoading, setLpIntelLoading] = useState(false);
-  const [lpIntelError, setLpIntelError]     = useState<string | null>(null);
+  const [lpIntelligence, setLpIntelligence]   = useState<LpIntelItem[]>([]);
+  const [lpIntelLoading, setLpIntelLoading]   = useState(false);
+  const [lpIntelError, setLpIntelError]       = useState<string | null>(null);
   const [lpIntelCachedAt, setLpIntelCachedAt] = useState<string | null>(null);
+  // "exa" = live Exa search results | "claude" = AI-generated fallback | null = not yet fetched
+  const [lpIntelDataSource, setLpIntelDataSource] = useState<"exa" | "claude" | null>(null);
 
   // Intelligence tab — LP-specific alignment analysis
   type AlignmentPick = { id: string | null; name: string; reason: string; sectors: string[]; stage: string | null; description: string | null; website: string | null };
@@ -821,9 +823,9 @@ export function LpViewClient({ initialCompanies }: Props) {
     // Load cached intelligence immediately so it's visible when tab opens
     try {
       const s = localStorage.getItem(`lp_intel_${id}`);
-      if (s) { const { items, cachedAt } = JSON.parse(s); setLpIntelligence(items ?? []); setLpIntelCachedAt(cachedAt ?? null); }
-      else { setLpIntelligence([]); setLpIntelCachedAt(null); }
-    } catch { setLpIntelligence([]); setLpIntelCachedAt(null); }
+      if (s) { const { items, cachedAt, dataSource } = JSON.parse(s); setLpIntelligence(items ?? []); setLpIntelCachedAt(cachedAt ?? null); setLpIntelDataSource(dataSource ?? null); }
+      else { setLpIntelligence([]); setLpIntelCachedAt(null); setLpIntelDataSource(null); }
+    } catch { setLpIntelligence([]); setLpIntelCachedAt(null); setLpIntelDataSource(null); }
     loadDetail(id);
   }
 
@@ -852,9 +854,10 @@ export function LpViewClient({ initialCompanies }: Props) {
       try {
         const cached = localStorage.getItem(`lp_intel_${selected.id}`);
         if (cached) {
-          const { items, cachedAt } = JSON.parse(cached);
+          const { items, cachedAt, dataSource } = JSON.parse(cached);
           setLpIntelligence(items ?? []);
           setLpIntelCachedAt(cachedAt ?? null);
+          setLpIntelDataSource(dataSource ?? null);
         }
       } catch {}
     }
@@ -907,15 +910,18 @@ export function LpViewClient({ initialCompanies }: Props) {
     setLpIntelLoading(true);
     setLpIntelError(null);
     try {
-      // Use the LP-specific news route (no strict 180-day cutoff — tuned for institutional investors)
       const res = await fetch(`/api/lp/${selected.id}/news`, { method: "POST" });
       if (res.ok) {
-        const data = await res.json() as { items?: LpIntelItem[] };
-        const items = data.items ?? [];
+        const data = await res.json() as { items?: LpIntelItem[]; source?: "exa" | "claude" };
+        const items      = data.items ?? [];
+        const dataSource = data.source ?? "claude";
+        const cachedAt   = new Date().toISOString();
         setLpIntelligence(items);
-        const cachedAt = new Date().toISOString();
         setLpIntelCachedAt(cachedAt);
-        try { localStorage.setItem(`lp_intel_${selected.id}`, JSON.stringify({ items, cachedAt })); } catch {}
+        setLpIntelDataSource(dataSource);
+        try {
+          localStorage.setItem(`lp_intel_${selected.id}`, JSON.stringify({ items, cachedAt, dataSource }));
+        } catch {}
       } else {
         try {
           const errData = await res.json();
@@ -1909,15 +1915,26 @@ export function LpViewClient({ initialCompanies }: Props) {
                   {/* Top: Updates section — independently scrollable */}
                   <div className="flex-1 overflow-y-auto px-5 pt-4 pb-2 space-y-3 border-b border-slate-200" style={{ minHeight: 0 }}>
                     <div className="flex items-center justify-between flex-shrink-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Recent News</p>
+                        {/* Source badge — shows whether data came from live Exa search or Claude */}
+                        {lpIntelDataSource && !lpIntelLoading && (
+                          <span className={cn(
+                            "text-[9px] font-semibold px-1.5 py-0.5 rounded-full",
+                            lpIntelDataSource === "exa"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-slate-100 text-slate-500"
+                          )}>
+                            {lpIntelDataSource === "exa" ? "⚡ Live · Exa" : "AI · Claude"}
+                          </span>
+                        )}
                         {lpIntelCachedAt && !lpIntelLoading && (
                           <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(lpIntelCachedAt).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
                         )}
                       </div>
                       <button onClick={fetchLpIntelligence} disabled={lpIntelLoading}
                         className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1">
-                        {lpIntelLoading ? <><Loader2 size={10} className="animate-spin" />Loading…</> : <><Sparkles size={10} />Refresh</>}
+                        {lpIntelLoading ? <><Loader2 size={10} className="animate-spin" />Loading…</> : <><RefreshCw size={10} />Refresh</>}
                       </button>
                     </div>
                     {lpIntelLoading ? (
@@ -1930,7 +1947,7 @@ export function LpViewClient({ initialCompanies }: Props) {
                       <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl">
                         <Sparkles size={24} className="mx-auto mb-2 text-slate-300" />
                         <p className="text-xs text-slate-400 mb-1">No news loaded yet</p>
-                        <p className="text-[11px] text-slate-300">Click Refresh to fetch recent news</p>
+                        <p className="text-[11px] text-slate-300">Click Refresh to fetch live news via Exa</p>
                       </div>
                     ) : (
                       <div className="space-y-2.5">
