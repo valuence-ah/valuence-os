@@ -8,10 +8,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAiConfig } from "@/lib/ai-config";
 import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 60;
-const MODEL = "claude-haiku-4-5";
 
 interface ExaResult {
   url?: string;
@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
 
   const name    = (fund.name as string).trim();
   const EXA_KEY = process.env.EXA_API_KEY;
+  const cfg     = await getAiConfig("fund_intelligence");
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   let investments: { name: string; round: string; sector: string; date: string }[] = [];
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
 
       try {
         const msg = await anthropic.messages.create({
-          model: MODEL,
+          model: cfg.model,
           max_tokens: 600,
           messages: [{
             role: "user",
@@ -158,7 +159,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const msg = await anthropic.messages.create({
-        model: MODEL,
+        model: cfg.model,
         max_tokens: 500,
         messages: [{
           role: "user",

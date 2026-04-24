@@ -371,7 +371,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [visible, setVisible] = useState(false);
 
   // Panel tab
-  const [fundTab, setFundTab] = useState<"overview" | "opportunities" | "fund_news" | "intelligence" | "fund_intelligence">("overview");
+  const [fundTab, setFundTab] = useState<"overview" | "opportunities" | "fund_news" | "fund_intelligence">("overview");
 
   // Live contacts from Supabase — keyed by fund id
   const [fundContacts, setFundContacts] = useState<Record<string, Contact[]>>({});
@@ -429,6 +429,12 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
   // Fund intelligence per company
   type FundIntelItem = { headline: string; source: string; date: string; summary?: string; url?: string };
+  type FundAiIntelResult = {
+    focus_analysis?:  string;
+    co_invest_angle?: string;
+    portfolio_picks?: { name: string; reason: string; sectors?: string[]; stage?: string | null; website?: string | null }[];
+    pipeline_picks?:  { name: string; reason: string; sectors?: string[]; stage?: string | null; website?: string | null }[];
+  };
   const [fundIntelMap, setFundIntelMap]       = useState<Record<string, FundIntelItem[]>>({});
   const [fundIntelCachedAt, setFundIntelCachedAt] = useState<Record<string, string>>({});
   const [fundIntelLoading, setFundIntelLoading] = useState(false);
@@ -438,8 +444,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [fundNewsCachedAt, setFundNewsCachedAt] = useState<Record<string, string>>({});
   const [fundNewsLoading, setFundNewsLoading] = useState(false);
   const [fundNewsSource, setFundNewsSource]   = useState<Record<string, "exa" | "claude">>({});
+  // Fund News starred — persisted to localStorage
+  const [fundNewsStarred, setFundNewsStarred] = useState<Record<string, string[]>>({});
   // Fund Intelligence (AI analysis tab) — keyed by fund id
-  const [fundAiIntel, setFundAiIntel]         = useState<Record<string, string>>({});
+  const [fundAiIntel, setFundAiIntel]         = useState<Record<string, FundAiIntelResult>>({});
   const [fundAiIntelLoading, setFundAiIntelLoading] = useState(false);
   const [fundAiIntelGeneratedAt, setFundAiIntelGeneratedAt] = useState<Record<string, string>>({});
 
@@ -447,6 +455,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [fundStarredIntel, setFundStarredIntel] = useState<Record<string, string[]>>({});
   useEffect(() => {
     try { const s = localStorage.getItem("fund_starred_intel"); if (s) setFundStarredIntel(JSON.parse(s)); } catch {}
+    try { const s = localStorage.getItem("fund_news_starred"); if (s) setFundNewsStarred(JSON.parse(s)); } catch {}
   }, []);
   function toggleFundStar(companyId: string, headline: string) {
     setFundStarredIntel(prev => {
@@ -454,6 +463,15 @@ export function FundsViewClient({ initialCompanies }: Props) {
       const next = current.includes(headline) ? current.filter(h => h !== headline) : [...current, headline];
       const updated = { ...prev, [companyId]: next };
       try { localStorage.setItem("fund_starred_intel", JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }
+  function toggleFundNewsStar(companyId: string, headline: string) {
+    setFundNewsStarred(prev => {
+      const current = prev[companyId] ?? [];
+      const next = current.includes(headline) ? current.filter(h => h !== headline) : [...current, headline];
+      const updated = { ...prev, [companyId]: next };
+      try { localStorage.setItem("fund_news_starred", JSON.stringify(updated)); } catch {}
       return updated;
     });
   }
@@ -568,29 +586,20 @@ export function FundsViewClient({ initialCompanies }: Props) {
     setFundNewsLoading(false);
   }
 
-  // ── Fund AI Intelligence (thesis + focus analysis) ─────────────────────────
+  // ── Fund AI Intelligence (thesis + focus analysis via AI Config) ────────────
   async function fetchFundAiIntel() {
     if (!selectedId || fundAiIntelLoading) return;
     setFundAiIntelLoading(true);
     try {
-      const fund = companies.find(c => c.id === selectedId);
-      const recentInvest = fundExtMap[selectedId]?.recentInvest ?? [];
-      const res = await fetch("/api/funds/generate-descriptions", {
+      const res = await fetch("/api/funds/fund-intelligence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company_id: selectedId,
-          name: fund?.name,
-          sectors: fund?.sectors,
-          recentInvestments: recentInvest,
-        }),
+        body: JSON.stringify({ company_id: selectedId }),
       });
       if (res.ok) {
-        const data = await res.json() as { description?: string };
-        if (data.description) {
-          setFundAiIntel(prev => ({ ...prev, [selectedId]: data.description! }));
-          setFundAiIntelGeneratedAt(prev => ({ ...prev, [selectedId]: new Date().toISOString() }));
-        }
+        const data = await res.json() as FundAiIntelResult;
+        setFundAiIntel(prev => ({ ...prev, [selectedId]: data }));
+        setFundAiIntelGeneratedAt(prev => ({ ...prev, [selectedId]: new Date().toISOString() }));
       }
     } catch {}
     setFundAiIntelLoading(false);
@@ -1699,15 +1708,12 @@ export function FundsViewClient({ initialCompanies }: Props) {
                   { key: "overview",          label: "Overview" },
                   { key: "opportunities",     label: "Opportunities" },
                   { key: "fund_news",         label: "Fund News" },
-                  { key: "intelligence",      label: "Intelligence" },
                   { key: "fund_intelligence", label: "Fund Intel" },
                 ] as const).map(({ key, label }) => (
                   <button
                     key={key}
                     onClick={() => {
                       setFundTab(key);
-                      if (key === "intelligence" && selectedId && !fundIntelMap[selectedId]?.length && !fundIntelLoading) fetchFundIntelligence();
-                      if (key === "fund_news"    && selectedId && !fundNewsMap[selectedId]?.length   && !fundNewsLoading)   fetchFundNews();
                     }}
                     className={cn(
                       "flex-shrink-0 text-xs font-medium py-2 px-3 transition-colors",
@@ -2130,7 +2136,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
                       <div className="px-4 py-3">
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Intelligence Feed</p>
-                          <button onClick={() => setFundTab("intelligence")} className="text-[10px] text-blue-500 hover:underline">See all</button>
+                          <button onClick={() => setFundTab("fund_intelligence")} className="text-[10px] text-blue-500 hover:underline">See all</button>
                         </div>
                         <div className="flex flex-col gap-1.5">
                           {selected.intel.slice(0, 3).map((item, i) => (
@@ -2755,59 +2761,12 @@ export function FundsViewClient({ initialCompanies }: Props) {
                         <p className="text-xs text-slate-400">Click Refresh to fetch live news via Exa</p>
                       </div>
                     )}
-                    {!fundNewsLoading && (fundNewsMap[selectedId ?? ""] ?? []).map((item, i) => (
-                      <div key={i} className="border border-slate-200 rounded-xl p-3 bg-white">
-                        <p className="text-xs font-semibold text-slate-800 leading-snug mb-1">{item.headline}</p>
-                        {item.summary && <p className="text-[11px] text-slate-500 leading-relaxed">{item.summary}</p>}
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-[10px] text-slate-400">{item.source}{item.date ? ` · ${item.date}` : ""}</span>
-                          {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={9} className="text-blue-400" /></a>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* ── INTELLIGENCE TAB (kept for manual/saved intel) ─────────── */}
-                {fundTab === "intelligence" && (
-                  <div className="px-4 py-4 space-y-4 flex-1 overflow-y-auto">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Key Updates · Past 180 Days</p>
-                        {selectedId && fundIntelCachedAt[selectedId] && !fundIntelLoading && (
-                          <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(fundIntelCachedAt[selectedId]).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
-                        )}
-                      </div>
-                      <button
-                        onClick={fetchFundIntelligence}
-                        disabled={fundIntelLoading}
-                        className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
-                      >
-                        {fundIntelLoading ? <><Loader2 size={10} className="animate-spin" />Loading…</> : <><Sparkles size={10} />Refresh</>}
-                      </button>
-                    </div>
-
-                    {fundIntelLoading ? (
-                      <div className="space-y-2">
-                        {[1,2,3,4].map(i => <div key={i} className="h-16 bg-slate-50 rounded-lg animate-pulse" />)}
-                      </div>
-                    ) : fundIntelError ? (
-                      <p className="text-xs text-red-400 italic">{fundIntelError}</p>
-                    ) : !(fundIntelMap[selectedId ?? ""]?.length) ? (
-                      <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl">
-                        <Sparkles size={24} className="mx-auto mb-2 text-slate-300" />
-                        <p className="text-xs text-slate-400 mb-1">No intelligence loaded</p>
-                        <p className="text-[11px] text-slate-300">Click Refresh to fetch latest signals</p>
-                      </div>
-                    ) : (() => {
-                      const items = fundIntelMap[selectedId ?? ""] ?? [];
-                      const cutoff = new Date(Date.now() - 180 * 86_400_000);
-                      const recent = items.filter(i => !i.date || new Date(i.date) >= cutoff)
-                                       .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
-                      const starred = (fundStarredIntel[selectedId ?? ""] ?? []);
-                      const starredItems = items.filter(i => starred.includes(i.headline));
-
-                      function FundIntelCard({ item }: { item: FundIntelItem }) {
+                    {!fundNewsLoading && (() => {
+                      const allItems  = fundNewsMap[selectedId ?? ""] ?? [];
+                      const starred   = fundNewsStarred[selectedId ?? ""] ?? [];
+                      const unstarred = allItems.filter(i => !starred.includes(i.headline));
+                      const starredItems = allItems.filter(i => starred.includes(i.headline));
+                      function FundNewsCard({ item }: { item: FundIntelItem }) {
                         const isStarred = starred.includes(item.headline);
                         const inner = (
                           <div className="border border-slate-200 rounded-xl p-3 bg-white hover:bg-slate-50 transition-colors">
@@ -2817,14 +2776,14 @@ export function FundsViewClient({ initialCompanies }: Props) {
                                 {item.summary && <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-3">{item.summary}</p>}
                               </div>
                               <button
-                                onClick={e => { e.preventDefault(); e.stopPropagation(); selectedId && toggleFundStar(selectedId, item.headline); }}
+                                onClick={e => { e.preventDefault(); e.stopPropagation(); selectedId && toggleFundNewsStar(selectedId, item.headline); }}
                                 className={cn("flex-shrink-0 mt-0.5 transition-colors", isStarred ? "text-amber-400" : "text-slate-200 hover:text-amber-300")}
                               >
                                 <Star size={13} fill={isStarred ? "currentColor" : "none"} />
                               </button>
                             </div>
                             <div className="flex items-center justify-between mt-2 gap-2">
-                              <span className="text-[10px] text-slate-400">{item.source} · {item.date}</span>
+                              <span className="text-[10px] text-slate-400">{item.source}{item.date ? ` · ${item.date}` : ""}</span>
                               {item.url && <ExternalLink size={9} className="text-blue-400 flex-shrink-0" />}
                             </div>
                           </div>
@@ -2833,24 +2792,17 @@ export function FundsViewClient({ initialCompanies }: Props) {
                           <a href={item.url} target="_blank" rel="noopener noreferrer" className="block">{inner}</a>
                         ) : inner;
                       }
-
                       return (
                         <>
                           <div className="space-y-2.5">
-                            {(recent.length > 0 ? recent : items).map((item, i) => (
-                              <FundIntelCard key={i} item={item} />
-                            ))}
+                            {unstarred.map((item, i) => <FundNewsCard key={i} item={item} />)}
                           </div>
                           {starredItems.length > 0 && (
-                            <div className="pt-3 border-t border-slate-100">
-                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                            <div className="pt-3 border-t border-slate-100 mt-3 space-y-2.5">
+                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
                                 <Star size={9} fill="currentColor" className="text-amber-400" /> Saved
                               </p>
-                              <div className="space-y-2.5">
-                                {starredItems.map((item, i) => (
-                                  <FundIntelCard key={i} item={item} />
-                                ))}
-                              </div>
+                              {starredItems.map((item, i) => <FundNewsCard key={i} item={item} />)}
                             </div>
                           )}
                         </>
@@ -2862,23 +2814,73 @@ export function FundsViewClient({ initialCompanies }: Props) {
                 {/* ── FUND INTELLIGENCE TAB ───────────────────────────────────── */}
                 {fundTab === "fund_intelligence" && (
                   <div className="px-4 py-4 space-y-4">
-                    {/* Investment Focus Analysis */}
+                    {/* AI Intelligence Analysis */}
                     <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-2">
                       <div className="flex items-center justify-between">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Investment Focus Analysis</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Fund Intelligence</p>
                         <button onClick={fetchFundAiIntel} disabled={fundAiIntelLoading}
                           className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1">
-                          {fundAiIntelLoading ? <><Loader2 size={10} className="animate-spin" />Analysing…</> : <><Sparkles size={10} />{fundAiIntel[selectedId ?? ""] ? "Regenerate" : "Analyse"}</>}
+                          {fundAiIntelLoading
+                            ? <><Loader2 size={10} className="animate-spin" />Analyzing…</>
+                            : <><Sparkles size={10} />{selectedId && fundAiIntel[selectedId] ? "Regenerate" : "Analyze"}</>}
                         </button>
                       </div>
                       {selectedId && fundAiIntelGeneratedAt[selectedId] && (
                         <p className="text-[10px] text-slate-400">Generated {new Date(fundAiIntelGeneratedAt[selectedId]).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
                       )}
-                      {fundAiIntelLoading && <div className="h-24 bg-slate-50 rounded-lg animate-pulse" />}
+                      {fundAiIntelLoading && (
+                        <div className="space-y-2">
+                          <div className="h-10 bg-slate-50 rounded-lg animate-pulse" />
+                          <div className="h-8 bg-slate-50 rounded-lg animate-pulse" />
+                        </div>
+                      )}
                       {!fundAiIntelLoading && selectedId && fundAiIntel[selectedId] ? (
-                        <p className="text-xs text-slate-700 leading-relaxed">{fundAiIntel[selectedId]}</p>
+                        <div className="space-y-3">
+                          {/* Focus Analysis */}
+                          {fundAiIntel[selectedId].focus_analysis && (
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Investment Focus</p>
+                              <p className="text-xs text-slate-700 leading-relaxed">{fundAiIntel[selectedId].focus_analysis}</p>
+                            </div>
+                          )}
+                          {/* Co-invest angle */}
+                          {fundAiIntel[selectedId].co_invest_angle && (
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Co-invest Angle</p>
+                              <p className="text-xs text-slate-700 leading-relaxed">{fundAiIntel[selectedId].co_invest_angle}</p>
+                            </div>
+                          )}
+                          {/* Portfolio picks */}
+                          {(fundAiIntel[selectedId].portfolio_picks ?? []).length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Portfolio Highlights</p>
+                              <div className="space-y-1.5">
+                                {(fundAiIntel[selectedId].portfolio_picks ?? []).map((pick, i) => (
+                                  <div key={i} className="p-2 bg-slate-50 rounded-lg border border-slate-100">
+                                    <p className="text-xs font-semibold text-slate-800">{pick.name}</p>
+                                    <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{pick.reason}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {/* Pipeline picks */}
+                          {(fundAiIntel[selectedId].pipeline_picks ?? []).length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Pipeline Co-invest Candidates</p>
+                              <div className="space-y-1.5">
+                                {(fundAiIntel[selectedId].pipeline_picks ?? []).map((pick, i) => (
+                                  <div key={i} className="p-2 bg-violet-50 rounded-lg border border-violet-100">
+                                    <p className="text-xs font-semibold text-slate-800">{pick.name}</p>
+                                    <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{pick.reason}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       ) : !fundAiIntelLoading && (
-                        <p className="text-xs text-slate-400 italic">Click Analyse to determine this fund&apos;s key investment focus based on their thesis and recent investments.</p>
+                        <p className="text-xs text-slate-400 italic">Click Analyze to determine this fund&apos;s key investment focus and co-invest opportunities with Valuence.</p>
                       )}
                     </div>
 
@@ -2886,7 +2888,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
                     {selectedId && (fundExtMap[selectedId]?.recentInvest ?? []).length > 0 && (
                       <div>
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Recent Investments (180 days)</p>
-                        <div className="space-y-2">
+                        <div className="max-h-[150px] overflow-y-auto space-y-2 pr-0.5">
                           {(fundExtMap[selectedId]?.recentInvest ?? []).map((inv, i) => (
                             <div key={i} className="border border-slate-200 rounded-lg p-2.5 bg-white">
                               <p className="text-xs font-semibold text-slate-800">{inv.name}</p>
@@ -2905,16 +2907,31 @@ export function FundsViewClient({ initialCompanies }: Props) {
                     {selectedId && (getCurrentOverlap?.() ?? []).length > 0 && (
                       <div>
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Portfolio / Pipeline Overlap</p>
-                        <div className="space-y-1.5">
-                          {(getCurrentOverlap?.() ?? []).map((p, i) => (
-                            <div key={i} className="flex items-center gap-2 p-2 border border-slate-200 rounded-lg bg-white">
-                              <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0", overlapAvatarColor(i))}>{p.initials}</div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-slate-800 truncate">{p.name}</p>
-                                <p className="text-[10px] text-slate-400">{p.role}</p>
+                        <div className="max-h-[150px] overflow-y-auto space-y-1.5 pr-0.5">
+                          {(getCurrentOverlap?.() ?? []).map((p, i) => {
+                            const website = companies.find(c => c.name === p.name)?.website as string | null | undefined;
+                            const domain = website ? website.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] : null;
+                            return (
+                              <div key={i} className="flex items-center gap-2 p-2 border border-slate-200 rounded-lg bg-white">
+                                {domain ? (
+                                  <img
+                                    src={`https://img.logo.dev/${domain}?token=pk_FYk-9BO1QwS9yyppOxJ2vQ&format=png&size=128`}
+                                    alt={p.name}
+                                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.removeProperty("display"); }}
+                                    className="w-6 h-6 rounded object-contain bg-white border border-slate-100 flex-shrink-0"
+                                  />
+                                ) : null}
+                                <div className={cn("w-6 h-6 rounded-full items-center justify-center text-[9px] font-bold text-white flex-shrink-0", overlapAvatarColor(i))}
+                                     style={{ display: domain ? "none" : "flex" }}>
+                                  {p.initials}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-slate-800 truncate">{p.name}</p>
+                                  <p className="text-[10px] text-slate-400">{p.role}</p>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}

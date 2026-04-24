@@ -927,78 +927,138 @@ export function MeetingsClient({
       )}
 
       {/* ── Table body (header is sticky inside so they share the same scroll width) ── */}
-      <div className="flex-1 overflow-y-auto min-h-0 bg-white">
+      {(() => {
+        const unresolvedMeetings = filtered.filter(m =>
+          m.resolution_status == null ||
+          m.resolution_status === "unresolved" ||
+          m.resolution_status === "partial"
+        );
+        const resolvedMeetings = filtered.filter(m =>
+          m.resolution_status === "resolved" ||
+          m.resolution_status === "no_external" ||
+          m.resolution_status === "deferred"
+        );
 
-        {/* Sticky header — lives inside the scroll container so widths always match */}
-        <div className="sticky top-0 z-20 bg-slate-50 border-b border-slate-200 select-none" style={{ userSelect: isDragging ? "none" : undefined }}>
-          <div
-            style={{ display: "grid", gridTemplateColumns: makeGridTemplate(colWidths), alignItems: "center", minHeight: "34px" }}
-          >
-            {/* 1 — strip placeholder */}
-            <div />
+        const StickyHeader = () => (
+          <div className="sticky top-0 z-20 bg-slate-50 border-b border-slate-200 select-none" style={{ userSelect: isDragging ? "none" : undefined }}>
+            <div
+              style={{ display: "grid", gridTemplateColumns: makeGridTemplate(colWidths), alignItems: "center", minHeight: "34px" }}
+            >
+              {/* 1 — strip placeholder */}
+              <div />
 
-            {/* 2 — select all */}
-            <div className="pl-5 pr-3 flex items-center">
-              <input
-                ref={selectAllRef}
-                type="checkbox"
-                checked={allVisibleSelected}
-                onChange={e => handleSelectAll(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-[#0D3D38]"
-              />
-            </div>
-
-            {/* 3 — title header */}
-            <div className="pr-4 min-w-0 flex items-center">
-              <ColHeader label="Title" sortKey="subject" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} />
-            </div>
-
-            {/* 4-8 — resizable column headers */}
-            {(["company", "attendees", "type", "date", "status"] as const).map(col => (
-              <div key={col} className="relative flex items-center h-full">
-                <div className="pl-3 pr-6 flex items-center min-w-0 flex-1">
-                  <ColHeader
-                    label={col === "attendees" ? "Participants" : col.charAt(0).toUpperCase() + col.slice(1)}
-                    sortKey={col === "attendees" ? "subject" : col as SortKey}
-                    currentSort={sortKey}
-                    currentDir={sortDir}
-                    onSort={col === "attendees" ? () => {} : handleSort}
-                  />
-                </div>
-                <div
-                  onPointerDown={e => startResize(e, col)}
-                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize border-r-2 border-slate-200 hover:border-brand-teal active:border-brand-teal transition-colors z-10"
-                  title="Drag to resize"
+              {/* 2 — select all */}
+              <div className="pl-5 pr-3 flex items-center">
+                <input
+                  ref={selectAllRef}
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={e => handleSelectAll(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-[#0D3D38]"
                 />
               </div>
-            ))}
+
+              {/* 3 — title header */}
+              <div className="pr-4 min-w-0 flex items-center">
+                <ColHeader label="Title" sortKey="subject" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} />
+              </div>
+
+              {/* 4-8 — resizable column headers */}
+              {(["company", "attendees", "type", "date", "status"] as const).map(col => (
+                <div key={col} className="relative flex items-center h-full">
+                  <div className="pl-3 pr-6 flex items-center min-w-0 flex-1">
+                    <ColHeader
+                      label={col === "attendees" ? "Participants" : col.charAt(0).toUpperCase() + col.slice(1)}
+                      sortKey={col === "attendees" ? "subject" : col as SortKey}
+                      currentSort={sortKey}
+                      currentDir={sortDir}
+                      onSort={col === "attendees" ? () => {} : handleSort}
+                    />
+                  </div>
+                  <div
+                    onPointerDown={e => startResize(e, col)}
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize border-r-2 border-slate-200 hover:border-brand-teal active:border-brand-teal transition-colors z-10"
+                    title="Drag to resize"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-            <Users size={32} className="mb-3 opacity-30" />
-            <p className="text-sm font-medium text-slate-500">No meetings found</p>
-            <p className="text-xs mt-1 text-slate-400">
-              {search ? "Try clearing your search or filters" : "Click \"Sync Fireflies\" to pull recent meetings"}
-            </p>
+        );
+
+        if (filtered.length === 0) {
+          return (
+            <div className="flex-1 overflow-y-auto min-h-0 bg-white">
+              <StickyHeader />
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                <Users size={32} className="mb-3 opacity-30" />
+                <p className="text-sm font-medium text-slate-500">No meetings found</p>
+                <p className="text-xs mt-1 text-slate-400">
+                  {search ? "Try clearing your search or filters" : "Click \"Sync Fireflies\" to pull recent meetings"}
+                </p>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex-1 overflow-y-auto min-h-0 bg-white">
+            <StickyHeader />
+
+            {/* ── Unresolved section ── */}
+            {unresolvedMeetings.length > 0 && (
+              <>
+                <div className="px-4 py-2 bg-white border-b border-slate-100 flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Unresolved</span>
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
+                    {unresolvedMeetings.length}
+                  </span>
+                </div>
+                {unresolvedMeetings.map(m => (
+                  <MeetingTableRow
+                    key={m.id}
+                    meeting={m}
+                    selected={selectedIds.has(m.id)}
+                    colWidths={colWidths}
+                    onToggle={handleToggleSelect}
+                    onResolve={setResolveMeeting}
+                    onOpenPanel={setPanelMeeting}
+                    onArchive={handleArchive}
+                    onReassign={setReassignId}
+                    onTypeChange={handleTypeChange}
+                  />
+                ))}
+              </>
+            )}
+
+            {/* ── Resolved section ── */}
+            {resolvedMeetings.length > 0 && (
+              <>
+                <div className="px-4 py-2 bg-slate-50 border-y border-slate-200 flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Resolved</span>
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-teal-50 text-teal-600 text-[10px] font-bold">
+                    {resolvedMeetings.length}
+                  </span>
+                </div>
+                {resolvedMeetings.map(m => (
+                  <MeetingTableRow
+                    key={m.id}
+                    meeting={m}
+                    selected={selectedIds.has(m.id)}
+                    colWidths={colWidths}
+                    onToggle={handleToggleSelect}
+                    onResolve={setResolveMeeting}
+                    onOpenPanel={setPanelMeeting}
+                    onArchive={handleArchive}
+                    onReassign={setReassignId}
+                    onTypeChange={handleTypeChange}
+                  />
+                ))}
+              </>
+            )}
           </div>
-        ) : (
-          filtered.map(m => (
-            <MeetingTableRow
-              key={m.id}
-              meeting={m}
-              selected={selectedIds.has(m.id)}
-              colWidths={colWidths}
-              onToggle={handleToggleSelect}
-              onResolve={setResolveMeeting}
-              onOpenPanel={setPanelMeeting}
-              onArchive={handleArchive}
-              onReassign={setReassignId}
-              onTypeChange={handleTypeChange}
-            />
-          ))
-        )}
-      </div>
+        );
+      })()}
 
       {/* ── Archived section ────────────────────────────────────────────────── */}
       {showArchived && (

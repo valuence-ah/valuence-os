@@ -11,7 +11,7 @@ import { MeetingTranscripts } from "@/components/crm/meeting-transcripts";
 import {
   Search, Plus, X, Check, Loader2, Mail, Video, Phone, FileText,
   Building2, Target, TrendingUp, AlertCircle, Users, User, Shield,
-  Handshake, MoreHorizontal, ChevronRight, ExternalLink, RefreshCw, MapPin, Link2,
+  Handshake, MoreHorizontal, ChevronRight, ExternalLink, RefreshCw, MapPin, Link2, Star,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -319,6 +319,8 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [newsLoading, setNewsLoading]       = useState(false);
   const [newsCachedAt, setNewsCachedAt]     = useState<string | null>(null);
   const [newsSource, setNewsSource]         = useState<"exa" | "claude" | null>(null);
+  // Company News starred — persisted to localStorage keyed by company id
+  const [newsStarred, setNewsStarred]       = useState<Record<string, string[]>>({});
   // Partnership Intelligence (alignment-style)
   const [partnerAlign, setPartnerAlign]     = useState<{ alignment_summary: string; portfolio_picks: { id: string | null; name: string; reason: string; sectors: string[]; stage: string | null; description: string | null; website: string | null }[]; pipeline_picks: { id: string | null; name: string; reason: string; sectors: string[]; stage: string | null; description: string | null; website: string | null }[] } | null>(null);
   const [partnerAlignLoading, setPartnerAlignLoading] = useState(false);
@@ -728,6 +730,21 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   }
 
   // ── Company News (Exa-powered) ───────────────────────────────────────────
+  // Load starred from localStorage on mount
+  useEffect(() => {
+    try { const s = localStorage.getItem("strategic_news_starred"); if (s) setNewsStarred(JSON.parse(s)); } catch {}
+  }, []);
+
+  function toggleNewsStar(companyId: string, headline: string) {
+    setNewsStarred(prev => {
+      const current = prev[companyId] ?? [];
+      const next = current.includes(headline) ? current.filter(h => h !== headline) : [...current, headline];
+      const updated = { ...prev, [companyId]: next };
+      try { localStorage.setItem("strategic_news_starred", JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }
+
   async function loadCompanyNews() {
     if (!selected) return;
     setNewsLoading(true);
@@ -1823,21 +1840,53 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                       <p className="text-xs">Click Refresh to fetch live news via Exa</p>
                     </div>
                   )}
-                  {!newsLoading && newsItems.map((item, i) => (
-                    <div key={i} className="border border-slate-200 rounded-lg p-2.5 bg-white">
-                      <p className="text-xs font-medium text-slate-800 leading-snug">{item.headline}</p>
-                      {item.summary && <p className="text-xs text-slate-500 mt-1 leading-relaxed">{item.summary}</p>}
-                      <div className="flex items-center justify-between mt-1.5">
-                        <span className="text-[10px] text-slate-400">{item.source}{item.date ? ` · ${item.date}` : ""}</span>
-                        {item.url && (
-                          <a href={item.url} target="_blank" rel="noopener noreferrer"
-                            className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5">
-                            View <ExternalLink size={9} />
-                          </a>
+                  {!newsLoading && (() => {
+                    const compId = selected?.id ?? "";
+                    const starred = newsStarred[compId] ?? [];
+                    const unstarred = newsItems.filter(i => !starred.includes(i.headline));
+                    const starredItems = newsItems.filter(i => starred.includes(i.headline));
+                    function NewsCard({ item }: { item: typeof newsItems[number] }) {
+                      const isStarred = starred.includes(item.headline);
+                      const inner = (
+                        <div className="border border-slate-200 rounded-lg p-2.5 bg-white hover:bg-slate-50 transition-colors">
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-slate-800 leading-snug">{item.headline}</p>
+                              {item.summary && <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-3">{item.summary}</p>}
+                            </div>
+                            <button
+                              onClick={e => { e.preventDefault(); e.stopPropagation(); toggleNewsStar(compId, item.headline); }}
+                              className={cn("flex-shrink-0 mt-0.5 transition-colors", isStarred ? "text-amber-400" : "text-slate-200 hover:text-amber-300")}
+                            >
+                              <Star size={13} fill={isStarred ? "currentColor" : "none"} />
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between mt-1.5 gap-2">
+                            <span className="text-[10px] text-slate-400">{item.source}{item.date ? ` · ${item.date}` : ""}</span>
+                            {item.url && <ExternalLink size={9} className="text-blue-400 flex-shrink-0" />}
+                          </div>
+                        </div>
+                      );
+                      return item.url ? (
+                        <a href={item.url} target="_blank" rel="noopener noreferrer" className="block">{inner}</a>
+                      ) : inner;
+                    }
+                    return (
+                      <>
+                        <div className="space-y-2">
+                          {unstarred.map((item, i) => <NewsCard key={i} item={item} />)}
+                        </div>
+                        {starredItems.length > 0 && (
+                          <div className="pt-3 border-t border-slate-100 space-y-2">
+                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                              <Star size={9} fill="currentColor" className="text-amber-400" /> Saved
+                            </p>
+                            {starredItems.map((item, i) => <NewsCard key={i} item={item} />)}
+                          </div>
                         )}
-                      </div>
-                    </div>
-                  ))}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 

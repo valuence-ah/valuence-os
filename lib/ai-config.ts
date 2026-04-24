@@ -110,6 +110,82 @@ Generate a one-sentence summary for each research item that explains its relevan
 Return ONLY a JSON array. No markdown. No prose outside the JSON.
 [{"index":0,"summary":"One sentence describing the signal and its deeptech relevance."},...]`;
 
+const PARTNERSHIP_INTELLIGENCE_DEFAULT = `You are a strategic partnerships analyst at Valuence Ventures — an early-stage deeptech VC fund.
+
+VALUENCE VENTURES THESIS:
+We invest at the intersection of science and capital — backing founders commercialising breakthrough research in cleantech (energy transition, sustainable materials, carbon capture), techbio (synthetic biology, diagnostics, bioprocessing, ag-bio), and advanced materials (specialty polymers, composites, semiconductors). We write $500K–$2M checks at pre-seed and seed stage.
+
+STRATEGIC PARTNER — {{partner_name}}:
+{{partner_profile}}
+
+OUR PORTFOLIO (invested companies):
+{{portfolio}}
+
+OUR ACTIVE PIPELINE (companies under evaluation, not yet passed):
+{{pipeline}}
+
+Produce a partnership intelligence brief for {{partner_name}}:
+
+1. ALIGNMENT (2–3 sentences): Why is Valuence Ventures a strong strategic partner for this organisation? Reference their specific type, focus area, geography, or stated interests. Be concrete — explain how their capabilities, customer base, or technology relate to Valuence's deeptech portfolio.
+
+2. PORTFOLIO PICKS (1–2 companies): Select 1–2 companies from the portfolio list that would most benefit from a partnership with this organisation. Base your selection on sector and stage. For each pick, write one sentence of rationale tied to the partner's specific capabilities or customer relationships.
+
+3. PIPELINE PICKS (2–4 companies): Select 2–4 companies from the pipeline list that could be strong candidates for a commercial pilot, strategic introduction, or customer relationship with this partner. For each pick, write one sentence of rationale. Never fabricate company names — only use names exactly as they appear in the lists above.
+
+IMPORTANT: You MUST populate portfolio_picks and pipeline_picks. Do not return empty arrays unless the lists above literally say "None."
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "alignment_summary": "2–3 sentence explanation of strategic partnership fit",
+  "portfolio_picks": [
+    { "name": "Exact company name from portfolio list", "reason": "One sentence why this fits the partner" }
+  ],
+  "pipeline_picks": [
+    { "name": "Exact company name from pipeline list", "reason": "One sentence why this fits the partner" }
+  ]
+}`;
+
+const FUND_INTELLIGENCE_DEFAULT = `You are a co-investment analyst at Valuence Ventures — an early-stage deeptech VC fund.
+
+VALUENCE VENTURES THESIS:
+We invest at the intersection of science and capital — backing founders commercialising breakthrough research in cleantech (energy transition, sustainable materials, carbon capture), techbio (synthetic biology, diagnostics, bioprocessing, ag-bio), and advanced materials (specialty polymers, composites, semiconductors). We write $500K–$2M checks at pre-seed and seed stage.
+
+FUND PROFILE — {{fund_name}}:
+{{fund_profile}}
+
+RECENT INVESTMENTS BY {{fund_name}} (past 180 days):
+{{recent_investments}}
+
+OUR PORTFOLIO (invested companies):
+{{portfolio}}
+
+OUR ACTIVE PIPELINE (companies under evaluation, not yet passed):
+{{pipeline}}
+
+Produce a fund intelligence brief for {{fund_name}}:
+
+1. FOCUS ANALYSIS (2–3 sentences): Based on their fund profile and recent investments, what is {{fund_name}}'s current investment focus? Be specific about sectors, stages, geographies, and thesis — avoid generic VC language. Reference their actual recent deals where available.
+
+2. CO-INVEST ANGLE (1–2 sentences): How does {{fund_name}}'s focus create co-investment opportunities with Valuence? What is the strategic rationale for the relationship — are they complementary, overlapping, or adjacent? Be honest about fit.
+
+3. PORTFOLIO PICKS (1–2 companies): Select 1–2 companies from OUR PORTFOLIO that {{fund_name}} would likely find most relevant based on their thesis and recent investment activity. For each, write one sentence of rationale tied to the fund's known focus areas. Only use names exactly as they appear in the portfolio list above.
+
+4. PIPELINE PICKS (2–4 companies): Select 2–4 companies from OUR PIPELINE that {{fund_name}} could co-invest in or that align with their thesis. For each, write one sentence of rationale. Never fabricate company names — only use names exactly as they appear in the lists above.
+
+IMPORTANT: You MUST populate portfolio_picks and pipeline_picks. Do not return empty arrays unless the lists literally say "None."
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "focus_analysis": "2–3 sentence analysis of the fund's investment focus",
+  "co_invest_angle": "1–2 sentence co-investment rationale",
+  "portfolio_picks": [
+    { "name": "Exact company name from portfolio list", "reason": "One sentence why this fits the fund's thesis" }
+  ],
+  "pipeline_picks": [
+    { "name": "Exact company name from pipeline list", "reason": "One sentence why this could be a co-invest" }
+  ]
+}`;
+
 const DEFAULTS: Record<string, AiConfig> = {
   pipeline_assistant:  { model: SONNET, max_tokens: 2048,  temperature: 0.30, system_prompt: null, user_prompt: "" },
   company_description: { model: SONNET, max_tokens: 500,   temperature: 0.50, system_prompt: null, user_prompt: "" },
@@ -124,8 +200,8 @@ const DEFAULTS: Record<string, AiConfig> = {
   pilot_intelligence:     { model: SONNET, max_tokens: 2500, temperature: 0.20, system_prompt: null, user_prompt: "" },
   competitor_intelligence:{ model: SONNET, max_tokens: 2500, temperature: 0.20, system_prompt: null, user_prompt: "" },
   lp_intelligence:        { model: SONNET, max_tokens: 1500, temperature: 0.30, system_prompt: "You are an LP relations specialist. Return only valid JSON as instructed.", user_prompt: "" },
-  partnership_intelligence: { model: SONNET, max_tokens: 1500, temperature: 0.30, system_prompt: "You are a strategic partnerships analyst. Return only valid JSON as instructed.", user_prompt: "" },
-  fund_intelligence:        { model: SONNET, max_tokens: 2000, temperature: 0.30, system_prompt: "You are a VC fund analyst. Return only valid JSON as instructed.", user_prompt: "" },
+  partnership_intelligence: { model: SONNET, max_tokens: 1500, temperature: 0.30, system_prompt: "You are a strategic partnerships analyst. Return only valid JSON as instructed.", user_prompt: PARTNERSHIP_INTELLIGENCE_DEFAULT },
+  fund_intelligence:        { model: SONNET, max_tokens: 2000, temperature: 0.30, system_prompt: "You are a VC fund analyst. Return only valid JSON as instructed.", user_prompt: FUND_INTELLIGENCE_DEFAULT },
 };
 
 /** Loads an AI config from Supabase, falling back to hardcoded defaults. */

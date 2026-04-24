@@ -1647,15 +1647,6 @@ export function CompanyDetailClient({
             )}
           >
             {t}
-            {t === "Contacts" && (contacts.length > 0 || (typeGroup === "startup" && interactions.length > 0)) && (
-                <span className="ml-1.5 badge bg-slate-100 text-slate-500">
-                  {typeGroup === "startup" && interactions.length > 0
-                    ? `${contacts.length} · ${interactions.length}`
-                    : contacts.length}
-                </span>
-              )}
-            {t === "Interactions" && interactions.length > 0 && <span className="ml-1.5 badge bg-slate-100 text-slate-500">{interactions.length}</span>}
-            {t === "Memos" && memos.length > 0 && <span className="ml-1.5 badge bg-slate-100 text-slate-500">{memos.length}</span>}
           </button>
         ))}
       </div>
@@ -1814,7 +1805,12 @@ export function CompanyDetailClient({
 
               <div className="card p-5 flex flex-col" style={{height: "280px"}}>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Company Intelligence</h3>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Company Intelligence</h3>
+                    <button onClick={() => setTab("Intelligence")} title="Go to Intelligence tab" className="text-[10px] text-violet-500 hover:text-violet-700 flex items-center gap-0.5">
+                      <Sparkles size={11} />
+                    </button>
+                  </div>
                   <button onClick={() => setTab("Intelligence")} className="text-xs text-blue-600 hover:text-blue-700">Full view →</button>
                 </div>
                 <div className="flex-1 overflow-y-auto space-y-3">
@@ -1834,7 +1830,7 @@ export function CompanyDetailClient({
                       </div>
                       <div className="space-y-0.5">
                         {memos.slice(0, 2).map(m => (
-                          <Link key={m.id} href={`/memos/${m.id}`} className="block text-xs text-blue-600 hover:text-blue-700 truncate">
+                          <Link key={m.id} href={`/memos/${m.id}`} className="block text-xs text-blue-600 hover:text-blue-700 truncate rounded px-1.5 py-1 hover:bg-slate-100 transition-colors cursor-pointer">
                             {m.title}
                           </Link>
                         ))}
@@ -2478,7 +2474,7 @@ export function CompanyDetailClient({
 
       {/* ── INTELLIGENCE TAB ── */}
       {tab === "Intelligence" && (
-        <IntelligenceTab companyId={company.id} autoLoad={typeGroup === "startup"} />
+        <IntelligenceTab companyId={company.id} />
       )}
 
       {/* ── Edit Modal ── */}
