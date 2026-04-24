@@ -314,11 +314,12 @@ export function StrategicViewClient({ initialCompanies }: Props) {
 
   // Panel tab
   const [panelTab, setPanelTab] = useState<"overview" | "opportunities" | "company_news" | "intelligence">("overview");
-  // Company News (Exa-powered)
-  const [newsItems, setNewsItems]           = useState<{ headline: string; source: string; date: string; summary: string; url: string | null }[]>([]);
+  // Company News (Exa-powered) — keyed by company id so each company keeps its own news
+  type StrategicNewsItem = { headline: string; source: string; date: string; summary: string; url: string | null };
+  const [newsMap, setNewsMap]               = useState<Record<string, StrategicNewsItem[]>>({});
   const [newsLoading, setNewsLoading]       = useState(false);
-  const [newsCachedAt, setNewsCachedAt]     = useState<string | null>(null);
-  const [newsSource, setNewsSource]         = useState<"exa" | "claude" | null>(null);
+  const [newsCachedAt, setNewsCachedAt]     = useState<Record<string, string>>({});
+  const [newsSource, setNewsSource]         = useState<Record<string, "exa" | "claude">>({});
   // Company News starred — persisted to localStorage keyed by company id
   const [newsStarred, setNewsStarred]       = useState<Record<string, string[]>>({});
   // Partnership Intelligence (alignment-style)
@@ -750,8 +751,13 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     setNewsLoading(true);
     try {
       const res = await fetch(`/api/lp/${selected.id}/news`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-      const data = await res.json() as { items?: typeof newsItems; source?: "exa" | "claude" };
-      if (data.items) { setNewsItems(data.items); setNewsCachedAt(new Date().toISOString()); setNewsSource(data.source ?? null); }
+      const data = await res.json() as { items?: StrategicNewsItem[]; source?: "exa" | "claude" };
+      if (data.items) {
+        const id = selected.id;
+        setNewsMap(prev => ({ ...prev, [id]: data.items! }));
+        setNewsCachedAt(prev => ({ ...prev, [id]: new Date().toISOString() }));
+        if (data.source) setNewsSource(prev => ({ ...prev, [id]: data.source! }));
+      }
     } catch {}
     setNewsLoading(false);
   }
@@ -1615,10 +1621,10 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                           </div>
                           <div
                             className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center cursor-pointer hover:bg-emerald-100 transition-colors"
-                            onClick={() => { setPanelTab("company_news"); if (newsItems.length === 0) loadCompanyNews(); }}
+                            onClick={() => { setPanelTab("company_news"); if (!(newsMap[selected?.id ?? ""]?.length)) loadCompanyNews(); }}
                           >
                             <FileText size={14} className="text-emerald-500 mx-auto mb-1" />
-                            <p className="text-lg font-bold text-emerald-700">{newsItems.length > 0 ? newsItems.length : "—"}</p>
+                            <p className="text-lg font-bold text-emerald-700">{(newsMap[selected?.id ?? ""] ?? []).length > 0 ? (newsMap[selected?.id ?? ""] ?? []).length : "—"}</p>
                             <p className="text-[10px] text-emerald-600 font-medium">Company News</p>
                             <p className="text-[10px] text-slate-400">click to view</p>
                           </div>
@@ -1818,13 +1824,13 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Recent News</h3>
-                      {newsSource && !newsLoading && (
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", newsSource === "exa" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500")}>
-                          {newsSource === "exa" ? "⚡ Live · Exa" : "AI · Claude"}
+                      {selected && newsSource[selected.id] && !newsLoading && (
+                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", newsSource[selected.id] === "exa" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500")}>
+                          {newsSource[selected.id] === "exa" ? "⚡ Live · Exa" : "AI · Claude"}
                         </span>
                       )}
-                      {newsCachedAt && !newsLoading && (
-                        <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(newsCachedAt).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
+                      {selected && newsCachedAt[selected.id] && !newsLoading && (
+                        <span className="text-[10px] text-slate-400">· {(() => { const d = Date.now() - new Date(newsCachedAt[selected.id]).getTime(); const m = Math.floor(d/60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; })()}</span>
                       )}
                     </div>
                     <button onClick={loadCompanyNews} disabled={newsLoading}
@@ -1834,7 +1840,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                     </button>
                   </div>
                   {newsLoading && <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />)}</div>}
-                  {!newsLoading && newsItems.length === 0 && (
+                  {!newsLoading && !(newsMap[selected?.id ?? ""]?.length) && (
                     <div className="text-center py-8 text-slate-400">
                       <FileText size={20} className="mx-auto mb-2 opacity-40" />
                       <p className="text-xs">Click Refresh to fetch live news via Exa</p>
@@ -1842,10 +1848,11 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                   )}
                   {!newsLoading && (() => {
                     const compId = selected?.id ?? "";
+                    const allItems = newsMap[compId] ?? [];
                     const starred = newsStarred[compId] ?? [];
-                    const unstarred = newsItems.filter(i => !starred.includes(i.headline));
-                    const starredItems = newsItems.filter(i => starred.includes(i.headline));
-                    function NewsCard({ item }: { item: typeof newsItems[number] }) {
+                    const unstarred = allItems.filter(i => !starred.includes(i.headline));
+                    const starredItems = allItems.filter(i => starred.includes(i.headline));
+                    function NewsCard({ item }: { item: StrategicNewsItem }) {
                       const isStarred = starred.includes(item.headline);
                       const inner = (
                         <div className="border border-slate-200 rounded-lg p-2.5 bg-white hover:bg-slate-50 transition-colors">
