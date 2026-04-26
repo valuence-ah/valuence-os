@@ -1432,7 +1432,7 @@ export function PipelineClient({ initialCompanies }: Props) {
       {pipelineView === "board" && (
         <>
           {/* Board toolbar (search + controls, same as list header) */}
-          <div className="w-[300px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
+          <div className="hidden md:flex w-[300px] flex-shrink-0 border-r border-slate-200 bg-white flex-col">
             <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-slate-800">
@@ -1569,7 +1569,7 @@ export function PipelineClient({ initialCompanies }: Props) {
       {/* ═══════════════════════════════════════════════════════════════════════
           LEFT PANEL — Company List
       ═══════════════════════════════════════════════════════════════════════ */}
-      {pipelineView === "list" && <div className="w-[300px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
+      {pipelineView === "list" && <div className="hidden md:flex w-[300px] flex-shrink-0 border-r border-slate-200 bg-white flex-col">
 
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-2">
@@ -1709,19 +1709,28 @@ export function PipelineClient({ initialCompanies }: Props) {
           RIGHT PANEL — Company Detail  (list view: flex-1 / board view: fixed 520px)
       ═══════════════════════════════════════════════════════════════════════ */}
       {pipelineView === "list" && !selected ? (
-        <div className="flex-1 flex items-center justify-center bg-slate-50">
+        <div className="hidden md:flex flex-1 items-center justify-center bg-slate-50">
           <div className="text-center text-slate-400">
             <Building2 size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-xs">Select a company to view details</p>
           </div>
         </div>
       ) : selected ? (
-        <div ref={rightPanelRef} className={pipelineView === "board" ? "w-[680px] flex-shrink-0 border-l border-slate-200 overflow-y-auto bg-white" : "flex-1 overflow-y-auto bg-white"}>
+        <div ref={rightPanelRef} className={pipelineView === "board" ? "w-full md:w-[680px] flex-shrink-0 border-l border-slate-200 overflow-y-auto bg-white" : "fixed md:relative inset-0 md:inset-auto md:flex-1 overflow-y-auto bg-white z-30"}>
 
           {/* ── Company Header ── */}
-          <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-8 py-3 flex flex-col gap-1.5">
+          <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-4 flex flex-col gap-1.5">
             {/* Row 1: logo + name */}
             <div className="flex items-center gap-4">
+              <button
+                className="md:hidden flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 mr-3 flex-shrink-0"
+                onClick={() => setSelectedId(null)}
+              >
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 12L6 8l4-4" />
+                </svg>
+                Back
+              </button>
               <CompanyLogo company={selected} />
               <h1 className="text-base font-bold text-slate-900">{selected.name}</h1>
             </div>

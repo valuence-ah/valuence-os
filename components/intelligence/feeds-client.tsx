@@ -327,11 +327,13 @@ export function FeedsClient() {
 
       {/* Three-panel layout */}
       <div className="flex flex-1 overflow-hidden border border-gray-200 rounded-lg bg-white min-h-0">
-        <FeedsSourcePanel
-          sources={sources}
-          selectedSource={sourceFilter}
-          onSelectSource={setSourceFilter}
-        />
+        <div className="hidden md:block">
+          <FeedsSourcePanel
+            sources={sources}
+            selectedSource={sourceFilter}
+            onSelectSource={setSourceFilter}
+          />
+        </div>
         <FeedsNewsColumn
           articles={filteredArticles}
           bucketFilter={bucketFilter}

@@ -377,6 +377,7 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
 
   return (
     <div className="flex-1 overflow-auto">
+      <div className="overflow-x-auto">
       <table className="w-full text-xs min-w-[900px]">
         <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
           <tr>
@@ -480,6 +481,7 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
           ))}
         </tbody>
       </table>
+      </div>
       {sorted.length === 0 && (
         <div className="flex items-center justify-center h-40 text-slate-400 text-xs">No tasks match your filters.</div>
       )}
@@ -819,8 +821,8 @@ function SidePanel({ task, onClose, onUpdate, onDelete, initiatives }: SidePanel
 
   return (
     <div
-      className={cn("fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-30 flex flex-col transition-transform duration-300", visible ? "translate-x-0" : "translate-x-full")}
-      style={{ width: 480 }}
+      className={cn("fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-50 flex flex-col transition-transform duration-300", visible ? "translate-x-0" : "translate-x-full")}
+      style={{ width: "min(480px, 100vw)" }}
     >
       {/* Header */}
       <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100">
@@ -1741,7 +1743,7 @@ export function TasksClient() {
       </div>
 
       {/* Content area */}
-      <div className={cn("flex flex-1 overflow-hidden transition-all duration-300", selectedTask ? "mr-[480px]" : "")}>
+      <div className={cn("flex flex-1 overflow-hidden transition-all duration-300", selectedTask ? "md:mr-[480px]" : "")}>
         {view === "table" && (
           <TableView
             tasks={filteredTasks}

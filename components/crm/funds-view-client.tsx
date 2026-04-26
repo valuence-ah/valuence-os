@@ -1361,7 +1361,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
       <div className="flex flex-1 overflow-hidden relative">
 
         {/* Table */}
-        <div className={cn("flex-1 overflow-auto", selectedId ? "mr-[480px]" : "")}>
+        <div className={cn("flex-1 overflow-auto", selectedId ? "md:mr-[480px]" : "")}>
           <table className="w-full text-sm border-collapse" style={{ minWidth: 1200 }}>
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>
@@ -1635,10 +1635,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
         {/* ── Side Panel ────────────────────────────────────────────────────── */}
         <div
           className={cn(
-            "fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-30 flex flex-col transition-transform duration-300",
+            "fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-40 flex flex-col transition-transform duration-300",
             visible ? "translate-x-0" : "translate-x-full"
           )}
-          style={{ width: 480 }}
+          style={{ width: "min(480px, 100vw)" }}
         >
           {selected && (
             <>

@@ -145,7 +145,7 @@ export function CompaniesClient({ initialCompanies, initialFilter }: Props) {
       {/* Table */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="data-table w-full">
+          <table className="data-table w-full min-w-[500px]">
             <thead>
               <tr>
                 <th>Company</th>

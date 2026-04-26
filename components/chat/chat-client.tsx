@@ -41,7 +41,7 @@ export function ChatClient() {
     <div className="flex-1 flex flex-col min-h-0 bg-white">
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
 
         {showWelcome ? (
           /* Welcome screen */
@@ -134,7 +134,7 @@ export function ChatClient() {
       </div>
 
       {/* Input area */}
-      <div className="border-t border-slate-200 bg-white px-6 py-4">
+      <div className="border-t border-slate-200 bg-white px-4 md:px-6 py-4">
         <form
           onSubmit={handleSubmit}
           className="max-w-3xl mx-auto flex gap-3 items-end"

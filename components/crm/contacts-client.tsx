@@ -807,7 +807,7 @@ export function ContactsClient({
         </div>
 
         {/* Table */}
-        <table className="w-full text-sm border-collapse">
+        <div className="overflow-x-auto -mx-4 md:mx-0"><table className="w-full text-sm border-collapse min-w-[640px]">
           <thead className="sticky top-[57px] z-10 bg-slate-50">
             <tr>
               {COL_DEFS.filter(c => visibleCols.includes(c.key)).map(col => (
@@ -960,7 +960,7 @@ export function ContactsClient({
               );
             })}
           </tbody>
-        </table>
+        </table></div>
 
         {/* Load More */}
         {!allLoaded && !search && (

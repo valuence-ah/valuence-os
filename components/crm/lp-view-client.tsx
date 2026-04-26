@@ -1668,7 +1668,7 @@ export function LpViewClient({ initialCompanies }: Props) {
 
         {/* Table */}
         {viewMode === "table" && (
-          <div className={cn("flex-1 overflow-auto", selected ? "mr-[480px]" : "")}>
+          <div className={cn("flex-1 overflow-auto", selected ? "md:mr-[480px]" : "")}>
             <table className="w-full text-sm border-collapse" style={{ tableLayout: "fixed" }}>
               <colgroup>
                 {Object.keys(DEFAULT_COL_WIDTHS).map(col => <col key={col} style={{ width: colWidths[col] }} />)}
@@ -1746,11 +1746,11 @@ export function LpViewClient({ initialCompanies }: Props) {
           </div>
         )}
 
-        {viewMode === "kanban" && <div className={cn("flex-1 overflow-hidden flex flex-col", selected ? "mr-[480px]" : "")}><KanbanView companies={filtered} onSelect={selectCompany} selectedId={selectedId} lastTouchMap={lastTouchMap} /></div>}
-        {viewMode === "map"    && <div className={cn("flex-1 overflow-hidden flex flex-col", selected ? "mr-[480px]" : "")}><MapView companies={filtered} onSelect={selectCompany} selectedId={selectedId} /></div>}
+        {viewMode === "kanban" && <div className={cn("flex-1 overflow-hidden flex flex-col", selected ? "md:mr-[480px]" : "")}><KanbanView companies={filtered} onSelect={selectCompany} selectedId={selectedId} lastTouchMap={lastTouchMap} /></div>}
+        {viewMode === "map"    && <div className={cn("flex-1 overflow-hidden flex flex-col", selected ? "md:mr-[480px]" : "")}><MapView companies={filtered} onSelect={selectCompany} selectedId={selectedId} /></div>}
 
         {/* ── Detail panel ─────────────────────────────────────────────────── */}
-        <div className={cn("fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-30 flex flex-col transition-transform duration-300", selected ? "translate-x-0" : "translate-x-full")} style={{ width: 480 }}>
+        <div className={cn("fixed right-0 top-0 h-full bg-white border-l border-slate-200 shadow-2xl z-40 flex flex-col transition-transform duration-300", selected ? "translate-x-0" : "translate-x-full")} style={{ width: "min(480px, 100vw)" }}>
           {selected && (<>
             {/* Header */}
             <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100">

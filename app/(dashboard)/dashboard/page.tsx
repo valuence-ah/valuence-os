@@ -143,7 +143,7 @@ export default async function DashboardPage() {
         subtitle={<DashboardGreeting />}
       />
 
-      <main className="flex-1 overflow-auto p-6 space-y-6">
+      <main className="flex-1 overflow-auto p-4 md:p-6 space-y-4 md:space-y-6">
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -159,7 +159,7 @@ export default async function DashboardPage() {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
 
           {/* Active Pipeline — reads company deal_status (not legacy deals table) */}
           <div className="card">

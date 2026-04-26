@@ -99,7 +99,8 @@ export function PortfolioClient({ companies: initial }: Props) {
     fetchDetail(selectedId);
   }, [selectedId, fetchDetail]);
 
-  async function handleSelect(id: string) {
+  async function handleSelect(id: string | null) {
+    if (!id) { setSelectedId(null); return; }
     if (id === selectedId) return;
     setSelectedId(id);
     setDetail(null);
@@ -142,12 +143,23 @@ export function PortfolioClient({ companies: initial }: Props) {
         <PortfolioStatTiles companies={companies} />
       </div>
       <div className="flex flex-1 overflow-hidden">
-        <PortfolioCompanyList
-          companies={companies}
-          selectedId={selectedId}
-          onSelect={handleSelect}
-        />
-        <div className="flex-1 overflow-hidden">
+        <div className={selectedCompany ? "hidden md:block" : "block"}>
+          <PortfolioCompanyList
+            companies={companies}
+            selectedId={selectedId}
+            onSelect={handleSelect}
+          />
+        </div>
+        <div className="flex-1 overflow-hidden relative">
+          {selectedCompany && (
+            <button
+              className="md:hidden absolute top-4 left-4 z-10 flex items-center gap-1.5 text-sm text-blue-600 bg-white rounded-lg px-3 py-1.5 shadow border border-slate-200"
+              onClick={() => handleSelect(null)}
+            >
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 12L6 8l4-4" /></svg>
+              Back
+            </button>
+          )}
           {selectedCompany ? (
             <PortfolioDetailPanel
               company={selectedCompany}
@@ -157,7 +169,7 @@ export function PortfolioClient({ companies: initial }: Props) {
               onCompanyUpdate={handleCompanyUpdate}
             />
           ) : (
-            <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+            <div className="hidden md:flex items-center justify-center h-full text-slate-400 text-sm">
               Select a company to view details
             </div>
           )}

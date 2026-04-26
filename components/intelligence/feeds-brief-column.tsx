@@ -18,7 +18,7 @@ export function FeedsBriefColumn({
   sourceMap, onAddToPipeline, onAddToFunds,
 }: Props) {
   return (
-    <div className="w-[532px] flex-shrink-0 flex flex-col overflow-hidden">
+    <div className="hidden lg:flex w-[532px] flex-shrink-0 flex-col overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
         <p className="text-sm font-semibold text-gray-900">AI daily brief</p>

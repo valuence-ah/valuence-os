@@ -10,6 +10,13 @@
     --sidebar-width: 240px;
   }
 
+  /* On mobile, sidebar is a drawer — no layout offset needed */
+  @media (max-width: 767px) {
+    :root {
+      --sidebar-width: 0px;
+    }
+  }
+
   html {
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -116,32 +123,12 @@
 .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
 .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
 
-/* ── Sidebar nav — hide scrollbar cross-browser ── */
+/* ── Sidebar nav scrollbar — hidden on all browsers ── */
 .sidebar-nav::-webkit-scrollbar { display: none; }
 .sidebar-nav { scrollbar-width: none; -ms-overflow-style: none; }
 
-/* ── IC Memo print / PDF export ── */
-@media print {
-  /* Hide everything except the memo content */
-  nav, aside, header, .no-print { display: none !important; }
-
-  /* Make the memo fill the page */
-  body, html { background: white !important; }
-  .memo-print-root { padding: 0 !important; overflow: visible !important; }
-  .memo-print-content {
-    max-width: 100% !important;
-    box-shadow: none !important;
-    border: none !important;
-    padding: 0 !important;
-  }
-
-  /* Force all collapsible section bodies to show */
-  .memo-section-body { display: block !important; }
-
-  /* Page breaks */
-  section { page-break-inside: avoid; }
-
-  /* Remove hover effects */
-  button { display: none !important; }
-  select { border: none !important; background: transparent !important; }
+/* Mobile touch targets — minimum 44px hit area */
+@media (max-width: 767px) {
+  .nav-item { min-height: 44px; }
+  button, a { -webkit-tap-highlight-color: transparent; }
 }

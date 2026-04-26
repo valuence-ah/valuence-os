@@ -425,10 +425,10 @@ export function SourcingClient({ initialSignals }: Props) {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 overflow-auto p-6 space-y-5">
+    <div className="flex-1 overflow-auto p-4 md:p-6 space-y-5">
 
       {/* ── Summary Tiles ── */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
           { label: "Total Signals",       value: stats.total,          color: "text-slate-900",  sub: "all time" },
           { label: "New / Unreviewed",     value: stats.newCount,       color: "text-blue-600",   sub: "pending review" },
