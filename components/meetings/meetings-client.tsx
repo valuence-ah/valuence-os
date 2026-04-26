@@ -728,7 +728,7 @@ export function MeetingsClient({
     <div className="flex-1 overflow-hidden flex flex-col min-h-0">
 
       {/* ── Stats bar ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-6 px-6 py-3 border-b border-slate-100 bg-white flex-shrink-0">
+      <div className="flex items-center gap-3 md:gap-6 px-4 md:px-6 py-3 border-b border-slate-100 bg-white flex-shrink-0">
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
           <span className="text-lg font-bold text-slate-900">{totalMeetings}</span>
           <span>meetings</span>

@@ -17,8 +17,11 @@ export function MobileNavProvider({ children }: { children: React.ReactNode }) {
       {/* Main content area:
           - Mobile (default): full width, no left margin
           - Desktop (md+): offset by sidebar width via CSS variable */}
+      {/* h-[100dvh]: dynamic viewport height — adjusts for iOS Safari toolbar so
+          content is never clipped behind browser chrome. Falls back to h-screen
+          on browsers that don't support dvh (pre-iOS 15.4 Safari). */}
       <div
-        className="flex-1 flex flex-col h-screen overflow-hidden min-w-0 md:ml-[240px]"
+        className="flex-1 flex flex-col h-[100dvh] overflow-hidden min-w-0 md:ml-[240px]"
       >
         {children}
       </div>
