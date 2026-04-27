@@ -83,7 +83,7 @@ export default async function CrmPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="CRM" subtitle="Companies, contacts, and relationship tracking" />
-      <main className="flex-1 overflow-auto p-6 space-y-6">
+      <main className="flex-1 overflow-auto p-4 md:p-6 space-y-4 md:space-y-6">
 
         {/* Summary totals */}
         <div className="grid grid-cols-2 gap-4">

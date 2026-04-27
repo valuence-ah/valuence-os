@@ -1432,7 +1432,7 @@ export function PipelineClient({ initialCompanies }: Props) {
       {pipelineView === "board" && (
         <>
           {/* Board toolbar (search + controls, same as list header) */}
-          <div className="hidden md:flex w-[300px] flex-shrink-0 border-r border-slate-200 bg-white flex-col">
+          <div className="flex md:w-[300px] w-full flex-shrink-0 md:border-r border-b md:border-b-0 border-slate-200 bg-white flex-col">
             <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-slate-800">
@@ -1440,7 +1440,7 @@ export function PipelineClient({ initialCompanies }: Props) {
                   <span className="ml-2 text-xs font-normal text-slate-400">{filtered.length}</span>
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <div className="flex rounded-md border border-slate-200 overflow-hidden">
+                  <div className="hidden sm:flex rounded-md border border-slate-200 overflow-hidden">
                     <button
                       onClick={() => setPipelineView("list")}
                       className="px-2.5 py-1.5 text-xs font-medium transition-colors bg-white text-slate-500 hover:bg-slate-50"
@@ -1569,7 +1569,7 @@ export function PipelineClient({ initialCompanies }: Props) {
       {/* ═══════════════════════════════════════════════════════════════════════
           LEFT PANEL — Company List
       ═══════════════════════════════════════════════════════════════════════ */}
-      {pipelineView === "list" && <div className="hidden md:flex w-[300px] flex-shrink-0 border-r border-slate-200 bg-white flex-col">
+      {pipelineView === "list" && <div className={`flex flex-col bg-white border-slate-200 ${selectedId ? "hidden md:flex w-[300px] flex-shrink-0 border-r" : "flex-1 md:flex md:w-[300px] md:flex-shrink-0 md:border-r"}`}>
 
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-2">
@@ -1580,7 +1580,7 @@ export function PipelineClient({ initialCompanies }: Props) {
             </span>
             <div className="flex items-center gap-1.5">
               {/* View toggle */}
-              <div className="flex rounded-md border border-slate-200 overflow-hidden">
+              <div className="hidden sm:flex rounded-md border border-slate-200 overflow-hidden">
                 <button
                   onClick={() => setPipelineView("list")}
                   className="px-2.5 py-1.5 text-xs font-medium transition-colors bg-slate-800 text-white"

@@ -7,7 +7,7 @@
 //   /api/*                           →  Network-only  (always fresh, never cached)
 //   All other GETs                   →  Network-first with cache fallback
 
-const CACHE = "valuence-os-v2";
+const CACHE = "valuence-os-v3";
 
 const PRECACHE = [
   "/dashboard",

@@ -1669,7 +1669,7 @@ export function LpViewClient({ initialCompanies }: Props) {
         {/* Table */}
         {viewMode === "table" && (
           <div className={cn("flex-1 overflow-auto", selected ? "md:mr-[480px]" : "")}>
-            <table className="w-full text-sm border-collapse" style={{ tableLayout: "fixed" }}>
+            <table className="w-full text-sm border-collapse" style={{ minWidth: "800px" }}>
               <colgroup>
                 {Object.keys(DEFAULT_COL_WIDTHS).map(col => <col key={col} style={{ width: colWidths[col] }} />)}
                 <col style={{ width: 40 }} />

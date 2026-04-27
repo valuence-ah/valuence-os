@@ -84,7 +84,7 @@ export function MemosClient({ initialMemos }: Props) {
     <div className="flex-1 overflow-auto p-4 md:p-6 space-y-4">
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           { label: "Total memos",    value: memos.length },
           { label: "In review",      value: memos.filter(m => m.status === "in_review").length },
@@ -156,7 +156,7 @@ export function MemosClient({ initialMemos }: Props) {
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+            <div className="flex items-center justify-between px-4 py-4 border-b">
               <h2 className="text-base font-semibold">New IC Memo</h2>
               <button onClick={() => setShowModal(false)} className="text-slate-400 text-xl">×</button>
             </div>

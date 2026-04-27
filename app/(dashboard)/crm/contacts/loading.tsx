@@ -21,7 +21,7 @@ export default function ContactsLoading() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4 md:p-6">
         <SkeletonList rows={10} cols={5} />
       </div>
     </div>

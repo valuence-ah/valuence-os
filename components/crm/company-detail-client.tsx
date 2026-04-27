@@ -1491,7 +1491,7 @@ export function CompanyDetailClient({
               </div>
             </div>
             {company.description && (
-              <p className="text-sm text-slate-500 mt-2 leading-relaxed">{company.description}</p>
+              <p className="text-sm text-slate-500 mt-2 leading-relaxed line-clamp-3 md:line-clamp-none">{company.description}</p>
             )}
             <div className="flex items-center gap-4 mt-2 flex-wrap">
               {company.location_city && (
@@ -1506,7 +1506,7 @@ export function CompanyDetailClient({
           </div>
 
           {/* Links + Edit + Logo + Merge + Delete */}
-          <div className="flex gap-2 flex-shrink-0 items-start flex-wrap">
+          <div className="flex gap-1.5 flex-shrink-0 items-start flex-wrap mt-2 md:mt-0">
             {company.website && (
               <a href={company.website} target="_blank" rel="noopener noreferrer"
                 className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-blue-600 transition-colors" title="Website">
@@ -1590,7 +1590,7 @@ export function CompanyDetailClient({
         </div>
 
         {/* Stat bar */}
-        <div className={cn("grid gap-4 mt-4 pt-4 border-t border-slate-100", typeGroup === "startup" ? "grid-cols-5" : "grid-cols-4")}>
+        <div className={cn("grid gap-3 mt-4 pt-4 border-t border-slate-100", typeGroup === "startup" ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" : "grid-cols-2 sm:grid-cols-4")}>
           {statBar.map(({ label, value }) => (
             <div key={label}>
               <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">{label}</p>
@@ -1634,13 +1634,13 @@ export function CompanyDetailClient({
       )}
 
       {/* ── Tabs ── */}
-      <div className="flex gap-1 border-b border-slate-200">
+      <div className="flex gap-1 border-b border-slate-200 overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
         {TABS.filter(t => !(typeGroup === "startup" && t === "Interactions")).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+              "px-3 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex-shrink-0",
               tab === t
                 ? "border-blue-600 text-blue-600"
                 : "border-transparent text-slate-500 hover:text-slate-800"

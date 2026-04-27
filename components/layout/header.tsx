@@ -43,10 +43,10 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
         {/* Hamburger — mobile only */}
         <button
           onClick={() => setOpen(true)}
-          className="md:hidden w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors flex-shrink-0"
+          className="md:hidden w-10 h-10 -ml-1 rounded-lg flex items-center justify-center text-slate-700 hover:bg-slate-100 active:bg-slate-200 transition-colors flex-shrink-0 touch-manipulation"
           aria-label="Open menu"
         >
-          <Menu size={18} />
+          <Menu size={20} />
         </button>
 
         <div className="min-w-0">

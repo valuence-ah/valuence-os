@@ -269,11 +269,11 @@ export function MemoDetailClient({ memo: initMemo }: { memo: MemoWithCompany }) 
   const recConfig = REC_CONFIG[memo.recommendation as keyof typeof REC_CONFIG] ?? REC_CONFIG.pending;
 
   return (
-    <div className="memo-print-root flex-1 overflow-auto p-6">
+    <div className="memo-print-root flex-1 overflow-auto p-4 md:p-6">
       <div className="memo-print-content max-w-4xl mx-auto space-y-6">
 
         {/* ── Header ────────────────────────────────────────────────────────── */}
-        <div className="card p-6">
+        <div className="card p-4 md:p-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <h1 className="text-xl font-bold text-slate-900">{memo.title}</h1>

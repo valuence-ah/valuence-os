@@ -37,7 +37,7 @@ export default function MeetingsLoading() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6 space-y-4">
+      <div className="flex-1 overflow-auto p-4 md:p-6 space-y-4">
         {Array.from({ length: 6 }).map((_, i) => (
           <SkeletonMeetingCard key={i} />
         ))}

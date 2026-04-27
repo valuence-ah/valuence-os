@@ -146,7 +146,7 @@ export default async function DashboardPage() {
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-4 md:space-y-6">
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
           {stats.map((s) => (
             <Link key={s.label} href={s.href} className="card p-4 block hover:shadow-md transition-shadow cursor-pointer group">
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 ${s.color}`}>

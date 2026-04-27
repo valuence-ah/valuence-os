@@ -130,5 +130,17 @@
 /* Mobile touch targets — minimum 44px hit area */
 @media (max-width: 767px) {
   .nav-item { min-height: 44px; }
-  button, a { -webkit-tap-highlight-color: transparent; }
+  button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+}
+
+/* Scrollbar hide utility (for scrollable tab bars) */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* Line clamp for mobile description truncation */
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

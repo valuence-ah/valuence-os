@@ -203,7 +203,7 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
   return (
     <div className="flex flex-col h-full flex-1 overflow-hidden">
       {/* Header */}
-      <div className="border-b border-slate-200 px-5 pt-4 pb-0 bg-white flex-shrink-0">
+      <div className="border-b border-slate-200 px-4 pt-3 pb-0 bg-white flex-shrink-0">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex items-center gap-3 min-w-0">
             <CompanyLogoHeader company={company} />
@@ -369,12 +369,12 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
         </div>
 
         {/* Tab bar */}
-        <div className="flex items-center gap-0">
+        <div className="flex items-center gap-0 overflow-x-auto scrollbar-hide">
           {TABS.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${
+              className={`px-3 py-2 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                 activeTab === tab.id
                   ? "border-blue-600 text-blue-600"
                   : "border-transparent text-slate-500 hover:text-slate-700"
