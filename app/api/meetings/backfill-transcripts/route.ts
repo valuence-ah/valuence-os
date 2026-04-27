@@ -31,7 +31,7 @@ export async function POST() {
   //    that are NOT in company_documents.
   const { data: allMeetings, error } = await supabase
     .from("interactions")
-    .select("id, type, subject, body, summary, ai_summary, transcript_text, transcript_url, action_items, attendees, duration_minutes, date, company_id, contact_ids, fireflies_id, fellow_id, source, resolution_status, pending_resolutions, sentiment, created_by, created_at, updated_at, archived")
+    .select("id, type, subject, body, summary, ai_summary, transcript_text, transcript_url, action_items, attendees, duration_minutes, date, company_id, contact_ids, fireflies_id, fellow_id, source, resolution_status, pending_resolutions, sentiment, created_by, created_at, updated_at, archived, host_user_id, host_email")
     .eq("type", "meeting")
     .not("company_id", "is", null)
     .order("date", { ascending: false });
