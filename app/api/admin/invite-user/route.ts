@@ -22,14 +22,29 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
 
   // Send Supabase invite email
-  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
+  const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
     data: { full_name: fullName, role },
     redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/auth/callback?redirectTo=/dashboard`,
   });
 
-  if (inviteError) {
+  const alreadyRegistered =
+    inviteError &&
+    (inviteError.message.toLowerCase().includes("already been registered") ||
+     inviteError.message.toLowerCase().includes("already registered") ||
+     inviteError.message.toLowerCase().includes("already exists"));
+
+  if (inviteError && !alreadyRegistered) {
     console.error("[invite-user]", inviteError);
     return NextResponse.json({ error: inviteError.message }, { status: 500 });
+  }
+
+  // If user already exists, look them up by email and update their role
+  if (alreadyRegistered) {
+    const { data: existingUsers } = await admin.auth.admin.listUsers();
+    const existingUser = existingUsers?.users?.find(u => u.email === email);
+    if (existingUser) {
+      await admin.from("profiles").update({ role }).eq("id", existingUser.id);
+    }
   }
 
   // Mark request approved
