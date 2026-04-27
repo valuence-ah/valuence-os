@@ -1953,7 +1953,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
             {/* ── Overview Fields ── */}
             <section>
               <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-4">Overview</h2>
-              <div className="grid grid-cols-5 gap-x-6 gap-y-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-6 gap-y-5">
 
                 {/* Row 1: Domain/Website, Type, Sector, Sub-sector, Last Contact */}
                 <Field label="Domain / Website">
