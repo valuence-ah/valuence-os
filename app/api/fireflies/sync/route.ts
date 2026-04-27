@@ -163,6 +163,8 @@ export async function POST() {
           created_at:          new Date().toISOString(),
           updated_at:          new Date().toISOString(),
           archived:            false,
+          host_user_id:        null,
+          host_email:          null,
         };
 
         // Fetch company name for PDF header, works for all entity types (pipeline, fund, LP, strategic)
