@@ -151,6 +151,17 @@ export async function POST(req: NextRequest) {
     ? await supabase.from("contacts").select("id").in("email", participantEmails)
     : { data: [] };
 
+  // Tag the meeting with which Valuence user originated it
+  let hostUserId: string | null = null;
+  if (t.host_email) {
+    const { data: hostProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .ilike("fireflies_email", t.host_email)
+      .maybeSingle();
+    hostUserId = hostProfile?.id ?? null;
+  }
+
   // Normalise action items (Fireflies returns a string or array)
   const actionItems: string[] =
     typeof t.summary?.action_items === "string"
@@ -171,6 +182,8 @@ export async function POST(req: NextRequest) {
       contact_ids: contacts?.map((c: { id: string }) => c.id) ?? [],
       fireflies_id: meetingId,
       sentiment: "neutral",
+      host_user_id: hostUserId,
+      host_email:   t.host_email ?? null,
     })
     .select("id")
     .single();

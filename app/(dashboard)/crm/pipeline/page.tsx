@@ -22,10 +22,15 @@ export default async function PipelinePage() {
     .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };
 
+  // Import createClient for user-specific data
+  const { createClient: createUserClient } = await import("@/lib/supabase/server");
+  const userSupabase = await createUserClient();
+  const currentUserId = (await userSupabase.auth.getUser()).data.user?.id ?? "";
+
   return (
     <div className="flex flex-col h-full">
       <Header title="Pipeline" subtitle={`${companies?.length ?? 0} startups`}  />
-      <PipelineClient initialCompanies={companies ?? []} />
+      <PipelineClient initialCompanies={companies ?? []} currentUserId={currentUserId} />
       {/* Floating Valuence AI chat — position: fixed, renders above page content */}
       <PipelineChatWidget />
     </div>

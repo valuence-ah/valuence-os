@@ -21,6 +21,10 @@ export interface Profile {
   role: "partner" | "principal" | "analyst" | "admin";
   created_at: string;
   updated_at: string;
+  outlook_mailbox:    string | null;
+  fireflies_email:    string | null;
+  fireflies_user_id:  string | null;
+  initials:           string | null;
 }
 
 export interface Company {
@@ -108,6 +112,8 @@ export interface Contact {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  received_by_user_id: string | null;
+  received_in_mailbox: string | null;
   // joined
   company?: Company;
 }
@@ -145,6 +151,8 @@ export interface Interaction {
   ai_summary: string | null;
   archived: boolean;
   meeting_type?: string | null;
+  host_user_id: string | null;
+  host_email:   string | null;
   // joined
   company?: Company;
 }
@@ -202,6 +210,8 @@ export interface IcMemo {
   risks:              string | null;
   investment_thesis:  string | null;
 
+  regenerated_by: string | null;
+  regenerated_at: string | null;
   recommendation: "invest" | "pass" | "more_diligence" | "pending" | null;
   status: "draft" | "in_review" | "approved" | "rejected";
   reviewed_by: string | null;

@@ -220,9 +220,19 @@ function MeetingTableRow({
       {/* 3 — title + summary */}
       <div className="min-w-0 py-2.5 pr-4">
         <button onClick={() => onOpenPanel(meeting)} className="text-left w-full group/title">
-          <p className="text-xs font-semibold text-slate-800 truncate group-hover/title:text-brand-teal transition-colors">
-            {meeting.subject ?? "Untitled Meeting"}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-slate-800 truncate group-hover/title:text-brand-teal transition-colors">
+              {meeting.subject ?? "Untitled Meeting"}
+            </p>
+            {(meeting as any).host_profile && (
+              <span
+                className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 flex-shrink-0"
+                title={`Host: ${(meeting as any).host_profile.full_name}`}
+              >
+                {(meeting as any).host_profile.initials ?? "?"}
+              </span>
+            )}
+          </div>
           {(meeting.ai_summary ?? meeting.summary) && (
             <p className="text-[10px] text-slate-400 truncate mt-0.5 leading-relaxed">
               {(meeting.ai_summary ?? meeting.summary ?? "").slice(0, 100)}
@@ -404,6 +414,7 @@ interface MeetingsClientProps {
   archivedMeetings?: MeetingRow[];
   lastSynced?: string | null;
   companies?: CompanyStub[];
+  teamMembers?: { id: string; full_name: string | null; email: string; initials: string | null }[];
 }
 
 export function MeetingsClient({
@@ -411,6 +422,7 @@ export function MeetingsClient({
   archivedMeetings: initialArchived = [],
   lastSynced: initialLastSynced,
   companies: allCompanies = [],
+  teamMembers = [],
 }: MeetingsClientProps) {
   const [meetings, setMeetings]                     = useState<MeetingRow[]>(initialMeetings);
   const [archivedMeetings, setArchivedMeetings]     = useState<MeetingRow[]>(initialArchived);
@@ -419,6 +431,7 @@ export function MeetingsClient({
   const [sourceFilter, setSourceFilter]             = useState<"all" | "fireflies" | "manual">("all");
   const [resolutionFilter, setResolutionFilter]     = useState<"all" | "resolved" | "review" | "unresolved" | "internal">("review");
   const [companyFilter, setCompanyFilter]           = useState("all");
+  const [hostFilter, setHostFilter]                 = useState("all");
   const [dateFrom, setDateFrom]                     = useState("");
   const [dateTo, setDateTo]                         = useState("");
   const [hasActionItems, setHasActionItems]         = useState(false);
@@ -523,6 +536,7 @@ export function MeetingsClient({
     if (resolutionFilter === "unresolved") rows = rows.filter(m => m.resolution_status === "unresolved");
     if (resolutionFilter === "internal")   rows = rows.filter(m => m.resolution_status === "no_external");
     if (companyFilter !== "all")           rows = rows.filter(m => m.company?.id === companyFilter);
+    if (hostFilter !== "all")              rows = rows.filter(m => (m as any).host_user_id === hostFilter);
     if (dateFrom)                          rows = rows.filter(m => m.date >= dateFrom);
     if (dateTo)                            rows = rows.filter(m => m.date <= dateTo + "T23:59:59");
     if (hasActionItems)                    rows = rows.filter(m => (m.action_items?.length ?? 0) > 0);
@@ -551,7 +565,7 @@ export function MeetingsClient({
     });
 
     return rows;
-  }, [meetings, search, sourceFilter, resolutionFilter, companyFilter, dateFrom, dateTo, hasActionItems, hasTranscript, sortKey, sortDir]);
+  }, [meetings, search, sourceFilter, resolutionFilter, companyFilter, hostFilter, dateFrom, dateTo, hasActionItems, hasTranscript, sortKey, sortDir]);
 
   // ── Select-all indeterminate ───────────────────────────────────────────────
 
@@ -844,6 +858,14 @@ export function MeetingsClient({
           <select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)} className={SEL_CLS}>
             <option value="all">All companies</option>
             {companyOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+        )}
+
+        {/* Host filter */}
+        {teamMembers.length > 0 && (
+          <select value={hostFilter} onChange={e => setHostFilter(e.target.value)} className={SEL_CLS}>
+            <option value="all">All hosts</option>
+            {teamMembers.map(m => <option key={m.id} value={m.id}>{m.full_name ?? m.email}</option>)}
           </select>
         )}
 

@@ -177,6 +177,8 @@ Return ONLY a valid JSON object with these exact keys (no markdown, no extra tex
 
       status:     "draft",
       created_by: created_by ?? null,
+      regenerated_by: created_by ?? null,
+      regenerated_at: new Date().toISOString(),
     })
     .select("*, company:companies(id, name, type, sectors)")
     .single();

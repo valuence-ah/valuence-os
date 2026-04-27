@@ -21,6 +21,8 @@ interface TeamMember {
   full_name: string | null;
   role: string;
   created_at: string;
+  outlook_mailbox: string | null;
+  fireflies_email: string | null;
 }
 
 interface Props {
@@ -228,30 +230,22 @@ export function TeamPanel({ initialRequests, initialMembers }: Props) {
           {members.length === 0 ? (
             <div className="px-6 py-8 text-center text-sm text-slate-400">No team members yet</div>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Member</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Role</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Joined</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {members.map(member => (
-                  <tr key={member.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-xs flex-shrink-0">
-                          {(member.full_name ?? member.email).charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-slate-900 truncate">{member.full_name ?? "—"}</p>
-                          <p className="text-xs text-slate-400 truncate">{member.email}</p>
-                        </div>
+            <div className="divide-y divide-slate-100">
+              {members.map(member => (
+                <div key={member.id} className="px-4 py-3 hover:bg-slate-50/60 transition-colors">
+                  <div className="flex items-center gap-3">
+                    {/* Avatar + name */}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-xs flex-shrink-0">
+                        {(member.full_name ?? member.email).charAt(0).toUpperCase()}
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-900 truncate text-sm">{member.full_name ?? "—"}</p>
+                        <p className="text-xs text-slate-400 truncate">{member.email}</p>
+                      </div>
+                    </div>
+                    {/* Role */}
+                    <div className="flex-shrink-0">
                       {member.role === "admin" ? (
                         <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full", ROLE_COLORS["admin"])}>Admin</span>
                       ) : (
@@ -272,26 +266,76 @@ export function TeamPanel({ initialRequests, initialMembers }: Props) {
                           <ChevronDown size={10} className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
                         </div>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400 hidden sm:table-cell">
-                      {fmtDate(member.created_at)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
+                    </div>
+                    {/* Joined */}
+                    <span className="text-xs text-slate-400 hidden sm:inline flex-shrink-0">{fmtDate(member.created_at)}</span>
+                    {/* Revoke */}
+                    <div className="flex-shrink-0">
                       {member.role !== "admin" && (
                         <button
                           onClick={() => handleRevoke(member)}
                           disabled={loadingAction[member.id]}
-                          className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50 flex items-center gap-1 ml-auto"
+                          className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50 flex items-center gap-1"
                         >
                           <UserX size={13} />
                           Revoke
                         </button>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+
+                  {/* Per-member integrations */}
+                  <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Outlook mailbox</label>
+                      <input
+                        type="email"
+                        defaultValue={member.outlook_mailbox ?? ""}
+                        placeholder="user@valuence.vc"
+                        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        onBlur={async (e) => {
+                          const val = e.target.value.trim().toLowerCase() || null;
+                          if (val === member.outlook_mailbox) return;
+                          const res = await fetch("/api/admin/update-integrations", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ userId: member.id, outlook_mailbox: val }),
+                          });
+                          if (res.ok) {
+                            setMembers(p => p.map(m => m.id === member.id ? { ...m, outlook_mailbox: val } : m));
+                            showToast(`Outlook mailbox updated for ${member.full_name ?? member.email}`);
+                          } else showToast("Failed to update", false);
+                        }}
+                      />
+                      <p className="text-[10px] text-slate-400 mt-0.5">Emails to this address auto-tag this user as recipient.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Fireflies email</label>
+                      <input
+                        type="email"
+                        defaultValue={member.fireflies_email ?? ""}
+                        placeholder="user@valuence.vc"
+                        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        onBlur={async (e) => {
+                          const val = e.target.value.trim().toLowerCase() || null;
+                          if (val === member.fireflies_email) return;
+                          const res = await fetch("/api/admin/update-integrations", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ userId: member.id, fireflies_email: val }),
+                          });
+                          if (res.ok) {
+                            setMembers(p => p.map(m => m.id === member.id ? { ...m, fireflies_email: val } : m));
+                            showToast(`Fireflies email updated for ${member.full_name ?? member.email}`);
+                          } else showToast("Failed to update", false);
+                        }}
+                      />
+                      <p className="text-[10px] text-slate-400 mt-0.5">Used to attribute meeting transcripts.</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </section>

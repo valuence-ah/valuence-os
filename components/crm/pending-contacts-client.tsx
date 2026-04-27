@@ -22,13 +22,21 @@ import {
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type CompanyStub = { id: string; name: string; type: string; website?: string | null };
-type PendingContact = Contact & { company?: CompanyStub | null };
+type PendingContact = Contact & {
+  company?: CompanyStub | null;
+  received_by?: { id: string; full_name: string | null; email: string; initials: string | null } | null;
+};
 type SortKey = "name" | "email" | "type" | "title" | "country" | "added";
 type SortDir = "asc" | "desc";
 
 interface Props {
   initialContacts: PendingContact[];
   companies: CompanyStub[];
+  currentUserId: string;
+}
+
+function getInitialsFromName(name: string): string {
+  return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1468,6 +1476,20 @@ const ContactRow = memo(function ContactRow({
         {formatDate(contact.created_at)}
       </span>
 
+      {/* Owner badge */}
+      <div className="flex-shrink-0 w-8 flex items-center justify-center">
+        {contact.received_by ? (
+          <span
+            className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700"
+            title={`Received by ${contact.received_by.full_name ?? contact.received_by.email}`}
+          >
+            {contact.received_by.initials ?? getInitialsFromName(contact.received_by.full_name ?? contact.received_by.email)}
+          </span>
+        ) : (
+          <span className="text-[10px] text-slate-300">—</span>
+        )}
+      </div>
+
       {/* Actions */}
       <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
         <button
@@ -1539,10 +1561,11 @@ function SortHeader({ label, sortKey, active, dir, onSort, className }: {
 const LS_EXCLUSIONS_KEY  = "pending_contacts_exclusions";
 const LS_COUNTRIES_KEY   = "pending_contacts_custom_countries";
 
-export function PendingContactsClient({ initialContacts, companies }: Props) {
+export function PendingContactsClient({ initialContacts, companies, currentUserId }: Props) {
   const [contacts, setContacts]               = useState<PendingContact[]>(initialContacts);
   const [companiesState, setCompaniesState]   = useState<CompanyStub[]>(companies);
   const [expandedCompanyId, setExpandedCompanyId] = useState<string | null>(null);
+  const [ownerFilter, setOwnerFilter]         = useState<"all" | "mine" | "unassigned">("all");
   const [customCountries, setCustomCountries] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(LS_COUNTRIES_KEY) ?? "[]") as string[]; } catch { return []; }
   });
@@ -1586,14 +1609,19 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
     setExclusions(prev => prev.filter(e => e !== word));
   }
 
-  // Filter contacts by exclusion words
+  // Filter contacts by exclusion words + owner filter
   const visibleContacts = useMemo(() => {
-    if (!exclusions.length) return contacts;
-    return contacts.filter(c => {
-      const email = (c.email ?? "").toLowerCase();
-      return !exclusions.some(ex => email.includes(ex));
-    });
-  }, [contacts, exclusions]);
+    let list = contacts;
+    if (exclusions.length) {
+      list = list.filter(c => {
+        const email = (c.email ?? "").toLowerCase();
+        return !exclusions.some(ex => email.includes(ex));
+      });
+    }
+    if (ownerFilter === "mine") list = list.filter(c => c.received_by_user_id === currentUserId);
+    if (ownerFilter === "unassigned") list = list.filter(c => !c.received_by_user_id);
+    return list;
+  }, [contacts, exclusions, ownerFilter, currentUserId]);
 
   const hiddenCount = contacts.length - visibleContacts.length;
 
@@ -1669,6 +1697,17 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
         </div>
 
         <div className="flex-1" />
+
+        {/* Owner filter dropdown */}
+        <select
+          value={ownerFilter}
+          onChange={(e) => setOwnerFilter(e.target.value as "all" | "mine" | "unassigned")}
+          className="text-xs border border-slate-200 rounded-md px-2 py-1.5"
+        >
+          <option value="all">All owners</option>
+          <option value="mine">Mine only</option>
+          <option value="unassigned">Unassigned</option>
+        </select>
 
         {/* Email filter toggle */}
         <button
@@ -1758,6 +1797,7 @@ export function PendingContactsClient({ initialContacts, companies }: Props) {
             <div className="w-20 flex-shrink-0 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">City</div>
             <SortHeader label="Country ✦" sortKey="country" active={sortKey==="country"} dir={sortDir} onSort={handleSort} className="w-28 flex-shrink-0" />
             <SortHeader label="Added"   sortKey="added"   active={sortKey==="added"}   dir={sortDir} onSort={handleSort} className="w-20 flex-shrink-0 justify-end" />
+            <div className="w-8 flex-shrink-0 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Owner</div>
             <div className="w-24 flex-shrink-0" />
           </div>
 

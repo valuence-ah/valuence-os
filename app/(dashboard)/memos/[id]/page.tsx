@@ -13,9 +13,9 @@ export default async function MemoDetailPage({ params }: { params: Promise<{ id:
 
   const { data: memo } = await (supabase
     .from("ic_memos")
-    .select("*, company:companies(id, name, type, sectors, description, website)")
+    .select("*, company:companies(id, name, type, sectors, description, website), created_by_profile:profiles!created_by(id, full_name, initials), regenerated_by_profile:profiles!regenerated_by(id, full_name, initials)")
     .eq("id", id)
-    .single() as unknown as Promise<{ data: (IcMemo & { company: { id: string; name: string; type: string; sectors: string[] | null; description: string | null; website: string | null } | null }) | null; error: unknown }>);
+    .single() as unknown as Promise<{ data: (IcMemo & { company: { id: string; name: string; type: string; sectors: string[] | null; description: string | null; website: string | null } | null; created_by_profile?: { id: string; full_name: string | null; initials: string | null } | null; regenerated_by_profile?: { id: string; full_name: string | null; initials: string | null } | null }) | null; error: unknown }>);
 
   if (!memo) notFound();
 

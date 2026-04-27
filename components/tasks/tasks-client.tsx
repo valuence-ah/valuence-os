@@ -6,7 +6,7 @@ import {
   Search, X, AlertCircle, Clock, CheckCircle2, TrendingUp,
   Users, Flag, ChevronRight, AlignLeft, LayoutGrid, GitBranch,
   Minus, ArrowUp, ArrowDown, Circle, Plus, Check, Building2,
-  MoreHorizontal,
+  MoreHorizontal, Archive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -31,6 +31,7 @@ interface Task {
   deps: string[];
   comments: { by: string; date: string; txt: string }[];
   noteItems?: { id: string; txt: string }[];
+  archived?: boolean;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -358,7 +359,7 @@ function MoreMenu({ task, onEdit, onDuplicate, onDelete }: {
 
 // ── Table view ────────────────────────────────────────────────────────────────
 
-function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, onStatusChange }: { tasks: Task[]; onSelect: (t: Task) => void; onToggleComplete: (t: Task) => void; onDelete: (t: Task) => void; onDuplicate: (t: Task) => void; onStatusChange: (t: Task, newStatus: string) => void }) {
+function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, onStatusChange, onArchive }: { tasks: Task[]; onSelect: (t: Task) => void; onToggleComplete: (t: Task) => void; onDelete: (t: Task) => void; onDuplicate: (t: Task) => void; onStatusChange: (t: Task, newStatus: string) => void; onArchive: (t: Task) => void }) {
   const sorted = [...tasks].sort((a, b) => {
     const order: Record<string, number> = { Overdue: 0, "At risk": 1, Blocked: 2, "Not started": 2, "On track": 3, Completed: 4 };
     const oa = order[a.status] ?? 3;
@@ -417,8 +418,8 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
                   {t.status === "Completed" && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                 </div>
               </td>
-              <td className="px-3 py-2 max-w-[280px]">
-                <span className="font-medium text-slate-800 leading-snug line-clamp-2">{t.title}</span>
+              <td className={cn("px-3 py-2 max-w-[280px]", t.status === "Completed" && "line-through text-slate-400")}>
+                <span className="font-medium leading-snug line-clamp-2">{t.title}</span>
               </td>
               <td className="px-3 py-2 whitespace-nowrap">
                 <CatBadge cat={t.cat} />
@@ -470,12 +471,23 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
                 <DaysChip daysLeft={t.daysLeft} />
               </td>
               <td className="px-3 py-2 w-8" onClick={e => e.stopPropagation()}>
-                <MoreMenu
-                  task={t}
-                  onEdit={() => onSelect(t)}
-                  onDuplicate={() => onDuplicate(t)}
-                  onDelete={() => onDelete(t)}
-                />
+                <div className="flex items-center gap-1">
+                  {t.status === "Completed" && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onArchive(t); }}
+                      className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"
+                      title="Archive"
+                    >
+                      <Archive size={12} /> Archive
+                    </button>
+                  )}
+                  <MoreMenu
+                    task={t}
+                    onEdit={() => onSelect(t)}
+                    onDuplicate={() => onDuplicate(t)}
+                    onDelete={() => onDelete(t)}
+                  />
+                </div>
               </td>
             </tr>
           ))}
@@ -1160,29 +1172,6 @@ function SidePanel({ task, onClose, onUpdate, onDelete, initiatives }: SidePanel
           </div>
         </section>
 
-        {/* Workload Context */}
-        <section className="px-4 py-3">
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Workload Context</p>
-          <div className="space-y-2">
-            {[
-              { owner: "Andrew", color: "bg-blue-500" },
-              { owner: "Gene",   color: "bg-violet-500" },
-              { owner: "Lance",  color: "bg-teal-500" },
-            ].map(({ owner, color }) => (
-              <div key={owner}>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <OwnerAvatar owner={owner} />
-                    <span className="text-slate-600">{owner}</span>
-                  </div>
-                </div>
-                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div className={cn("h-full rounded-full", color)} style={{ width: owner === task.owner ? "70%" : "40%" }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
       </div>
 
     </div>
@@ -1430,6 +1419,11 @@ export function TasksClient() {
     setConfirmDeleteTaskId(t.id);
   }
 
+  function handleArchiveTask(t: Task) {
+    setTasks(prev => prev.map(x => x.id === t.id ? { ...x, archived: true } : x));
+    if (selectedTask?.id === t.id) setSelectedTask(null);
+  }
+
   function confirmDeleteTask() {
     if (confirmDeleteTaskId === null) return;
     setTasks(prev => prev.filter(t => t.id !== confirmDeleteTaskId));
@@ -1440,6 +1434,7 @@ export function TasksClient() {
   // ── Filtering ────────────────────────────────────────────────────────────────
 
   const showCompleted = activeFilter === "completed";
+  const showArchived = activeFilter === "archived";
 
   const filteredTasks = useMemo(() => {
     let list = tasks;
@@ -1458,11 +1453,16 @@ export function TasksClient() {
       );
     }
 
+    if (showArchived) {
+      return list.filter(t => t.archived);
+    }
+
     if (showCompleted) {
       return list.filter(t => t.status === "Completed");
     }
 
-    // Exclude completed unless pill active
+    // Exclude archived and completed unless pill active
+    list = list.filter(t => !t.archived);
     list = list.filter(t => t.status !== "Completed");
 
     switch (activeFilter) {
@@ -1479,7 +1479,7 @@ export function TasksClient() {
     }
 
     return list;
-  }, [tasks, activeFilter, activeInitiative, search, showCompleted]);
+  }, [tasks, activeFilter, activeInitiative, search, showCompleted, showArchived]);
 
   // All tasks respecting only search + initiative (for kanban completed column)
   const allSearchedTasks = useMemo(() => {
@@ -1494,24 +1494,17 @@ export function TasksClient() {
 
   // ── Stats ────────────────────────────────────────────────────────────────────
 
-  const nonCompleted = tasks.filter(t => t.status !== "Completed");
+  const nonCompleted = tasks.filter(t => t.status !== "Completed" && !t.archived);
   const totalDisplay = showCompleted ? tasks.filter(t => t.status === "Completed").length : nonCompleted.length;
   const overdueCnt   = nonCompleted.filter(t => t.status === "Overdue").length;
   const atRiskCnt    = nonCompleted.filter(t => t.status === "At risk").length;
   const onTrackCnt   = nonCompleted.filter(t => t.status === "On track").length;
   const notStartedCnt = nonCompleted.filter(t => t.status === "Not started").length;
 
-  const ownerCounts = {
-    Andrew: nonCompleted.filter(t => t.owner === "Andrew").length,
-    Gene:   nonCompleted.filter(t => t.owner === "Gene").length,
-    Lance:  nonCompleted.filter(t => t.owner === "Lance").length,
-  };
-  const maxOwnerCount = Math.max(ownerCounts.Andrew, ownerCounts.Gene, ownerCounts.Lance, 1);
-
   // ── Initiative helpers ────────────────────────────────────────────────────────
 
   function taskCountForInit(key: string) {
-    return tasks.filter(t => t.init === key && t.status !== "Completed").length;
+    return tasks.filter(t => t.init === key && t.status !== "Completed" && !t.archived).length;
   }
 
   function addInitiative() {
@@ -1528,12 +1521,13 @@ export function TasksClient() {
 
   const FILTER_PILLS = [
     "all", "Fundraising", "Diligence", "Portfolio", "Ecosystem", "IC Memo",
-    "Overdue", "At Risk", "Andrew", "Gene", "Lance", "completed",
+    "Overdue", "At Risk", "Andrew", "Gene", "Lance", "completed", "archived",
   ];
 
   const pillLabel = (f: string) => {
     if (f === "all") return "All";
     if (f === "completed") return "Completed";
+    if (f === "archived") return "Archived";
     return f;
   };
 
@@ -1581,28 +1575,6 @@ export function TasksClient() {
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Not Started</p>
               <p className="text-lg font-bold text-slate-900 leading-tight">{notStartedCnt}</p>
               <p className="text-xs text-slate-400">pending</p>
-            </div>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-500"><Users size={14} className="text-white" /></div>
-            <div className="min-w-0 flex-1 flex flex-col justify-between h-full">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">Workload</p>
-              <div className="space-y-1">
-                {(["Andrew", "Gene", "Lance"] as const).map(owner => {
-                  const cnt = ownerCounts[owner];
-                  const pct = (cnt / maxOwnerCount) * 100;
-                  const barColor = owner === "Andrew" ? "bg-blue-400" : owner === "Gene" ? "bg-violet-400" : "bg-teal-400";
-                  return (
-                    <div key={owner} className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-slate-500 w-9 flex-shrink-0">{owner[0]}</span>
-                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={cn("h-full rounded-full", barColor)} style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-[10px] text-slate-500 w-4 flex-shrink-0 text-right">{cnt}</span>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           </div>
         </div>
@@ -1752,6 +1724,7 @@ export function TasksClient() {
             onDelete={handleDeleteTask}
             onDuplicate={(t) => { const dup = { ...t, id: Date.now(), title: `${t.title} (copy)` }; setTasks(prev => [...prev, dup]); }}
             onStatusChange={(t, newStatus) => setTasks(prev => prev.map(task => task.id === t.id ? { ...task, status: newStatus } : task))}
+            onArchive={handleArchiveTask}
           />
         )}
         {view === "kanban" && (

@@ -166,6 +166,19 @@ export async function POST(req: NextRequest) {
   const extraSkip: string[]     = Array.isArray(dbCfg.additionalSkipPatterns) ? dbCfg.additionalSkipPatterns : [];
   const extraSkipRx             = extraSkip.map((p: string) => new RegExp(p, "i"));
 
+  // Load profile→mailbox map so we can tag contacts with the receiving user
+  const { data: profilesData } = await supabase
+    .from("profiles")
+    .select("id, outlook_mailbox")
+    .not("outlook_mailbox", "is", null);
+
+  const mailboxToUserId = new Map<string, string>();
+  profilesData?.forEach(p => {
+    if (p.outlook_mailbox) {
+      mailboxToUserId.set(p.outlook_mailbox.toLowerCase(), p.id);
+    }
+  });
+
   const url = new URL(req.url);
   const since =
     url.searchParams.get("since") ??
@@ -325,6 +338,8 @@ export async function POST(req: NextRequest) {
         status:     "pending",
         last_contact_date: candidate.emailDate,
         notes:      sourceNote,
+        received_by_user_id: mailboxToUserId.get(mailbox.toLowerCase()) ?? null,
+        received_in_mailbox: mailbox.toLowerCase(),
       });
 
       if (insertError) {

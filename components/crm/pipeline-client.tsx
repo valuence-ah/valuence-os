@@ -429,6 +429,7 @@ function UploadBox({ label, accept, companyId, docType, bucket, existingUrl, exi
 
 interface Props {
   initialCompanies: Company[];
+  currentUserId: string;
 }
 
 // Inline sector chip editor used for double-click quick-edit
@@ -465,7 +466,7 @@ function SectorQuickEdit({ current, onSave, onCancel }: {
   );
 }
 
-export function PipelineClient({ initialCompanies }: Props) {
+export function PipelineClient({ initialCompanies, currentUserId }: Props) {
   const supabase = createClient();
 
   // ── State ────────────────────────────────────────────────────────────────────
@@ -474,7 +475,7 @@ export function PipelineClient({ initialCompanies }: Props) {
     // Restore last-viewed company on mount (client-only)
     if (typeof window !== "undefined") {
       try {
-        const saved = localStorage.getItem("pipeline_last_company");
+        const saved = localStorage.getItem(`pipeline_last_company_${currentUserId}`);
         if (saved && initialCompanies.some(c => c.id === saved)) return saved;
       } catch {}
     }
@@ -839,7 +840,7 @@ export function PipelineClient({ initialCompanies }: Props) {
   // Persist the last-viewed company so the page re-opens to it on next visit
   useEffect(() => {
     if (selectedId) {
-      try { localStorage.setItem("pipeline_last_company", selectedId); } catch {}
+      try { localStorage.setItem(`pipeline_last_company_${currentUserId}`, selectedId); } catch {}
     }
   }, [selectedId]);
 

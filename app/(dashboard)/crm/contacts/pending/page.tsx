@@ -4,6 +4,7 @@
 // Make.com imports land with status = 'pending' by default.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
 import { PendingContactsClient } from "@/components/crm/pending-contacts-client";
 
@@ -11,16 +12,19 @@ export const metadata = { title: "New Contacts" };
 
 export default async function PendingContactsPage() {
   const supabase = createAdminClient();
+  const supabaseUser = await createClient();
+
+  const currentUserId = (await supabaseUser.auth.getUser()).data.user?.id ?? "";
 
   const [{ data: contacts }, { data: companies }] = await Promise.all([
-    // Fetch all contacts awaiting review
+    // Fetch all contacts awaiting review with receiving user profile
     supabase
       .from("contacts")
-      .select("*, company:companies(id, name, type)")
+      .select("*, company:companies(id, name, type), received_by:profiles!received_by_user_id(id, full_name, email, initials)")
       .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(10000) as unknown as Promise<{
-        data: (import("@/lib/types").Contact & { company?: { id: string; name: string; type: string; website?: string | null } | null })[] | null;
+        data: (import("@/lib/types").Contact & { company?: { id: string; name: string; type: string; website?: string | null } | null; received_by?: { id: string; full_name: string | null; email: string; initials: string | null } | null })[] | null;
         error: unknown;
       }>,
     supabase
@@ -42,6 +46,7 @@ export default async function PendingContactsPage() {
       <PendingContactsClient
         initialContacts={contacts ?? []}
         companies={companies ?? []}
+        currentUserId={currentUserId}
       />
     </div>
   );
