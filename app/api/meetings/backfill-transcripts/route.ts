@@ -107,6 +107,8 @@ export async function POST() {
             created_at:          m.created_at,
             updated_at:          m.updated_at,
             archived:            m.archived ?? false,
+            host_user_id:        m.host_user_id ?? null,
+            host_email:          m.host_email ?? null,
           };
 
           const result = await saveMeetingTranscript(supabase, meetingRecord, co.name as string);
