@@ -44,7 +44,7 @@ export function PortfolioCompanyList({ companies, selectedId, onSelect }: Props)
   }, [companies, search, sortKey]);
 
   return (
-    <div className="flex flex-col h-full border-r border-slate-200 bg-white" style={{ minWidth: 220, width: 270 }}>
+    <div className="flex flex-col h-full border-r border-slate-200 bg-white w-full md:w-[270px] md:min-w-[220px]">
       {/* Search */}
       <div className="p-2.5 border-b border-slate-100">
         <div className="relative">

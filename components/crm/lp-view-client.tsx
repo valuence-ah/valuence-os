@@ -1668,7 +1668,22 @@ export function LpViewClient({ initialCompanies }: Props) {
 
         {/* Table */}
         {viewMode === "table" && (
-          <div className={cn("flex-1 overflow-auto", selected ? "md:mr-[480px]" : "")}>
+          <>
+            {/* Mobile card list — Company + LP Type only */}
+            <div className="md:hidden flex-1 overflow-auto">
+              {filtered.map(co => (
+                <div key={co.id} onClick={() => selectCompany(co.id)}
+                  className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-white cursor-pointer hover:bg-slate-50 active:bg-slate-100">
+                  <span className="text-sm font-medium text-slate-800 truncate mr-3">{co.name}</span>
+                  {co.lp_type
+                    ? <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap flex-shrink-0", getLpTypeBadge(co.lp_type))}>{co.lp_type}</span>
+                    : <span className="text-slate-300 text-xs flex-shrink-0">—</span>}
+                </div>
+              ))}
+              {filtered.length === 0 && <p className="px-4 py-12 text-center text-sm text-slate-400">No LPs found</p>}
+            </div>
+            {/* Desktop table */}
+            <div className={cn("hidden md:block md:flex-1 md:overflow-auto", selected ? "md:mr-[480px]" : "")}>
             <table className="w-full text-sm border-collapse" style={{ minWidth: "800px" }}>
               <colgroup>
                 {Object.keys(DEFAULT_COL_WIDTHS).map(col => <col key={col} style={{ width: colWidths[col] }} />)}
@@ -1743,7 +1758,8 @@ export function LpViewClient({ initialCompanies }: Props) {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
 
         {viewMode === "kanban" && <div className={cn("flex-1 overflow-hidden flex flex-col", selected ? "md:mr-[480px]" : "")}><KanbanView companies={filtered} onSelect={selectCompany} selectedId={selectedId} lastTouchMap={lastTouchMap} /></div>}

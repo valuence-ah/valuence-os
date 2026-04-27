@@ -1854,14 +1854,14 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     href={selected.website}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                    className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
                   >
                     Go to Website <ExternalLink size={12} />
                   </a>
                 )}
 
-                {/* ── Logo button ── */}
-                <div className="relative">
+                {/* ── Logo button — desktop only ── */}
+                <div className="hidden md:block relative">
                   <button
                     onClick={() => { setShowLogoPicker(p => !p); setLogoMsg(null); setLogoUrlInput(""); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
@@ -1948,7 +1948,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
             </div>
           </div>
 
-          <div className="px-8 py-6 space-y-8">
+          <div className="px-4 md:px-8 py-4 md:py-6 space-y-8">
 
             {/* ── Overview Fields ── */}
             <section>
@@ -2188,8 +2188,8 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                 </Field>
                 </div>
 
-                {/* Keywords — 3 cols on mobile (full-width row), 2 cols on desktop */}
-                <div className="col-span-3 md:col-span-2 order-9 md:order-9">
+                {/* Keywords — desktop only (2-col span) */}
+                <div className="hidden md:block md:col-span-2 order-9">
                   <Field label="Keywords">
                     {editing ? (
                       <div className="min-h-[28px]">
@@ -3418,7 +3418,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     </button>
                   </div>
                   {memo.executive_summary && (
-                    <p className="text-sm text-slate-600 leading-relaxed line-clamp-4">{memo.executive_summary}</p>
+                    <p className="text-xs md:text-sm text-slate-600 leading-relaxed line-clamp-4">{memo.executive_summary}</p>
                   )}
                 </div>
               ) : (

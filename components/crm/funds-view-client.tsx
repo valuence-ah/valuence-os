@@ -1360,8 +1360,25 @@ export function FundsViewClient({ initialCompanies }: Props) {
       {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden relative">
 
+        {/* Mobile card list — Fund name + Investor Type only */}
+        <div className="md:hidden flex-1 overflow-auto">
+          {filtered.map(fund => (
+            <div key={fund.id} onClick={() => setSelectedId(fund.id === selectedId ? null : fund.id)}
+              className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-white cursor-pointer hover:bg-slate-50 active:bg-slate-100">
+              <span className="text-sm font-medium text-slate-800 truncate mr-3">{fund.co}</span>
+              {fund.investorType
+                ? <span className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap flex-shrink-0"
+                    style={INVESTOR_TYPE_STYLES[fund.investorType] ?? { background: "#f1f5f9", color: "#475569" }}>
+                    {fund.investorType}
+                  </span>
+                : <span className="text-slate-300 text-xs flex-shrink-0">—</span>}
+            </div>
+          ))}
+          {filtered.length === 0 && <p className="px-4 py-12 text-center text-sm text-slate-400">No funds found</p>}
+        </div>
+
         {/* Table */}
-        <div className={cn("flex-1 overflow-auto", selectedId ? "md:mr-[480px]" : "")}>
+        <div className={cn("hidden md:block md:flex-1 md:overflow-auto", selectedId ? "md:mr-[480px]" : "")}>
           <table className="w-full text-sm border-collapse" style={{ minWidth: 1200 }}>
             <thead className="sticky top-0 z-10 bg-slate-100">
               <tr>

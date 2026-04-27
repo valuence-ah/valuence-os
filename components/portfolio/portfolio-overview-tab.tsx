@@ -386,7 +386,7 @@ export function PortfolioOverviewTab({
     <div className="p-5 space-y-4 overflow-y-auto h-full">
 
       {/* ═══ ROW 1: Valuence Investment (left) + Fundraise Tracker (right) ══════ */}
-      <div className="grid grid-cols-2 gap-4 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
 
         {/* Left: Valuence Investment — compact clickable cards */}
         <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col min-h-[110px]">
@@ -560,7 +560,7 @@ export function PortfolioOverviewTab({
       </div>
 
       {/* ═══ ROW 2: Key Metrics (left) + Meeting History (right) ═════════════════ */}
-      <div className="grid grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
 
         {/* Left: Key metrics */}
         <div className="flex flex-col">
@@ -659,7 +659,7 @@ export function PortfolioOverviewTab({
       </div>
 
       {/* ═══ ROW 3: Key Milestones (left) + Strategic Initiatives (right) ════════ */}
-      <div className="grid grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
 
         {/* Left: Key milestones */}
         <div className="flex flex-col">
@@ -808,7 +808,7 @@ export function PortfolioOverviewTab({
       </div>
 
       {/* ═══ ROW 4: M&A Acquirers (left) + Pilot Partners (right) ═══════════════ */}
-      <div className="grid grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
 
         {/* Left: M&A acquirers */}
         <div className="flex flex-col">

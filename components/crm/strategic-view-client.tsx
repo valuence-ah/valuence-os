@@ -1045,8 +1045,28 @@ export function StrategicViewClient({ initialCompanies }: Props) {
       {/* ── Body ─────────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden relative">
 
+        {/* Mobile card list — Company name + Strategic Type only */}
+        <div className="md:hidden flex-1 overflow-auto">
+          {filtered.map(co => {
+            const stratType = strategicTypeMap[co.id] !== undefined
+              ? strategicTypeMap[co.id]
+              : (co as unknown as Record<string, string>).strategic_type ?? "";
+            const style = STRATEGIC_TYPE_STYLES[stratType] ?? { background: "#f8fafc", color: "#64748b" };
+            return (
+              <div key={co.id} onClick={() => selectCompany(co.id)}
+                className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-white cursor-pointer hover:bg-slate-50 active:bg-slate-100">
+                <span className="text-sm font-medium text-slate-800 truncate mr-3">{co.name}</span>
+                {stratType
+                  ? <span className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap flex-shrink-0" style={style}>{stratType}</span>
+                  : <span className="text-slate-300 text-xs flex-shrink-0">—</span>}
+              </div>
+            );
+          })}
+          {filtered.length === 0 && <p className="px-4 py-12 text-center text-sm text-slate-400">No strategic partners found</p>}
+        </div>
+
         {/* Table */}
-        <div className={cn("flex-1 overflow-auto", selectedId ? "md:mr-[480px]" : "")}>
+        <div className={cn("hidden md:block md:flex-1 md:overflow-auto", selectedId ? "md:mr-[480px]" : "")}>
           <table className="w-full text-sm border-collapse" style={{ tableLayout: "fixed" }}>
             <colgroup>
               {Object.keys(DEFAULT_COL_WIDTHS).map(col => <col key={col} style={{ width: colWidths[col] }} />)}

@@ -1680,7 +1680,7 @@ export function PendingContactsClient({ initialContacts, companies, currentUserI
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-0 hidden md:flex">
 
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white flex-shrink-0 flex-wrap gap-y-2">

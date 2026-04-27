@@ -139,7 +139,7 @@ export function PortfolioClient({ companies: initial }: Props) {
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <div className="px-5 pt-4 flex-shrink-0">
+      <div className="hidden md:block px-5 pt-4 flex-shrink-0">
         <PortfolioStatTiles companies={companies} />
       </div>
       <div className="flex flex-1 overflow-hidden">

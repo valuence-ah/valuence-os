@@ -652,7 +652,7 @@ export function ContactsClient({
     <div className="flex flex-1 overflow-hidden flex-col">
 
       {/* ── Summary Tiles ── */}
-      <div className="px-6 py-3 flex gap-3 border-b border-slate-100 bg-white flex-wrap">
+      <div className="hidden md:flex px-6 py-3 gap-3 border-b border-slate-100 bg-white flex-wrap">
         {([
           { key: "all"          as TileFilter, label: "Total Contacts",   value: totalCount,         icon: <Users size={16} />,       color: "blue"    },
           { key: "thisMonth"    as TileFilter, label: "New This Month",   value: newThisMonthCount,  icon: <TrendingUp size={16} />,  color: "emerald" },
@@ -806,8 +806,34 @@ export function ContactsClient({
           )}
         </div>
 
+        {/* Mobile card list — each contact in its own row */}
+        <div className="md:hidden overflow-y-auto flex-1">
+          {filtered.length === 0 ? (
+            <p className="px-4 py-12 text-center text-sm text-slate-400">
+              {search ? `No contacts matching "${search}"` : "No contacts match current filters."}
+            </p>
+          ) : filtered.map(c => {
+            const fullName = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
+            const typeCls  = TYPE_BADGE[c.type] ?? { bg: "bg-gray-100", text: "text-gray-600" };
+            return (
+              <div key={c.id} onClick={() => openContact(c.id)}
+                className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-white cursor-pointer hover:bg-slate-50 active:bg-slate-100">
+                <div className="min-w-0 flex-1 mr-3">
+                  <p className="text-sm font-medium text-slate-800 truncate">{fullName || "—"}</p>
+                  {c.company?.name && <p className="text-xs text-slate-400 truncate">{c.company.name}</p>}
+                </div>
+                {c.type && (
+                  <span className={cn("text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap flex-shrink-0", typeCls.bg, typeCls.text)}>
+                    {c.type}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
         {/* Table */}
-        <div className="overflow-x-auto -mx-4 md:mx-0"><table className="w-full text-sm border-collapse min-w-[640px]">
+        <div className="hidden md:block overflow-x-auto -mx-4 md:mx-0"><table className="w-full text-sm border-collapse min-w-[640px]">
           <thead className="sticky top-[57px] z-10 bg-slate-50">
             <tr>
               {COL_DEFS.filter(c => visibleCols.includes(c.key)).map(col => (
@@ -962,7 +988,7 @@ export function ContactsClient({
           </tbody>
         </table></div>
 
-        {/* Load More */}
+        {/* Load More — desktop only */}
         {!allLoaded && !search && (
           <div className="flex items-center justify-center py-4 border-t border-slate-100">
             <button onClick={loadMore} disabled={loadingMore}
