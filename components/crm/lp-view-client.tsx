@@ -1494,8 +1494,8 @@ export function LpViewClient({ initialCompanies }: Props) {
         </div>
       )}
 
-      {/* ── Metrics bar ────────────────────────────────────────────────────── */}
-      <div className="px-5 py-4 border-b border-slate-200 bg-white">
+      {/* ── Metrics bar — hidden on mobile ─────────────────────────────────── */}
+      <div className="hidden md:block px-5 py-4 border-b border-slate-200 bg-white">
         <div className="flex gap-3 mb-4">
           {/* Fund Target */}
           <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
@@ -1587,8 +1587,8 @@ export function LpViewClient({ initialCompanies }: Props) {
         })()}
       </div>
 
-      {/* ── Fundraising Summary Bar ─────────────────────────────────────── */}
-      <div className="flex items-center gap-6 px-6 py-3 bg-slate-50 border-b border-slate-200 text-xs">
+      {/* ── Fundraising Summary Bar — hidden on mobile ──────────────────── */}
+      <div className="hidden md:flex items-center gap-6 px-6 py-3 bg-slate-50 border-b border-slate-200 text-xs">
         <div className="flex items-center gap-1.5">
           <span className="font-semibold text-slate-700">{companies.length}</span>
           <span className="text-slate-500">Total LPs</span>

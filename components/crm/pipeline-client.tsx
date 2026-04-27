@@ -1953,10 +1953,11 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
             {/* ── Overview Fields ── */}
             <section>
               <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-4">Overview</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-6 gap-y-5">
+              <div className="grid grid-cols-3 md:grid-cols-5 gap-x-6 gap-y-5">
 
-                {/* Row 1: Domain/Website, Type, Sector, Sub-sector, Last Contact */}
-                <Field label="Domain / Website">
+                {/* Mobile row 1: Website · Type · Status  |  Desktop row 1: Website · Type · Sector · Sub-sector · Last Contact */}
+                <div className="order-1">
+                <Field label="Website">
                   {editing ? (
                     <input className="input text-xs" value={editForm.website ?? ""} onChange={e => setEF("website", e.target.value)} placeholder="https://…" />
                   ) : editField === "website" ? (
@@ -1977,7 +1978,9 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     </div>
                   )}
                 </Field>
+                </div>
 
+                <div className="order-2">
                 <Field label="Type">
                   <div className="flex flex-wrap gap-1.5 mt-0.5">
                     {TYPE_OPTIONS.map(o => {
@@ -2002,7 +2005,39 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     {!editing && !(selected.types ?? []).length && !selected.type && <span className="text-xs text-slate-300">—</span>}
                   </div>
                 </Field>
+                </div>
 
+                {/* order-3 on mobile (Status), order-7 on desktop */}
+                <div className="order-3 md:order-7">
+                <Field label="Status">
+                  {editing ? (
+                    <select className="select text-xs" value={editForm.deal_status ?? ""} onChange={e => setEF("deal_status", e.target.value as DealStatus || null)}>
+                      <option value="">Not set</option>
+                      {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  ) : editField === "deal_status" ? (
+                    <select
+                      autoFocus
+                      className="w-full text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
+                      defaultValue={selected.deal_status ?? ""}
+                      onBlur={e => quickSave("deal_status", (e.target.value as DealStatus) || null)}
+                      onChange={e => quickSave("deal_status", (e.target.value as DealStatus) || null)}
+                    >
+                      <option value="">Not set</option>
+                      {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  ) : (
+                    <div onDoubleClick={() => setEditField("deal_status")} title="Double-click to edit" className="cursor-pointer">
+                      {selected.deal_status
+                        ? <span className={cn("inline-block text-xs px-2 py-1 rounded-md font-medium", STATUS_COLORS[selected.deal_status])}>{STATUS_LABELS[selected.deal_status]}</span>
+                        : <span className="text-xs text-slate-300 italic">double-click to set</span>}
+                    </div>
+                  )}
+                </Field>
+                </div>
+
+                {/* Mobile row 2: Sector · Sub-sector · Inv Round  |  Desktop row 1 cont. */}
+                <div className="order-4 md:order-3">
                 <Field label="Sector">
                   {editField === "sectors" ? (
                     <SectorQuickEdit
@@ -2038,7 +2073,9 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     </div>
                   )}
                 </Field>
+                </div>
 
+                <div className="order-5 md:order-4">
                 <Field label="Sub-sector">
                   {editing ? (
                     <select className="select text-xs" value={editForm.sub_type ?? ""} onChange={e => setEF("sub_type", e.target.value || null)}>
@@ -2065,15 +2102,10 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     </div>
                   )}
                 </Field>
+                </div>
 
-                <Field label="Last Contact">
-                  <span className="text-xs text-slate-700 flex items-center gap-1">
-                    <Calendar size={12} className="text-slate-400" />
-                    {formatDate(selected.last_contact_date)}
-                  </span>
-                </Field>
-
-                {/* Row 2: Investment Round, Status, Location, Keywords, Data Room */}
+                {/* order-6 on mobile, order-6 on desktop */}
+                <div className="order-6">
                 <Field label="Investment Round">
                   {editing ? (
                     <select className="select text-xs" value={editForm.stage ?? ""} onChange={e => setEF("stage", e.target.value || null)}>
@@ -2100,33 +2132,19 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     </div>
                   )}
                 </Field>
+                </div>
 
-                <Field label="Status">
-                  {editing ? (
-                    <select className="select text-xs" value={editForm.deal_status ?? ""} onChange={e => setEF("deal_status", e.target.value as DealStatus || null)}>
-                      <option value="">Not set</option>
-                      {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                  ) : editField === "deal_status" ? (
-                    <select
-                      autoFocus
-                      className="w-full text-xs border border-blue-300 rounded px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-400"
-                      defaultValue={selected.deal_status ?? ""}
-                      onBlur={e => quickSave("deal_status", (e.target.value as DealStatus) || null)}
-                      onChange={e => quickSave("deal_status", (e.target.value as DealStatus) || null)}
-                    >
-                      <option value="">Not set</option>
-                      {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                  ) : (
-                    <div onDoubleClick={() => setEditField("deal_status")} title="Double-click to edit" className="cursor-pointer">
-                      {selected.deal_status
-                        ? <span className={cn("inline-block text-xs px-2 py-1 rounded-md font-medium", STATUS_COLORS[selected.deal_status])}>{STATUS_LABELS[selected.deal_status]}</span>
-                        : <span className="text-xs text-slate-300 italic">double-click to set</span>}
-                    </div>
-                  )}
+                {/* Mobile row 3: Last Contact · Location  |  Desktop row 1 position 5 */}
+                <div className="order-7 md:order-5">
+                <Field label="Last Contact">
+                  <span className="text-xs text-slate-700 flex items-center gap-1">
+                    <Calendar size={12} className="text-slate-400" />
+                    {formatDate(selected.last_contact_date)}
+                  </span>
                 </Field>
+                </div>
 
+                <div className="order-8 md:order-8">
                 <Field label="Location">
                   {editing ? (
                     <div className="flex gap-2">
@@ -2168,9 +2186,10 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     </span>
                   )}
                 </Field>
+                </div>
 
-                {/* Keywords — spans 2 columns, inline-editable */}
-                <div className="col-span-2">
+                {/* Keywords — 3 cols on mobile (full-width row), 2 cols on desktop */}
+                <div className="col-span-3 md:col-span-2 order-9 md:order-9">
                   <Field label="Keywords">
                     {editing ? (
                       <div className="min-h-[28px]">
@@ -2234,7 +2253,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
             </section>
 
             {/* ── Row A: Contacts | Interaction Timeline ── */}
-            <div className={pipelineView === "board" ? "flex flex-col gap-y-8" : "grid grid-cols-2 gap-6"}>
+            <div className={pipelineView === "board" ? "flex flex-col gap-y-8" : "grid grid-cols-1 md:grid-cols-2 gap-6"}>
 
               {/* Section: Contacts */}
               <section>
@@ -2287,7 +2306,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     }}
                     className="w-full flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-lg hover:bg-blue-50 transition-colors text-left h-[60px] overflow-hidden"
                   >
-                    <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-violet-100 hidden md:flex items-center justify-center flex-shrink-0">
                       <User size={12} className="text-violet-600" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -2452,13 +2471,13 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
 
                 return (
                   <>
-                    {/* Vertical line — positioned inside the outer relative box */}
-                    <div className="absolute left-[27px] top-2 bottom-2 w-px bg-slate-200" />
+                    {/* Vertical line — hidden on mobile, visible on desktop */}
+                    <div className="absolute left-[27px] top-2 bottom-2 w-px bg-slate-200 hidden md:block" />
                     <div className="space-y-3">
                       {events.map(ev => (
                         <div key={ev.id} className="flex gap-3">
-                          {/* Dot on timeline */}
-                          <div className={cn("w-8 h-8 rounded-full border flex items-center justify-center flex-shrink-0 bg-white z-10", kindColor[ev.kind] ?? "bg-slate-50 border-slate-200")}>
+                          {/* Dot on timeline — hidden on mobile */}
+                          <div className={cn("w-8 h-8 rounded-full border hidden md:flex items-center justify-center flex-shrink-0 bg-white z-10", kindColor[ev.kind] ?? "bg-slate-50 border-slate-200")}>
                             {kindIcon[ev.kind] ?? <FileText size={13} className="text-slate-400" />}
                           </div>
                           {/* Card — fixed height to match Contact tiles */}
@@ -2756,7 +2775,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
             })()}
 
             {/* ── Row B: Strategic Partnerships | Portfolio Intelligence ── */}
-            <div className={pipelineView === "board" ? "flex flex-col gap-y-8" : "grid grid-cols-2 gap-6"}>
+            <div className={pipelineView === "board" ? "flex flex-col gap-y-8" : "grid grid-cols-1 md:grid-cols-2 gap-6"}>
 
               {/* Section: Strategic Partnerships */}
               <section>
@@ -2948,9 +2967,9 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                 <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Documents</h2>
               </div>
 
-              <div className="flex gap-4 items-start">
-              {/* ── Pitch Decks (50%) ── */}
-              <div style={{flex: '0 0 50%', minWidth: 0}}>
+              <div className="flex flex-col md:flex-row gap-4 items-start">
+              {/* ── Pitch Decks (full-width mobile / 50% desktop) ── */}
+              <div className="w-full md:w-auto" style={{flex: '0 0 50%', minWidth: 0}}>
                 <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                   <FileText size={12} /> Pitch Decks
                   {documents.filter(d => d.type === "deck" && !d.google_drive_url).length > 0 && (
@@ -3015,8 +3034,8 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                 })()}
               </div>
 
-              {/* ── Transcripts (50%) ── */}
-              <div style={{flex: '0 0 50%', minWidth: 0}}>
+              {/* ── Transcripts (full-width mobile / 50% desktop) ── */}
+              <div className="w-full md:w-auto" style={{flex: '0 0 50%', minWidth: 0}}>
                 <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                   <Paperclip size={12} /> Meeting Transcripts
                   {documents.filter(d => d.type === "transcript" && !d.google_drive_url).length > 0 && (

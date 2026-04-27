@@ -1249,8 +1249,8 @@ export function FundsViewClient({ initialCompanies }: Props) {
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-50">
 
-      {/* ── Stat cards ──────────────────────────────────────────────────────── */}
-      <div className="flex gap-3 px-5 py-4 bg-white border-b border-slate-200 flex-shrink-0">
+      {/* ── Stat cards — hidden on mobile ───────────────────────────────────── */}
+      <div className="hidden md:flex gap-3 px-5 py-4 bg-white border-b border-slate-200 flex-shrink-0">
         <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 flex-1 min-w-0 h-24">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-500"><Building2 size={14} className="text-white" /></div>
           <div className="min-w-0 flex-1">
