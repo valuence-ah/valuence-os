@@ -20,7 +20,7 @@ import {
 import "react-data-grid/lib/styles.css";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact, ContactStatus } from "@/lib/types";
-import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen, Download, Bell, ExternalLink, MapPin, Globe, Users, Building2, Calendar } from "lucide-react";
+import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen, Download, Bell, ExternalLink, MapPin, Globe, Users, Building2, Calendar, UserPlus } from "lucide-react";
 import { formatDealStatus, normalizeSector } from "@/lib/constants";
 import { AiConfigPanel } from "@/components/admin/ai-config-panel";
 import { ApiConfigPanel } from "@/components/admin/api-config-panel";
@@ -28,6 +28,7 @@ import { DrivePanel } from "@/components/admin/drive-panel";
 import { SourcingConfigPanel } from "@/components/admin/sourcing-config-panel";
 import { WatchlistPanel } from "@/components/admin/watchlist-panel";
 import { ThesisKeywordsPanel } from "@/components/admin/thesis-keywords-panel";
+import { TeamPanel } from "@/components/admin/team-panel";
 
 // ─── Row types ────────────────────────────────────────────────────────────────
 
@@ -1734,12 +1735,14 @@ function CompanyDetailPanel({ company, onClose }: { company: CompanyRow; onClose
 interface AdminClientProps {
   initialCompanies: Company[];
   initialContacts: (Contact & { company: { name: string } | null })[];
+  pendingRequests: Array<{ id: string; email: string; full_name: string; message: string | null; requested_at: string; status: string }>;
+  teamMembers: Array<{ id: string; email: string; full_name: string | null; role: string; created_at: string }>;
 }
 
-export function AdminClient({ initialCompanies, initialContacts }: AdminClientProps) {
+export function AdminClient({ initialCompanies, initialContacts, pendingRequests, teamMembers }: AdminClientProps) {
   const supabase = createClient();
 
-  const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive" | "sourcing" | "watchlist" | "thesis_keywords">("companies");
+  const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive" | "sourcing" | "watchlist" | "thesis_keywords" | "team">("companies");
 
   // ── Create Company panel (lifted above grid so it outlives cell editors) ──
   const [createRequest, setCreateRequest] = useState<{ name: string; onCreated: (co: CompanyRow) => void } | null>(null);
@@ -3202,13 +3205,28 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
           >
             <Sparkles size={11} /> Thesis
           </button>
+          <button
+            onClick={() => { setActiveTab("team"); setSearch(""); setSearchInput(""); }}
+            className={`px-3 py-1.5 border-l border-slate-200 transition-colors flex items-center gap-1 ${
+              activeTab === "team"
+                ? "bg-blue-600 text-white"
+                : "bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <UserPlus size={11} /> Team
+            {pendingRequests.length > 0 && (
+              <span className="ml-0.5 bg-amber-500 text-white text-[9px] font-bold px-1 py-0.5 rounded-full leading-none">
+                {pendingRequests.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
       {/* ── Header: Row 2 — search + filter + columns + export + add ── */}
       <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-slate-200 flex-shrink-0 flex-wrap">
         {/* Search — hidden on api/drive/sourcing/watchlist tab */}
-        <div className={`relative flex-1 max-w-xs ${(activeTab === "api" || isDrive || isSourcing || activeTab === "watchlist" || activeTab === "thesis_keywords") ? "invisible" : ""}`}>
+        <div className={`relative flex-1 max-w-xs ${(activeTab === "api" || isDrive || isSourcing || activeTab === "watchlist" || activeTab === "thesis_keywords" || activeTab === "team") ? "invisible" : ""}`}>
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -3411,7 +3429,9 @@ export function AdminClient({ initialCompanies, initialContacts }: AdminClientPr
 
       {/* ── Grid or AI Config panel or API or Drive or Sourcing or Watchlist ── */}
       <div className="flex-1 overflow-hidden admin-grid">
-        {activeTab === "thesis_keywords" ? (
+        {activeTab === "team" ? (
+          <TeamPanel initialRequests={pendingRequests} initialMembers={teamMembers} />
+        ) : activeTab === "thesis_keywords" ? (
           <ThesisKeywordsPanel />
         ) : activeTab === "watchlist" ? (
           <WatchlistPanel />

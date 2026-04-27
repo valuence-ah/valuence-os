@@ -39,6 +39,27 @@ export async function GET(request: NextRequest) {
     );
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // Auto-create profile for invited users if it doesn't exist yet
+      try {
+        const { data: { user: authedUser } } = await supabase.auth.getUser();
+        if (authedUser) {
+          const { data: existingProfile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("id", authedUser.id)
+            .maybeSingle();
+          if (!existingProfile) {
+            await supabase.from("profiles").insert({
+              id:        authedUser.id,
+              email:     authedUser.email!,
+              full_name: authedUser.user_metadata?.full_name ?? null,
+              role:      authedUser.user_metadata?.role ?? "analyst",
+            });
+          }
+        }
+      } catch (profileErr) {
+        console.error("[callback] profile creation:", profileErr);
+      }
       return NextResponse.redirect(`${origin}${redirectTo}`);
     }
   }

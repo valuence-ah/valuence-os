@@ -243,6 +243,15 @@ export default function LoginPage() {
           )}
         </div>
 
+        <div className="mt-4 pt-4 border-t border-slate-700 text-center">
+          <p className="text-xs text-slate-500">
+            Don&apos;t have access?{" "}
+            <a href="/auth/request-access" className="text-blue-400 hover:text-blue-300 font-medium hover:underline">
+              Request access
+            </a>
+          </p>
+        </div>
+
         <p className="text-center text-xs text-slate-600 mt-4">
           Internal use only · Valuence Ventures
         </p>
