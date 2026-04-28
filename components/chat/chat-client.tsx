@@ -2,7 +2,8 @@
 // ─── AI Chat Client ────────────────────────────────────────────────────────────
 // Full-featured chat interface powered by Claude.
 // Streams responses in real-time. Uses Vercel AI SDK useChat hook.
-// Suggested prompts to help users get started.
+// Auto-scroll: only scrolls when the user is already at the bottom,
+// so you can freely scroll up to read earlier messages while streaming.
 
 import { useChat } from "ai/react";
 import { useEffect, useRef } from "react";
@@ -19,17 +20,41 @@ const SUGGESTED_PROMPTS = [
 ];
 
 export function ChatClient() {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef     = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setInput, reload, error } = useChat({
+  // Track whether user is at (or near) the bottom — use a ref so we don't
+  // trigger extra re-renders every time the user scrolls.
+  const isAtBottomRef = useRef(true);
+
+  const {
+    messages, input, handleInputChange, handleSubmit,
+    isLoading, setInput, reload, error,
+  } = useChat({
     api: "/api/chat",
     initialMessages: [],
   });
 
-  // Auto-scroll to bottom on new messages
+  // Update the "is at bottom" flag whenever the user scrolls.
+  function handleScroll() {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }
+
+  // Only auto-scroll when new content arrives if the user is already at the bottom.
+  // This lets the user scroll up freely while the AI is still streaming.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
+
+  // When the user sends a new message, always jump to the bottom so they see it.
+  function submitAndScrollDown(e: React.FormEvent) {
+    isAtBottomRef.current = true;
+    handleSubmit(e);
+  }
 
   function handleSuggestedPrompt(prompt: string) {
     setInput(prompt);
@@ -40,8 +65,12 @@ export function ChatClient() {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-white">
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6">
+      {/* Messages area — attach scroll ref + handler here */}
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-4 md:p-6"
+      >
 
         {showWelcome ? (
           /* Welcome screen */
@@ -52,7 +81,8 @@ export function ChatClient() {
               </div>
               <h2 className="text-xl font-bold text-slate-900">Valuence AI Assistant</h2>
               <p className="text-slate-500 text-sm mt-2 max-w-sm mx-auto">
-                Ask me anything about your fund — pipeline status, portfolio companies, LP relationships, sourcing signals, or market trends.
+                Ask me anything about your fund — pipeline, portfolio, LPs, sourcing signals, or market knowledge.
+                All data stays private within Valuence OS.
               </p>
             </div>
 
@@ -136,7 +166,7 @@ export function ChatClient() {
       {/* Input area */}
       <div className="border-t border-slate-200 bg-white px-4 md:px-6 py-4">
         <form
-          onSubmit={handleSubmit}
+          onSubmit={submitAndScrollDown}
           className="max-w-3xl mx-auto flex gap-3 items-end"
         >
           <textarea
@@ -150,6 +180,7 @@ export function ChatClient() {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
+                isAtBottomRef.current = true;
                 handleSubmit(e as unknown as React.FormEvent);
               }
             }}
@@ -164,7 +195,7 @@ export function ChatClient() {
           </button>
         </form>
         <p className="text-center text-xs text-slate-400 mt-2">
-          Press Enter to send · Shift+Enter for new line · Powered by Claude
+          Press Enter to send · Shift+Enter for new line · Powered by Claude · Data stays private
         </p>
       </div>
     </div>
