@@ -17,7 +17,7 @@ async function sendEmail({ to, subject, html }: { to: string; subject: string; h
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Valuence OS <notifications@valuence.vc>",
+        from: "Valuence OS <onboarding@resend.dev>",
         to,
         subject,
         html,
