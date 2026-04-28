@@ -20,7 +20,8 @@ import {
 import "react-data-grid/lib/styles.css";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Contact, ContactStatus } from "@/lib/types";
-import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen, Download, Bell, ExternalLink, MapPin, Globe, Users, Building2, Calendar, UserPlus } from "lucide-react";
+import { Search, Plus, Trash2, Shield, SlidersHorizontal, X, Filter, Sparkles, Rss, FolderOpen, Download, Bell, ExternalLink, MapPin, Globe, Users, Building2, Calendar, UserPlus, Menu } from "lucide-react";
+import { useMobileNav } from "@/components/layout/sidebar";
 import { formatDealStatus, normalizeSector } from "@/lib/constants";
 import { AiConfigPanel } from "@/components/admin/ai-config-panel";
 import { ApiConfigPanel } from "@/components/admin/api-config-panel";
@@ -1744,6 +1745,7 @@ export function AdminClient({ initialCompanies, initialContacts, pendingRequests
 
   const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive" | "sourcing" | "watchlist" | "thesis_keywords" | "team">("companies");
   const [mobileShowHome, setMobileShowHome] = useState(true);
+  const { setOpen: openSidebar } = useMobileNav();
 
   function selectMobileTab(tab: typeof activeTab) {
     setActiveTab(tab);
@@ -3129,7 +3131,14 @@ export function AdminClient({ initialCompanies, initialContacts, pendingRequests
       {/* ── Mobile: tile home screen ── */}
       {mobileShowHome && (
         <div className="md:hidden flex-1 overflow-auto bg-slate-50 p-4">
-          <div className="flex items-center gap-2 mb-5">
+          <div className="flex items-center gap-3 mb-5">
+            <button
+              onClick={() => openSidebar(true)}
+              className="w-9 h-9 -ml-1 rounded-lg flex items-center justify-center text-slate-700 hover:bg-slate-200 active:bg-slate-300 transition-colors flex-shrink-0"
+              aria-label="Open menu"
+            >
+              <Menu size={20} />
+            </button>
             <Shield size={18} className="text-blue-600" />
             <h1 className="text-base font-bold text-slate-800">Admin</h1>
           </div>
@@ -3170,6 +3179,15 @@ export function AdminClient({ initialCompanies, initialContacts, pendingRequests
 
       {/* ── Header: Row 1 — title + tabs (desktop always / mobile only when not on home) ── */}
       <div className={`${mobileShowHome ? "hidden md:flex" : "flex"} items-center gap-3 px-4 py-2.5 bg-white border-b border-slate-100 flex-shrink-0 flex-wrap`}>
+        {/* Hamburger — mobile only, opens sidebar drawer */}
+        <button
+          onClick={() => openSidebar(true)}
+          className="md:hidden w-9 h-9 -ml-1 rounded-lg flex items-center justify-center text-slate-700 hover:bg-slate-100 active:bg-slate-200 transition-colors flex-shrink-0"
+          aria-label="Open menu"
+        >
+          <Menu size={20} />
+        </button>
+
         <Shield size={18} className="text-blue-600" />
         <h1 className="text-sm font-semibold text-slate-800 mr-2">Admin</h1>
 
