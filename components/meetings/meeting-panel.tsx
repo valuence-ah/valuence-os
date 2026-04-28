@@ -771,7 +771,7 @@ export function MeetingPanel({ meeting, onClose, onUpdate }: Props) {
   return (
     <>
       <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
-      <div className="fixed top-0 right-0 h-full w-[480px] bg-white shadow-2xl z-50 flex flex-col">
+      <div className="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white shadow-2xl z-50 flex flex-col">
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-200 flex items-start gap-3">

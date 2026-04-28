@@ -2170,9 +2170,9 @@ export function CompanyDetailClient({
             </div>
           </div>
 
-          {/* Right column: Interaction history (startups only) */}
+          {/* Right column: Interaction history (startups only) — hidden on mobile, use Interactions tab instead */}
           {typeGroup === "startup" && (
-            <div className="card">
+            <div className="card hidden md:block">
               <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-slate-800">Interaction History</h3>
                 <button

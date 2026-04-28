@@ -1982,28 +1982,46 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
 
                 <div className="order-2">
                 <Field label="Type">
-                  <div className="flex flex-wrap gap-1.5 mt-0.5">
-                    {TYPE_OPTIONS.map(o => {
-                      // Fall back to the `type` string column when `types` array is empty
-                      const viewTypes = (selected.types ?? []).length > 0
-                        ? (selected.types ?? [])
-                        : (selected.type ? [selected.type] : []);
-                      const active = editing
-                        ? (editForm.types as string[] ?? []).includes(o.value)
-                        : viewTypes.includes(o.value);
-                      return editing ? (
-                        <button key={o.value} type="button" onClick={() => toggleType(o.value)}
-                          className={cn("px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
-                            active ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
-                          )}>
-                          {o.label}
-                        </button>
-                      ) : active ? (
-                        <span key={o.value} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{o.label}</span>
-                      ) : null;
-                    })}
-                    {!editing && !(selected.types ?? []).length && !selected.type && <span className="text-xs text-slate-300">—</span>}
-                  </div>
+                  {editing ? (
+                    <>
+                      {/* Mobile: single select dropdown */}
+                      <select
+                        className="md:hidden select text-xs w-full mt-0.5"
+                        value={(editForm.types as string[] ?? [])[0] ?? ""}
+                        onChange={e => setEF("types", e.target.value ? [e.target.value] : [])}
+                      >
+                        <option value="">— select type —</option>
+                        {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      {/* Desktop: toggle pills */}
+                      <div className="hidden md:flex flex-wrap gap-1.5 mt-0.5">
+                        {TYPE_OPTIONS.map(o => {
+                          const active = (editForm.types as string[] ?? []).includes(o.value);
+                          return (
+                            <button key={o.value} type="button" onClick={() => toggleType(o.value)}
+                              className={cn("px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+                                active ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
+                              )}>
+                              {o.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 mt-0.5">
+                      {TYPE_OPTIONS.map(o => {
+                        const viewTypes = (selected.types ?? []).length > 0
+                          ? (selected.types ?? [])
+                          : (selected.type ? [selected.type] : []);
+                        const active = viewTypes.includes(o.value);
+                        return active ? (
+                          <span key={o.value} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{o.label}</span>
+                        ) : null;
+                      })}
+                      {!(selected.types ?? []).length && !selected.type && <span className="text-xs text-slate-300">—</span>}
+                    </div>
+                  )}
                 </Field>
                 </div>
 
@@ -2045,27 +2063,47 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                       onSave={async (vals) => { await quickSave("sectors", vals); }}
                       onCancel={() => setEditField(null)}
                     />
+                  ) : editing ? (
+                    <>
+                      {/* Mobile: single select dropdown */}
+                      <select
+                        className="md:hidden select text-xs w-full mt-0.5"
+                        value={(editForm.sectors as string[] ?? [])[0] ?? ""}
+                        onChange={e => setEF("sectors", e.target.value ? [e.target.value] : [])}
+                      >
+                        <option value="">— select sector —</option>
+                        {SECTOR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      {/* Desktop: toggle pills */}
+                      <div className="hidden md:flex flex-wrap gap-1.5 mt-0.5 cursor-text min-h-[28px] items-center">
+                        {SECTOR_OPTIONS.map(s => {
+                          const lower = s.toLowerCase();
+                          const active = (editForm.sectors as string[] ?? []).map(s => s.toLowerCase()).includes(lower);
+                          return (
+                            <button key={s} type="button" onClick={() => toggleSector(s)}
+                              className={cn("px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+                                active ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
+                              )}>
+                              {s}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
                   ) : (
                     <div
                       className="flex flex-wrap gap-1.5 mt-0.5 cursor-text min-h-[28px] items-center"
-                      onDoubleClick={() => !editing && setEditField("sectors")}
-                      title={editing ? undefined : "Double-click to edit"}
+                      onDoubleClick={() => setEditField("sectors")}
+                      title="Double-click to edit"
                     >
                       {SECTOR_OPTIONS.map(s => {
                         const lower = s.toLowerCase();
-                        const active = (editing ? (editForm.sectors as string[] ?? []) : (selected.sectors ?? [])).map(s => s.toLowerCase()).includes(lower);
-                        return editing ? (
-                          <button key={s} type="button" onClick={() => toggleSector(s)}
-                            className={cn("px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
-                              active ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
-                            )}>
-                            {s}
-                          </button>
-                        ) : active ? (
+                        const active = (selected.sectors ?? []).map(s => s.toLowerCase()).includes(lower);
+                        return active ? (
                           <span key={s} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{s}</span>
                         ) : null;
                       })}
-                      {!editing && !(selected.sectors ?? []).length && (
+                      {!(selected.sectors ?? []).length && (
                         <span className="text-xs text-slate-400 border border-dashed border-slate-300 rounded-full px-2.5 py-1 hover:border-indigo-400 hover:text-indigo-500 transition-colors">
                           + double-click to set
                         </span>
@@ -2983,9 +3021,9 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   const decks = documents.filter(d => d.type === "deck" && !d.google_drive_url);
                   const total = decks.length + 1; // +1 for upload box
                   const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
-                  const colClass = cols === 1 ? "grid-cols-1" : cols === 2 ? "grid-cols-2" : cols === 3 ? "grid-cols-3" : "grid-cols-4";
+                  const desktopCols = cols === 1 ? "md:grid-cols-1" : cols === 2 ? "md:grid-cols-2" : cols === 3 ? "md:grid-cols-3" : "md:grid-cols-4";
                   return (
-                    <div className={`grid ${colClass} gap-2 h-28 overflow-hidden`}>
+                    <div className={`grid grid-cols-2 ${desktopCols} gap-2 h-28 overflow-hidden`}>
                       {decks.map(doc => {
                         const url = doc.storage_path
                           ? supabase.storage.from("decks").getPublicUrl(doc.storage_path).data.publicUrl
@@ -3048,9 +3086,9 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   const transcripts = documents.filter(d => d.type === "transcript" && !d.google_drive_url);
                   const total = transcripts.length + 1;
                   const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
-                  const colClass = cols === 1 ? "grid-cols-1" : cols === 2 ? "grid-cols-2" : cols === 3 ? "grid-cols-3" : "grid-cols-4";
+                  const desktopColsT = cols === 1 ? "md:grid-cols-1" : cols === 2 ? "md:grid-cols-2" : cols === 3 ? "md:grid-cols-3" : "md:grid-cols-4";
                   return (
-                    <div className={`grid ${colClass} gap-2 h-24`}>
+                    <div className={`grid grid-cols-2 ${desktopColsT} gap-2 h-24`}>
                       {transcripts.map(doc => {
                         const url = doc.storage_path
                           ? supabase.storage.from("transcripts").getPublicUrl(doc.storage_path).data.publicUrl
@@ -3265,9 +3303,9 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
 
               return (
                 <section>
-                  <div className="flex gap-4">
+                  <div className="flex flex-col md:flex-row gap-4">
                     {/* Competitor Landscape */}
-                    <div style={{ flex: "0 0 50%", minWidth: 0 }}>
+                    <div className="w-full md:w-auto" style={{ flex: "0 0 50%", minWidth: 0 }}>
                       <div className="flex items-center justify-between mb-2">
                         <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Competitor Landscape</h2>
                         <div className="flex items-center gap-2">
@@ -3295,7 +3333,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     </div>
 
                     {/* M&A Acquirers */}
-                    <div style={{ flex: "0 0 50%", minWidth: 0 }}>
+                    <div className="w-full md:w-auto" style={{ flex: "0 0 50%", minWidth: 0 }}>
                       <div className="flex items-center justify-between mb-2">
                         <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Potential M&A Acquirers</h2>
                         <div className="flex items-center gap-2">

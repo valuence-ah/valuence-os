@@ -1026,7 +1026,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search partners…"
             className="pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white w-56 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
         </div>
-        <div className="flex gap-1">
+        <div className="hidden md:flex gap-1">
           {FILTER_PILLS.map(p => (
             <button key={p.id} onClick={() => setActiveFilter(p.id)}
               className={cn("px-3 py-1 text-xs font-medium rounded-full border transition-colors",

@@ -150,15 +150,18 @@ export function PortfolioClient({ companies: initial }: Props) {
             onSelect={handleSelect}
           />
         </div>
-        <div className="flex-1 overflow-hidden relative">
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {/* Mobile back button — its own row so it doesn't overlap the company name */}
           {selectedCompany && (
-            <button
-              className="md:hidden absolute top-4 left-4 z-10 flex items-center gap-1.5 text-sm text-blue-600 bg-white rounded-lg px-3 py-1.5 shadow border border-slate-200"
-              onClick={() => handleSelect(null)}
-            >
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 12L6 8l4-4" /></svg>
-              Back
-            </button>
+            <div className="md:hidden flex-shrink-0 px-4 pt-3 pb-0 bg-white border-b border-slate-100">
+              <button
+                className="flex items-center gap-1.5 text-sm text-blue-600"
+                onClick={() => handleSelect(null)}
+              >
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 12L6 8l4-4" /></svg>
+                Back to Portfolio
+              </button>
+            </div>
           )}
           {selectedCompany ? (
             <PortfolioDetailPanel

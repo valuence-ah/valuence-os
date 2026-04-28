@@ -972,20 +972,22 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
             </select>
           )}
 
-          {cfg.filters.length > 0 && <div className="h-4 w-px bg-slate-200 mx-0.5" />}
-          <span className="text-xs text-slate-400">Sort:</span>
-          {cfg.sortKeys.map(({ key, label }) => {
-            const active = sortKey === key;
-            return (
-              <button key={key} onClick={() => handleSort(key)}
-                className={cn("flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all",
-                  active ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600")}>
-                {label}
-                {active ? (sortDir === "asc" ? <ChevronUp size={11} /> : <ChevronDown size={11} />) : <ArrowUpDown size={11} className="opacity-40" />}
-              </button>
-            );
-          })}
+          {cfg.filters.length > 0 && <div className="hidden md:block h-4 w-px bg-slate-200 mx-0.5" />}
+          <div className="flex items-center gap-1 flex-nowrap w-full md:w-auto overflow-x-auto">
+            <span className="text-xs text-slate-400 flex-shrink-0">Sort:</span>
+            {cfg.sortKeys.map(({ key, label }) => {
+              const active = sortKey === key;
+              return (
+                <button key={key} onClick={() => handleSort(key)}
+                  className={cn("flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all flex-shrink-0",
+                    active ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600")}>
+                  {label}
+                  {active ? (sortDir === "asc" ? <ChevronUp size={11} /> : <ChevronDown size={11} />) : <ArrowUpDown size={11} className="opacity-40" />}
+                </button>
+              );
+            })}
+          </div>
 
           {activeFilters > 0 && (
             <button onClick={() => { setFStatus(""); setFSector(""); setFStage(""); setFSubType(""); setFTypes([]); setFCountry(""); }}
@@ -1012,8 +1014,8 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
               <CompanyLogo company={c} />
               <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
             </div>
-            {c.sectors?.[0] && (
-              <span className="text-xs text-slate-400 flex-shrink-0 truncate max-w-[120px]">{c.sectors[0]}</span>
+            {c.type && (
+              <span className="text-xs text-slate-400 flex-shrink-0 truncate max-w-[120px] capitalize">{c.type.replace(/_/g, " ")}</span>
             )}
           </div>
         ))}

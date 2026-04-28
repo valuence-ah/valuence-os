@@ -1743,6 +1743,14 @@ export function AdminClient({ initialCompanies, initialContacts, pendingRequests
   const supabase = createClient();
 
   const [activeTab, setActiveTab] = useState<"companies" | "contacts" | "ai_config" | "api" | "drive" | "sourcing" | "watchlist" | "thesis_keywords" | "team">("companies");
+  const [mobileShowHome, setMobileShowHome] = useState(true);
+
+  function selectMobileTab(tab: typeof activeTab) {
+    setActiveTab(tab);
+    setSearch("");
+    setSearchInput("");
+    setMobileShowHome(false);
+  }
 
   // ── Create Company panel (lifted above grid so it outlives cell editors) ──
   const [createRequest, setCreateRequest] = useState<{ name: string; onCreated: (co: CompanyRow) => void } | null>(null);
@@ -3118,13 +3126,64 @@ export function AdminClient({ initialCompanies, initialContacts, pendingRequests
   return (
     <>
     <div className="flex flex-col h-full">
-      {/* ── Header: Row 1 — title + tabs ── */}
-      <div className="flex items-center gap-3 px-4 py-2.5 bg-white border-b border-slate-100 flex-shrink-0 flex-wrap">
-        <Shield size={18} className="text-blue-600" />
-        <h1 className="text-sm font-semibold text-slate-800 mr-2">Admin Spreadsheet</h1>
+      {/* ── Mobile: tile home screen ── */}
+      {mobileShowHome && (
+        <div className="md:hidden flex-1 overflow-auto bg-slate-50 p-4">
+          <div className="flex items-center gap-2 mb-5">
+            <Shield size={18} className="text-blue-600" />
+            <h1 className="text-base font-bold text-slate-800">Admin</h1>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { tab: "companies"       as const, icon: <Building2 size={22} />,  label: "Companies",  desc: "All CRM companies" },
+              { tab: "contacts"        as const, icon: <Users size={22} />,      label: "Contacts",   desc: "All contacts" },
+              { tab: "ai_config"       as const, icon: <Sparkles size={22} />,   label: "AI Config",  desc: "Model & prompt settings" },
+              { tab: "api"             as const, icon: <Rss size={22} />,        label: "API Keys",   desc: "Integration keys" },
+              { tab: "drive"           as const, icon: <FolderOpen size={22} />, label: "Drive",      desc: "Google Drive sync" },
+              { tab: "sourcing"        as const, icon: <Sparkles size={22} />,   label: "Sourcing",   desc: "Signal config" },
+              { tab: "watchlist"       as const, icon: <Bell size={22} />,       label: "Watchlist",  desc: "Companies to track" },
+              { tab: "thesis_keywords" as const, icon: <Sparkles size={22} />,   label: "Thesis",     desc: "Keyword filters" },
+              { tab: "team"            as const, icon: <UserPlus size={22} />,   label: "Team",       desc: "Users & access", badge: pendingRequests.length },
+            ]).map(({ tab, icon, label, desc, badge }) => (
+              <button
+                key={tab}
+                onClick={() => selectMobileTab(tab)}
+                className="flex flex-col items-start gap-2 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm text-left hover:border-blue-300 hover:shadow-md transition-all active:scale-95"
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center relative">
+                  {icon}
+                  {badge ? (
+                    <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center leading-none">
+                      {badge}
+                    </span>
+                  ) : null}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{label}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
-        {/* Tab selector */}
-        <div className="flex rounded-md border border-slate-200 overflow-hidden text-xs font-medium">
+      {/* ── Header: Row 1 — title + tabs (desktop always / mobile only when not on home) ── */}
+      <div className={`${mobileShowHome ? "hidden md:flex" : "flex"} items-center gap-3 px-4 py-2.5 bg-white border-b border-slate-100 flex-shrink-0 flex-wrap`}>
+        <Shield size={18} className="text-blue-600" />
+        <h1 className="text-sm font-semibold text-slate-800 mr-2">Admin</h1>
+
+        {/* Mobile back-to-home */}
+        <button
+          onClick={() => setMobileShowHome(true)}
+          className="md:hidden flex items-center gap-1 text-xs text-blue-600 mr-2"
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 12L6 8l4-4" /></svg>
+          All sections
+        </button>
+
+        {/* Desktop tab selector */}
+        <div className="hidden md:flex rounded-md border border-slate-200 overflow-hidden text-xs font-medium">
           <button
             onClick={() => { setActiveTab("companies"); setSearch(""); setSearchInput(""); }}
             className={`px-3 py-1.5 transition-colors ${
@@ -3221,10 +3280,15 @@ export function AdminClient({ initialCompanies, initialContacts, pendingRequests
             )}
           </button>
         </div>
+
+        {/* Mobile: show active tab name */}
+        <span className="md:hidden text-xs font-semibold text-slate-600 capitalize ml-auto">
+          {activeTab.replace(/_/g, " ")}
+        </span>
       </div>
 
       {/* ── Header: Row 2 — search + filter + columns + export + add ── */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-slate-200 flex-shrink-0 flex-wrap">
+      <div className={`${mobileShowHome ? "hidden md:flex" : "flex"} items-center gap-3 px-4 py-2 bg-white border-b border-slate-200 flex-shrink-0 flex-wrap`}>
         {/* Search — hidden on api/drive/sourcing/watchlist tab */}
         <div className={`relative flex-1 max-w-xs ${(activeTab === "api" || isDrive || isSourcing || activeTab === "watchlist" || activeTab === "thesis_keywords" || activeTab === "team") ? "invisible" : ""}`}>
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -3428,7 +3492,7 @@ export function AdminClient({ initialCompanies, initialContacts, pendingRequests
       </div>
 
       {/* ── Grid or AI Config panel or API or Drive or Sourcing or Watchlist ── */}
-      <div className="flex-1 overflow-hidden admin-grid">
+      <div className={`${mobileShowHome ? "hidden md:flex md:flex-col" : "flex flex-col"} flex-1 overflow-hidden admin-grid`}>
         {activeTab === "team" ? (
           <TeamPanel initialRequests={pendingRequests} initialMembers={teamMembers} />
         ) : activeTab === "thesis_keywords" ? (
