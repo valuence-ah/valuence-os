@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { FeedsManager } from "@/components/admin/feeds-manager";
 import {
   Loader2, Save, Check, Rss, Search, BookOpen, Award, FlaskConical,
-  Plus, Trash2, Mail, Wifi, WifiOff, AlertCircle, Users, Tags,
+  Plus, Trash2, Mail, Wifi, WifiOff, AlertCircle, Users, Tags, Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +70,14 @@ const TABS = [
     color:       "text-violet-600",
     bg:          "bg-violet-50",
     description: "Fireflies.ai meeting recorder — syncs transcripts, AI summaries, and action items into Valuence OS.",
+  },
+  {
+    id:          "resend",
+    label:       "Resend",
+    icon:        Send,
+    color:       "text-orange-600",
+    bg:          "bg-orange-50",
+    description: "Resend transactional email — sends access-request notifications to Andrew and approval emails to new users.",
   },
 ] as const;
 
@@ -960,6 +968,165 @@ function FirefliesPanel() {
   );
 }
 
+// ── Resend email status panel ─────────────────────────────────────────────────
+function ResendPanel() {
+  const [status,      setStatus]      = useState<"idle" | "checking" | "ok" | "error" | "not_configured">("idle");
+  const [message,     setMessage]     = useState("");
+  const [sending,     setSending]     = useState(false);
+  const [sendResult,  setSendResult]  = useState<string | null>(null);
+  const [sendError,   setSendError]   = useState<string | null>(null);
+
+  async function checkConnection() {
+    setStatus("checking"); setMessage("");
+    try {
+      const res  = await fetch("/api/resend/status");
+      const data = await res.json() as { configured: boolean; valid?: boolean; message?: string };
+      if (!data.configured) {
+        setStatus("not_configured");
+        setMessage(data.message ?? "RESEND_API_KEY is not set.");
+      } else if (data.valid === false) {
+        setStatus("error");
+        setMessage(data.message ?? "API key invalid.");
+      } else {
+        setStatus("ok");
+        setMessage(data.message ?? "Connected to Resend.");
+      }
+    } catch (err) {
+      setStatus("error");
+      setMessage(err instanceof Error ? err.message : "Network error.");
+    }
+  }
+
+  async function sendTestEmail() {
+    setSending(true); setSendResult(null); setSendError(null);
+    try {
+      const res  = await fetch("/api/resend/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      const data = await res.json() as { ok?: boolean; to?: string; error?: string };
+      if (!res.ok || data.error) {
+        setSendError(data.error ?? "Send failed.");
+      } else {
+        setSendResult(`✓ Test email sent to ${data.to}`);
+      }
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Network error.");
+    }
+    setSending(false);
+  }
+
+  return (
+    <div className="max-w-2xl space-y-6">
+
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-orange-50">
+          <Send size={16} className="text-orange-600" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Resend</h2>
+          <p className="text-xs text-slate-400 mt-0.5 max-w-md">
+            Transactional email provider used to notify Andrew of new access requests and send approval emails to invited users.
+          </p>
+        </div>
+      </div>
+
+      {/* What it does */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">What Resend sends</p>
+        <ul className="space-y-2">
+          {[
+            { emoji: "🔔", title: "New access request notification", desc: "Emailed to andrew@valuence.vc whenever someone submits an access request." },
+            { emoji: "✅", title: "Access approved confirmation", desc: "Branded email sent to the new user when an admin approves them via the Admin panel." },
+          ].map(({ emoji, title, desc }) => (
+            <li key={title} className="flex items-start gap-3">
+              <span className="text-base leading-none mt-0.5">{emoji}</span>
+              <div>
+                <p className="text-xs font-medium text-slate-700">{title}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{desc}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-200 mt-2">
+          Both emails are silently skipped if <code className="bg-slate-100 px-1 rounded">RESEND_API_KEY</code> is not set, so the app works without it. Set the key to enable them.
+        </p>
+      </div>
+
+      {/* Connection test */}
+      <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Connection Status</p>
+          <button
+            onClick={checkConnection}
+            disabled={status === "checking"}
+            className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+          >
+            {status === "checking" ? <Loader2 size={12} className="animate-spin" /> : <Wifi size={12} />}
+            {status === "checking" ? "Checking…" : "Test Connection"}
+          </button>
+        </div>
+        {status === "idle"           && <p className="text-xs text-slate-400">Click &quot;Test Connection&quot; to verify your Resend API key.</p>}
+        {status === "ok"             && <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2"><Wifi size={14} /><span className="text-xs font-medium">{message}</span></div>}
+        {status === "not_configured" && <div className="flex items-start gap-2 text-amber-700 bg-amber-50 rounded-lg px-3 py-2"><AlertCircle size={14} className="mt-0.5 flex-shrink-0" /><div><p className="text-xs font-semibold">Not configured</p><p className="text-xs mt-0.5 font-mono opacity-80">{message}</p></div></div>}
+        {status === "error"          && <div className="flex items-start gap-2 text-red-700 bg-red-50 rounded-lg px-3 py-2"><WifiOff size={14} className="mt-0.5 flex-shrink-0" /><div><p className="text-xs font-semibold">Connection failed</p><p className="text-xs mt-0.5 opacity-80">{message}</p></div></div>}
+      </div>
+
+      {/* Send test email */}
+      <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Send Test Email</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Sends a test email to your own address to confirm delivery is working end-to-end.</p>
+          </div>
+          <button
+            onClick={sendTestEmail}
+            disabled={sending}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-orange-600 text-white hover:bg-orange-500 disabled:opacity-50 transition-colors"
+          >
+            {sending ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+            {sending ? "Sending…" : "Send Test Email"}
+          </button>
+        </div>
+        {sendResult && (
+          <p className="text-[11px] px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700">{sendResult}</p>
+        )}
+        {sendError && (
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50">
+            <AlertCircle size={12} className="text-red-500 mt-0.5 flex-shrink-0" />
+            <p className="text-[11px] text-red-700">{sendError}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Required env var */}
+      <div className="space-y-3">
+        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Required Environment Variable</p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-200">
+          <div className="px-4 py-2.5 flex items-start justify-between gap-4">
+            <code className="text-xs font-mono text-blue-700 flex-shrink-0">RESEND_API_KEY</code>
+            <span className="text-xs text-slate-500 text-right">Your Resend API key — found in Resend dashboard → API Keys</span>
+          </div>
+        </div>
+        <p className="text-xs text-slate-400">
+          Add to <strong>Vercel → Settings → Environment Variables</strong>, then redeploy.
+        </p>
+      </div>
+
+      {/* Setup guide */}
+      <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
+        <p className="text-xs font-semibold text-orange-800 mb-1">Setup Guide</p>
+        <ol className="text-xs text-orange-700 space-y-1 list-decimal list-inside">
+          <li>Go to <strong>resend.com</strong> and create a free account</li>
+          <li>Navigate to <strong>API Keys → Create API Key</strong>, copy the key</li>
+          <li>Add <code className="bg-orange-100 px-1 rounded">RESEND_API_KEY</code> to <strong>Vercel → Settings → Environment Variables</strong></li>
+          <li>Redeploy, then click &quot;Test Connection&quot; and &quot;Send Test Email&quot; above</li>
+          <li>Optional: verify a custom domain in Resend to send from <code className="bg-orange-100 px-1 rounded">noreply@valuence.vc</code></li>
+        </ol>
+      </div>
+
+    </div>
+  );
+}
+
 // ── Main panel ────────────────────────────────────────────────────────────────
 export function ApiConfigPanel() {
   const [activeTab, setActiveTab] = useState<TabId>("feeds");
@@ -998,6 +1165,7 @@ export function ApiConfigPanel() {
         {activeTab === "feeds"      ? <FeedsManager /> :
          activeTab === "outlook"    ? <OutlookPanel /> :
          activeTab === "fireflies"  ? <FirefliesPanel /> :
+         activeTab === "resend"     ? <ResendPanel /> :
          <AgentEditor agentName={activeTab as "exa" | "arxiv" | "sbir" | "nsf"} tab={tab} />
         }
       </div>
