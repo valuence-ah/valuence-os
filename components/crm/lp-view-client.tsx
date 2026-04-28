@@ -589,6 +589,16 @@ export function LpViewClient({ initialCompanies }: Props) {
   // LP Detail tab
   const [lpDetailTab, setLpDetailTab] = useState<"overview" | "tasks" | "company_news" | "intelligence">("overview");
 
+  // LP Tasks tab — add task form
+  const LP_TASK_CATEGORIES = ["Commercialization", "Co-investment", "Due diligence", "Ecosystem", "Fundraising", "Introduction", "Investment", "Pilot", "Portfolio Management"] as const;
+  type LpTaskCategory = typeof LP_TASK_CATEGORIES[number];
+  const [showLpTaskForm, setShowLpTaskForm]   = useState(false);
+  const [lpTaskTitle, setLpTaskTitle]         = useState("");
+  const [lpTaskCat, setLpTaskCat]             = useState<LpTaskCategory>("Fundraising");
+  const [lpTaskPrio, setLpTaskPrio]           = useState<"High" | "Medium" | "Low">("Medium");
+  const [lpTaskDue, setLpTaskDue]             = useState("");
+  const [lpTaskDesc, setLpTaskDesc]           = useState("");
+
   // Contact pop-out panel
   const [viewingContact, setViewingContact] = useState<Contact | null>(null);
 
@@ -1153,6 +1163,42 @@ export function LpViewClient({ initialCompanies }: Props) {
   const graphEmails90d       = emailEvents.filter(e => e.date >= ninetyDaysAgo).length;
   const emails90d   = interactionEmails90d + graphEmails90d;
   const meetings90d = interactions.filter(i => (i.type === "meeting" || i.type === "call") && i.date >= ninetyDaysAgo).length;
+
+  // ── Add LP Task (bridges to crm_tasks localStorage) ──────────────────────
+  function addLpTask() {
+    if (!lpTaskTitle.trim() || !selected) return;
+    try {
+      const taskId = Date.now();
+      const newTask = {
+        id: taskId,
+        title: lpTaskTitle.trim(),
+        cat: lpTaskCat,
+        init: "lp-relations",
+        prio: lpTaskPrio,
+        status: "Not started",
+        prog: 0,
+        owner: "Andrew",
+        cos: [selected.name],
+        start: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        due: lpTaskDue ? new Date(lpTaskDue).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "",
+        daysLeft: 0,
+        notes: lpTaskDesc.trim(),
+        risks: [],
+        deps: [],
+        comments: [],
+      };
+      const rawMap = localStorage.getItem("strategic_tasks_map") ?? "{}";
+      const map = JSON.parse(rawMap) as Record<string, unknown>;
+      map[String(taskId)] = newTask;
+      localStorage.setItem("strategic_tasks_map", JSON.stringify(map));
+      const rawCrm = localStorage.getItem("crm_tasks");
+      const crmTasks = rawCrm ? JSON.parse(rawCrm) as unknown[] : [];
+      crmTasks.push(newTask);
+      localStorage.setItem("crm_tasks", JSON.stringify(crmTasks));
+    } catch {}
+    setLpTaskTitle(""); setLpTaskCat("Fundraising"); setLpTaskPrio("Medium"); setLpTaskDue(""); setLpTaskDesc("");
+    setShowLpTaskForm(false);
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -1864,10 +1910,49 @@ export function LpViewClient({ initialCompanies }: Props) {
               }
               return (
                 <div className="px-4 py-4 space-y-4">
+                  {/* Add task form */}
                   <div>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Outstanding Tasks ({outstanding.length})</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Opportunities / Tasks</p>
+                      <button onClick={() => setShowLpTaskForm(v => !v)} className="text-blue-600 hover:text-blue-700"><Plus size={14} /></button>
+                    </div>
+                    {showLpTaskForm && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3 space-y-2">
+                        <input value={lpTaskTitle} onChange={e => setLpTaskTitle(e.target.value)}
+                          placeholder="Opportunity / task title"
+                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                        <div className="flex gap-2">
+                          <select value={lpTaskCat} onChange={e => setLpTaskCat(e.target.value as LpTaskCategory)}
+                            className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
+                            {LP_TASK_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                          </select>
+                          <select value={lpTaskPrio} onChange={e => setLpTaskPrio(e.target.value as "High" | "Medium" | "Low")}
+                            className="w-24 flex-shrink-0 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
+                            <option>High</option>
+                            <option>Medium</option>
+                            <option>Low</option>
+                          </select>
+                        </div>
+                        <textarea value={lpTaskDesc} onChange={e => setLpTaskDesc(e.target.value)}
+                          placeholder="Description (optional)" rows={2}
+                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 resize-none" />
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] text-slate-500 flex-shrink-0">Target date</label>
+                          <input type="date" value={lpTaskDue} onChange={e => setLpTaskDue(e.target.value)}
+                            className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={addLpTask} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
+                          <button onClick={() => { setShowLpTaskForm(false); setLpTaskTitle(""); setLpTaskDesc(""); setLpTaskDue(""); }}
+                            className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Outstanding ({outstanding.length})</p>
                     {outstanding.length === 0
-                      ? <p className="text-xs text-slate-400 text-center py-6 border-2 border-dashed border-slate-200 rounded-xl">No outstanding tasks linked to this LP.<br /><span className="text-[11px]">Tag this company in the Tasks page to link tasks here.</span></p>
+                      ? <p className="text-xs text-slate-400 text-center py-6 border-2 border-dashed border-slate-200 rounded-xl">No outstanding tasks linked to this LP.<br /><span className="text-[11px]">Add one above or tag this company in the Tasks page.</span></p>
                       : <div className="space-y-2">{outstanding.map(t => <TaskRow key={t.id} t={t} />)}</div>
                     }
                   </div>

@@ -155,7 +155,7 @@ const FILTER_PILLS = [
 type FilterId = (typeof FILTER_PILLS)[number]["id"];
 
 type OppUrgency = "high" | "medium" | "low";
-type OppType = "Co-invest" | "Introduction" | "Pilot" | "Diligence" | "Customer" | "Value-add";
+type OppType = "Commercialization" | "Co-investment" | "Due diligence" | "Ecosystem" | "Fundraising" | "Introduction" | "Investment" | "Pilot" | "Portfolio Management";
 
 // ── Helper functions ───────────────────────────────────────────────────────────
 
@@ -280,12 +280,15 @@ function urgencyColors(urgency: OppUrgency): string {
 }
 
 const OPP_TYPE_COLORS: Record<string, string> = {
-  "Introduction": "bg-amber-100 text-amber-700",
-  "Co-invest":    "bg-amber-100 text-amber-700",
-  "Pilot":        "bg-emerald-100 text-emerald-700",
-  "Diligence":    "bg-violet-100 text-violet-700",
-  "Customer":     "bg-blue-100 text-blue-700",
-  "Value-add":    "bg-slate-100 text-slate-600",
+  "Commercialization":   "bg-orange-100 text-orange-700",
+  "Co-investment":       "bg-amber-100 text-amber-700",
+  "Due diligence":       "bg-violet-100 text-violet-700",
+  "Ecosystem":           "bg-teal-100 text-teal-700",
+  "Fundraising":         "bg-blue-100 text-blue-700",
+  "Introduction":        "bg-amber-100 text-amber-700",
+  "Investment":          "bg-emerald-100 text-emerald-700",
+  "Pilot":               "bg-emerald-100 text-emerald-700",
+  "Portfolio Management":"bg-slate-100 text-slate-600",
 };
 
 // ── InlinePickerCell ───────────────────────────────────────────────────────────
@@ -767,7 +770,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [fundOpps, setFundOpps] = useState<Record<string, { id: string; title: string; type: string; urgency: string; desc: string; due: string }[]>>({});
   const [showFundOppForm, setShowFundOppForm] = useState(false);
   const [fundOppTitle, setFundOppTitle]   = useState("");
-  const [fundOppType, setFundOppType]     = useState<OppType>("Introduction");
+  const [fundOppType, setFundOppType]     = useState<OppType>("Ecosystem");
   const [fundOppUrgency, setFundOppUrgency] = useState<OppUrgency>("medium");
   const [fundOppDesc, setFundOppDesc]     = useState("");
   const [fundOppDue, setFundOppDue]       = useState("");
@@ -1218,7 +1221,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
       const newTask = {
         id: taskId,
         title: fundOppTitle.trim(),
-        cat: "Ecosystem",
+        cat: fundOppType,
         init: "ecosystem",
         prio: fundOppUrgency === "high" ? "High" : fundOppUrgency === "medium" ? "Medium" : "Low",
         status: "Not started",
@@ -1242,7 +1245,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
       crmTasks.push(newTask);
       localStorage.setItem("crm_tasks", JSON.stringify(crmTasks));
     } catch {}
-    setFundOppTitle(""); setFundOppType("Introduction"); setFundOppUrgency("medium"); setFundOppDesc(""); setFundOppDue("");
+    setFundOppTitle(""); setFundOppType("Ecosystem"); setFundOppUrgency("medium"); setFundOppDesc(""); setFundOppDue("");
     setShowFundOppForm(false);
   }
 
@@ -2661,7 +2664,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
                               onChange={e => setFundOppType(e.target.value as OppType)}
                               className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white"
                             >
-                              {(["Co-invest", "Introduction", "Pilot", "Diligence", "Customer", "Value-add"] as OppType[]).map(t => (
+                              {(["Commercialization", "Co-investment", "Due diligence", "Ecosystem", "Fundraising", "Introduction", "Investment", "Pilot", "Portfolio Management"] as OppType[]).map(t => (
                                 <option key={t}>{t}</option>
                               ))}
                             </select>
@@ -2683,7 +2686,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
                             className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 resize-none"
                           />
                           <div className="flex items-center gap-2">
-                            <label className="text-[10px] text-slate-500 flex-shrink-0">Action date</label>
+                            <label className="text-[10px] text-slate-500 flex-shrink-0">Target date</label>
                             <input
                               type="date"
                               value={fundOppDue}

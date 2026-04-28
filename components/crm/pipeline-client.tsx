@@ -487,6 +487,10 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
   const [boardDragOver, setBoardDragOver] = useState<string | null>(null);
   const [sortBy, setSortBy]               = useState<"name" | "status" | "last_contact" | "date_added">("name");
   const [includePassed, setIncludePassed] = useState(false);
+  const [filterType, setFilterType]     = useState<string | null>(null);
+  const [filterSector, setFilterSector] = useState<string | null>(null);
+  const [filterSubSector, setFilterSubSector] = useState<string | null>(null);
+  const [filterRound, setFilterRound]   = useState<string | null>(null);
   const [contacts, setContacts]           = useState<Contact[]>([]);
   const [interactions, setInteractions]   = useState<Interaction[]>([]);
   const [documents, setDocuments]         = useState<Array<{id:string;name:string;type:string;storage_path:string|null;google_drive_url:string|null;created_at:string}>>([]);
@@ -557,6 +561,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
   const [showStatusPicker,   setShowStatusPicker]   = useState(false);
 
   // Strategic Partnerships (populated from portco_strategic_map localStorage)
+  const [crmTasks, setCrmTasks] = useState<Array<{ id: number; title: string; cat: string; cos: string[]; due: string; start: string; prio: string }>>([]);
   const [portcoPartnerships, setPortcoPartnerships] = useState<{ strategicId: string; strategicName: string; portcoId: string; status: string; due: string }[]>([]);
   const [manualPartnerships, setManualPartnerships] = useState<{ id: string; name: string; note: string; date: string; status?: string }[]>([]);
   const [showAddPartnership, setShowAddPartnership] = useState(false);
@@ -671,6 +676,10 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
       // Hide passed companies by default — but never hide them when the user
       // is actively searching (so searching "Westwood" still surfaces it).
       if (!includePassed && !q && c.deal_status === "passed") return false;
+      if (filterType && !(c.types ?? []).includes(filterType as CompanyType)) return false;
+      if (filterSector && !(c.sectors ?? []).some(s => s.toLowerCase() === filterSector.toLowerCase())) return false;
+      if (filterSubSector && c.sub_sector?.toLowerCase() !== filterSubSector.toLowerCase()) return false;
+      if (filterRound && c.stage?.toLowerCase() !== filterRound.toLowerCase()) return false;
       return (
         !q ||
         c.name.toLowerCase().includes(q) ||
@@ -696,7 +705,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
           return 0;
       }
     });
-  }, [companies, search, sortBy, includePassed]);
+  }, [companies, search, sortBy, includePassed, filterType, filterSector, filterSubSector, filterRound]);
 
   // ── Virtualizer for the company list (left panel) ─────────────────────────
   const rowVirtualizer = useVirtualizer({
@@ -867,6 +876,28 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
     } catch { setManualPartnerships([]); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
+
+  // Load crm_tasks from localStorage for Opportunities/Tasks section
+  useEffect(() => {
+    function loadCrmTasks() {
+      try {
+        const raw = localStorage.getItem("crm_tasks");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            // Only show tasks that are linked to the currently selected company
+            setCrmTasks(parsed);
+          }
+        }
+      } catch {}
+    }
+    loadCrmTasks();
+    function handleStorage(e: StorageEvent) {
+      if (e.key === "crm_tasks") loadCrmTasks();
+    }
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   // Scroll right panel to top when selected company changes
   useEffect(() => {
@@ -1498,6 +1529,65 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   {includePassed ? "✕ Passed" : "+ Passed"}
                 </button>
               </div>
+              {/* Filter pills: Type / Sector / Sub-sector / Round */}
+              {(() => {
+                const allTypes = [...new Set(companies.flatMap(c => c.types ?? []))].filter(Boolean).sort();
+                const allSectors = [...new Set(companies.flatMap(c => c.sectors ?? []))].filter(Boolean).sort();
+                const allSubSectors = [...new Set(companies.map(c => c.sub_sector).filter(Boolean) as string[])].sort();
+                const allRounds = [...new Set(companies.map(c => c.stage).filter(Boolean) as string[])].sort();
+                const hasAnyFilter = filterType || filterSector || filterSubSector || filterRound;
+
+                return (
+                  <div className="space-y-1.5">
+                    {allTypes.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {allTypes.slice(0, 5).map(t => (
+                          <button key={t} onClick={() => setFilterType(filterType === t ? null : t)}
+                            className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors capitalize ${filterType === t ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-blue-300"}`}>
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {allSectors.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {allSectors.slice(0, 6).map(s => (
+                          <button key={s} onClick={() => setFilterSector(filterSector === s ? null : s)}
+                            className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors capitalize ${filterSector === s ? "bg-emerald-600 border-emerald-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-emerald-300"}`}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {allSubSectors.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {allSubSectors.slice(0, 5).map(s => (
+                          <button key={s} onClick={() => setFilterSubSector(filterSubSector === s ? null : s)}
+                            className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${filterSubSector === s ? "bg-violet-600 border-violet-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-violet-300"}`}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {allRounds.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {allRounds.slice(0, 6).map(r => (
+                          <button key={r} onClick={() => setFilterRound(filterRound === r ? null : r)}
+                            className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${filterRound === r ? "bg-amber-500 border-amber-500 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-amber-300"}`}>
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {hasAnyFilter && (
+                      <button onClick={() => { setFilterType(null); setFilterSector(null); setFilterSubSector(null); setFilterRound(null); }}
+                        className="text-[10px] text-slate-400 hover:text-red-500 underline">
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             {/* Hidden in board view — just takes up the sidebar space for layout consistency */}
             <div className="flex-1" />
@@ -1642,6 +1732,65 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
               {includePassed ? "✕ Passed" : "+ Passed"}
             </button>
           </div>
+          {/* Filter pills: Type / Sector / Sub-sector / Round */}
+          {(() => {
+            const allTypes = [...new Set(companies.flatMap(c => c.types ?? []))].filter(Boolean).sort();
+            const allSectors = [...new Set(companies.flatMap(c => c.sectors ?? []))].filter(Boolean).sort();
+            const allSubSectors = [...new Set(companies.map(c => c.sub_sector).filter(Boolean) as string[])].sort();
+            const allRounds = [...new Set(companies.map(c => c.stage).filter(Boolean) as string[])].sort();
+            const hasAnyFilter = filterType || filterSector || filterSubSector || filterRound;
+
+            return (
+              <div className="space-y-1.5">
+                {allTypes.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {allTypes.slice(0, 5).map(t => (
+                      <button key={t} onClick={() => setFilterType(filterType === t ? null : t)}
+                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors capitalize ${filterType === t ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-blue-300"}`}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {allSectors.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {allSectors.slice(0, 6).map(s => (
+                      <button key={s} onClick={() => setFilterSector(filterSector === s ? null : s)}
+                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors capitalize ${filterSector === s ? "bg-emerald-600 border-emerald-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-emerald-300"}`}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {allSubSectors.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {allSubSectors.slice(0, 5).map(s => (
+                      <button key={s} onClick={() => setFilterSubSector(filterSubSector === s ? null : s)}
+                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${filterSubSector === s ? "bg-violet-600 border-violet-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-violet-300"}`}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {allRounds.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {allRounds.slice(0, 6).map(r => (
+                      <button key={r} onClick={() => setFilterRound(filterRound === r ? null : r)}
+                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${filterRound === r ? "bg-amber-500 border-amber-500 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-amber-300"}`}>
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {hasAnyFilter && (
+                  <button onClick={() => { setFilterType(null); setFilterSector(null); setFilterSubSector(null); setFilterRound(null); }}
+                    className="text-[10px] text-slate-400 hover:text-red-500 underline">
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Company list — virtualized for performance with 200+ companies */}
@@ -2815,19 +2964,19 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
             {/* ── Row B: Strategic Partnerships | Portfolio Intelligence ── */}
             <div className={pipelineView === "board" ? "flex flex-col gap-y-8" : "grid grid-cols-1 md:grid-cols-2 gap-6"}>
 
-              {/* Section: Strategic Partnerships */}
+              {/* Section: Opportunities / Tasks */}
               <section>
-              {/* Header: Strategic Partnerships */}
+              {/* Header: Opportunities / Tasks */}
               <div className="h-9 flex items-center justify-between mb-3">
-                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Strategic Partnerships</h2>
+                <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em]">Opportunities / Tasks</h2>
                 <button onClick={() => setShowAddPartnership(v => !v)}
                   className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                   <Plus size={11} /> Add
                 </button>
               </div>
 
-              {/* Content: Strategic Partnerships */}
-              <div className="h-[150px] overflow-y-auto pr-1 bg-slate-50 rounded-xl p-3">
+              {/* Content: Opportunities / Tasks */}
+              <div className="h-[220px] overflow-y-auto pr-1 bg-slate-50 rounded-xl p-3">
                 {showAddPartnership && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
                     <div className="flex gap-2">
@@ -2870,64 +3019,90 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     </div>
                   </div>
                 )}
-                {portcoPartnerships.length === 0 && manualPartnerships.length === 0 && !showAddPartnership && (
-                  <p className="text-xs text-slate-300 italic pt-2">No strategic partnerships yet</p>
-                )}
-                <div className="divide-y divide-slate-100">
-                  {portcoPartnerships.map(p => (
-                    <div key={p.strategicId}>
-                      {confirmDeletePartner?.type === "portco" && confirmDeletePartner.id === p.strategicId ? (
-                        <div className="flex items-center gap-2 py-1.5">
-                          <span className="text-xs text-slate-500 flex-1 italic">Delete &ldquo;{p.strategicName}&rdquo;?</span>
-                          <button onMouseDown={() => { deletePortcoPartnership(p.strategicId); setConfirmDeletePartner(null); }} className="text-xs text-red-600 hover:underline font-medium flex-shrink-0">Yes</button>
-                          <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-xs text-slate-400 hover:underline flex-shrink-0">No</button>
+                {/* Combined tiles: crm tasks linked to this company + portco partnerships + manual partnerships */}
+                {(() => {
+                  const companyName = selected?.name ?? "";
+                  // crm tasks linked to this company
+                  const linkedTasks = crmTasks.filter(t => (t.cos ?? []).some(co => co.toLowerCase() === companyName.toLowerCase()));
+                  const totalItems = linkedTasks.length + portcoPartnerships.length + manualPartnerships.length;
+
+                  if (totalItems === 0 && !showAddPartnership) {
+                    return <p className="text-xs text-slate-300 italic pt-2">No opportunities or tasks yet</p>;
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      {/* CRM Tasks linked to this company */}
+                      {linkedTasks.map(t => (
+                        <div key={`task-${t.id}`} className="bg-white border border-slate-200 rounded-lg p-2.5 hover:border-blue-300 transition-colors">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-slate-800 leading-tight truncate">{t.title}</p>
+                              {(t.cos ?? []).length > 0 && (
+                                <p className="text-[10px] text-slate-500 mt-0.5 truncate">{(t.cos ?? []).join(", ")}</p>
+                              )}
+                              {t.cat && (
+                                <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">{t.cat}</span>
+                              )}
+                            </div>
+                            <div className="flex-shrink-0 text-right">
+                              {t.start && <p className="text-[10px] text-slate-400">{t.start}</p>}
+                              {t.due && <p className="text-[10px] text-slate-500 font-medium">{t.due}</p>}
+                            </div>
+                          </div>
                         </div>
-                      ) : (
-                        <button onClick={() => setExpandedPartner(expandedPartner === p.strategicId ? null : p.strategicId)}
-                          className="w-full flex items-center gap-2 py-1.5 px-1 text-left hover:bg-slate-50 rounded transition-colors">
-                          <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.strategicName}</span>
-                          {p.due && <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(p.due)}</span>}
-                          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>
-                          <ChevronRight size={11} className={cn("text-slate-300 flex-shrink-0 transition-transform", expandedPartner === p.strategicId && "rotate-90")} />
-                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "portco", id: p.strategicId }); }} className="text-slate-300 hover:text-red-400 flex-shrink-0 cursor-pointer"><X size={11} /></span>
-                        </button>
-                      )}
-                      {expandedPartner === p.strategicId && (
-                        <div className="px-2 pb-2 text-xs text-slate-500">
-                          <p><span className="font-medium text-slate-600">Status:</span> {p.status}</p>
-                          {p.due && <p><span className="font-medium text-slate-600">Due:</span> {formatDate(p.due)}</p>}
+                      ))}
+                      {/* Portco partnerships from strategic map */}
+                      {portcoPartnerships.map(p => (
+                        <div key={`portco-${p.strategicId}`} className="bg-white border border-slate-200 rounded-lg p-2.5 hover:border-blue-300 transition-colors">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-slate-800 leading-tight truncate">{p.strategicName}</p>
+                              <span className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500"}`}>{p.status}</span>
+                            </div>
+                            <div className="flex-shrink-0 text-right">
+                              {p.due && <p className="text-[10px] text-slate-500 font-medium">{formatDate(p.due)}</p>}
+                            </div>
+                          </div>
+                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "portco", id: p.strategicId }); }} className="mt-1 text-[10px] text-slate-300 hover:text-red-400 cursor-pointer">Remove</span>
+                          {confirmDeletePartner?.type === "portco" && confirmDeletePartner.id === p.strategicId && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] text-slate-500 flex-1 italic">Delete?</span>
+                              <button onMouseDown={() => { deletePortcoPartnership(p.strategicId); setConfirmDeletePartner(null); }} className="text-[10px] text-red-600 hover:underline font-medium">Yes</button>
+                              <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-[10px] text-slate-400 hover:underline">No</button>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      ))}
+                      {/* Manual partnerships */}
+                      {manualPartnerships.map(p => (
+                        <div key={`manual-${p.id}`} className="bg-white border border-slate-200 rounded-lg p-2.5 hover:border-blue-300 transition-colors">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-slate-800 leading-tight truncate">{p.name}</p>
+                              {p.note && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{p.note}</p>}
+                              {p.status && (
+                                <span className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500"}`}>{p.status}</span>
+                              )}
+                            </div>
+                            <div className="flex-shrink-0 text-right">
+                              {p.date && <p className="text-[10px] text-slate-500 font-medium">{formatDate(p.date)}</p>}
+                            </div>
+                          </div>
+                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "manual", id: p.id }); }} className="mt-1 text-[10px] text-slate-300 hover:text-red-400 cursor-pointer">Remove</span>
+                          {confirmDeletePartner?.type === "manual" && confirmDeletePartner.id === p.id && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] text-slate-500 flex-1 italic">Delete?</span>
+                              <button onMouseDown={() => { deleteManualPartnership(p.id); setConfirmDeletePartner(null); }} className="text-[10px] text-red-600 hover:underline font-medium">Yes</button>
+                              <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-[10px] text-slate-400 hover:underline">No</button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                  {manualPartnerships.map(p => (
-                    <div key={p.id}>
-                      {confirmDeletePartner?.type === "manual" && confirmDeletePartner.id === p.id ? (
-                        <div className="flex items-center gap-2 py-1.5">
-                          <span className="text-xs text-slate-500 flex-1 italic">Delete &ldquo;{p.name}&rdquo;?</span>
-                          <button onMouseDown={() => { deleteManualPartnership(p.id); setConfirmDeletePartner(null); }} className="text-xs text-red-600 hover:underline font-medium flex-shrink-0">Yes</button>
-                          <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-xs text-slate-400 hover:underline flex-shrink-0">No</button>
-                        </div>
-                      ) : (
-                        <button onClick={() => setExpandedPartner(expandedPartner === p.id ? null : p.id)}
-                          className="w-full flex items-center gap-2 py-1.5 px-1 text-left hover:bg-slate-50 rounded transition-colors">
-                          <span className="text-xs font-medium text-slate-700 flex-1 min-w-0 truncate">{p.name}</span>
-                          {p.date && <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(p.date)}</span>}
-                          {p.status && <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>}
-                          <ChevronRight size={11} className={cn("text-slate-300 flex-shrink-0 transition-transform", expandedPartner === p.id && "rotate-90")} />
-                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "manual", id: p.id }); }} className="text-slate-300 hover:text-red-400 flex-shrink-0 cursor-pointer"><X size={11} /></span>
-                        </button>
-                      )}
-                      {expandedPartner === p.id && (
-                        <div className="px-2 pb-2 text-xs text-slate-500 space-y-0.5">
-                          {p.note && <p>{p.note}</p>}
-                          {p.date && <p><span className="font-medium text-slate-600">Date:</span> {formatDate(p.date)}</p>}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>{/* end strategic partnerships content */}
+                  );
+                })()}
+              </div>{/* end opportunities/tasks content */}
               </section>
 
               {/* Section: Company Intelligence */}

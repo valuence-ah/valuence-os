@@ -18,7 +18,7 @@ import {
 
 type StrategicRole = "Co-invest" | "Customer" | "Pilot" | "Diligence";
 type SignalType = "hot" | "warm" | "cold";
-type OppType = "Co-invest" | "Introduction" | "Pilot" | "Diligence" | "Customer" | "Value-add";
+type OppType = "Commercialization" | "Co-investment" | "Due diligence" | "Ecosystem" | "Fundraising" | "Introduction" | "Investment" | "Pilot" | "Portfolio Management";
 type OppUrgency = "high" | "medium" | "low";
 type PortcoStatus = "Active pilot" | "Intro pending" | "Exploring" | "Not started";
 
@@ -84,12 +84,20 @@ const FILTER_PILLS = [
 type FilterId = (typeof FILTER_PILLS)[number]["id"];
 
 const OPP_TYPE_COLORS: Record<string, string> = {
-  "Introduction": "bg-amber-100 text-amber-700",
-  "Co-invest":    "bg-amber-100 text-amber-700",  // backwards compat
-  "Pilot":        "bg-emerald-100 text-emerald-700",
-  "Diligence":    "bg-violet-100 text-violet-700",
-  "Customer":     "bg-blue-100 text-blue-700",
-  "Value-add":    "bg-slate-100 text-slate-600",
+  "Commercialization":   "bg-orange-100 text-orange-700",
+  "Co-investment":       "bg-amber-100 text-amber-700",
+  "Due diligence":       "bg-violet-100 text-violet-700",
+  "Ecosystem":           "bg-teal-100 text-teal-700",
+  "Fundraising":         "bg-blue-100 text-blue-700",
+  "Introduction":        "bg-amber-100 text-amber-700",
+  "Investment":          "bg-emerald-100 text-emerald-700",
+  "Pilot":               "bg-emerald-100 text-emerald-700",
+  "Portfolio Management":"bg-slate-100 text-slate-600",
+  // backwards compat
+  "Co-invest":           "bg-amber-100 text-amber-700",
+  "Diligence":           "bg-violet-100 text-violet-700",
+  "Customer":            "bg-blue-100 text-blue-700",
+  "Value-add":           "bg-slate-100 text-slate-600",
 };
 
 const PORTCO_STATUS_COLORS: Record<PortcoStatus, string> = {
@@ -350,7 +358,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   // Opportunity form
   const [showOppForm, setShowOppForm]         = useState(false);
   const [oppTitle, setOppTitle]               = useState("");
-  const [oppType, setOppType]                 = useState<OppType>("Introduction");
+  const [oppType, setOppType]                 = useState<OppType>("Ecosystem");
   const [oppUrgency, setOppUrgency]           = useState<OppUrgency>("medium");
   const [oppCompany, setOppCompany]           = useState("");
   const [oppCompanyId, setOppCompanyId]       = useState("");
@@ -904,7 +912,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
         const newTask = {
           id: taskId,
           title: oppTitle.trim(),
-          cat: "Ecosystem",
+          cat: oppType,
           init: "ecosystem",
           prio: oppUrgency === "high" ? "High" : oppUrgency === "medium" ? "Medium" : "Low",
           status: "Not started",
@@ -932,7 +940,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
       } catch {}
     }
     setOppTitle("");
-    setOppCompany(""); setOppCompanyId(""); setOppSearch(""); setOppType("Introduction"); setOppUrgency("medium"); setOppDesc(""); setOppDue("");
+    setOppCompany(""); setOppCompanyId(""); setOppSearch(""); setOppType("Ecosystem"); setOppUrgency("medium"); setOppDesc(""); setOppDue("");
     setShowOppForm(false);
   }
 
@@ -1726,7 +1734,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         <div className="flex gap-2">
                           <select value={oppType} onChange={e => setOppType(e.target.value as OppType)}
                             className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
-                            {(["Co-invest", "Introduction", "Pilot", "Diligence", "Customer", "Value-add"] as OppType[]).map(t => <option key={t}>{t}</option>)}
+                            {(["Commercialization", "Co-investment", "Due diligence", "Ecosystem", "Fundraising", "Introduction", "Investment", "Pilot", "Portfolio Management"] as OppType[]).map(t => <option key={t}>{t}</option>)}
                           </select>
                           <select value={oppUrgency} onChange={e => setOppUrgency(e.target.value as OppUrgency)}
                             className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white">
@@ -1760,7 +1768,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                         <textarea value={oppDesc} onChange={e => setOppDesc(e.target.value)} placeholder="Description (optional)"
                           rows={2} className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 resize-none" />
                         <div className="flex items-center gap-2">
-                          <label className="text-[10px] text-slate-500 flex-shrink-0">Action date</label>
+                          <label className="text-[10px] text-slate-500 flex-shrink-0">Target date</label>
                           <input type="date" value={oppDue} onChange={e => setOppDue(e.target.value)}
                             className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400" />
                         </div>

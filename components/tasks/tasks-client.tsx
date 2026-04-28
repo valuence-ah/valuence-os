@@ -38,7 +38,10 @@ interface Task {
 
 const OWNERS = ["Andrew", "Gene", "Lance"];
 
-const CATEGORIES = ["Fundraising", "Diligence", "Portfolio", "Ecosystem", "IC Memo"];
+const CATEGORIES = [
+  "Commercialization", "Co-investment", "Due diligence", "Ecosystem",
+  "Fundraising", "Introduction", "Investment", "Pilot", "Portfolio Management",
+];
 
 const DEFAULT_INITIATIVES = [
   { key: "fundraise",    label: "Fundraise" },
@@ -54,11 +57,19 @@ const PRIORITIES = ["Critical", "High", "Medium", "Low"];
 // ── Color helpers ─────────────────────────────────────────────────────────────
 
 const CAT_COLORS: Record<string, string> = {
-  "Fundraising": "bg-blue-50 text-blue-700",
-  "Diligence":   "bg-violet-50 text-violet-700",
-  "Portfolio":   "bg-teal-50 text-teal-700",
-  "Ecosystem":   "bg-green-50 text-green-700",
-  "IC Memo":     "bg-amber-50 text-amber-700",
+  "Commercialization":   "bg-teal-50 text-teal-700",
+  "Co-investment":       "bg-indigo-50 text-indigo-700",
+  "Due diligence":       "bg-violet-50 text-violet-700",
+  "Ecosystem":           "bg-green-50 text-green-700",
+  "Fundraising":         "bg-blue-50 text-blue-700",
+  "Introduction":        "bg-sky-50 text-sky-700",
+  "Investment":          "bg-emerald-50 text-emerald-700",
+  "Pilot":               "bg-orange-50 text-orange-700",
+  "Portfolio Management":"bg-amber-50 text-amber-700",
+  // legacy colours kept for existing tasks
+  "Diligence":           "bg-violet-50 text-violet-700",
+  "Portfolio":           "bg-teal-50 text-teal-700",
+  "IC Memo":             "bg-amber-50 text-amber-700",
 };
 
 const PRIO_DOTS: Record<string, string> = {
@@ -359,8 +370,12 @@ function MoreMenu({ task, onEdit, onDuplicate, onDelete }: {
 
 // ── Table view ────────────────────────────────────────────────────────────────
 
-function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, onStatusChange, onArchive }: { tasks: Task[]; onSelect: (t: Task) => void; onToggleComplete: (t: Task) => void; onDelete: (t: Task) => void; onDuplicate: (t: Task) => void; onStatusChange: (t: Task, newStatus: string) => void; onArchive: (t: Task) => void }) {
+function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, onStatusChange, onArchive, justCompleted }: { tasks: Task[]; onSelect: (t: Task) => void; onToggleComplete: (t: Task) => void; onDelete: (t: Task) => void; onDuplicate: (t: Task) => void; onStatusChange: (t: Task, newStatus: string) => void; onArchive: (t: Task) => void; justCompleted: Set<number> }) {
   const sorted = [...tasks].sort((a, b) => {
+    // Just-completed tasks stay at top (position 0) so they stay visible
+    const aJust = justCompleted.has(a.id) ? -1 : 0;
+    const bJust = justCompleted.has(b.id) ? -1 : 0;
+    if (aJust !== bJust) return aJust - bJust;
     const order: Record<string, number> = { Overdue: 0, "At risk": 1, Blocked: 2, "Not started": 2, "On track": 3, Completed: 4 };
     const oa = order[a.status] ?? 3;
     const ob = order[b.status] ?? 3;
@@ -403,9 +418,10 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
               key={t.id}
               onClick={() => onSelect(t)}
               className={cn(
-                "group hover:bg-slate-50 cursor-pointer transition-colors",
-                t.status === "Overdue" && "border-l-2 border-red-400",
-                t.status === "At risk" && "border-l-2 border-amber-400",
+                "group cursor-pointer transition-colors",
+                justCompleted.has(t.id) ? "bg-emerald-50 hover:bg-emerald-100" : "hover:bg-slate-50",
+                t.status === "Overdue" && !justCompleted.has(t.id) && "border-l-2 border-red-400",
+                t.status === "At risk" && !justCompleted.has(t.id) && "border-l-2 border-amber-400",
               )}
             >
               <td className="px-3 py-2" onClick={e => { e.stopPropagation(); onToggleComplete(t); }}>
@@ -1269,21 +1285,9 @@ function AddTaskModal({ onClose, onAdd, initiatives }: AddTaskModalProps) {
               </select>
             </div>
             <div>
-              <label className="text-[10px] text-slate-400 uppercase block mb-1">Initiative</label>
-              <select className={selectCls} value={form.init} onChange={e => setForm(f => ({ ...f, init: e.target.value }))}>
-                {initiatives.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}
-              </select>
-            </div>
-            <div>
               <label className="text-[10px] text-slate-400 uppercase block mb-1">Priority</label>
               <select className={selectCls} value={form.prio} onChange={e => setForm(f => ({ ...f, prio: e.target.value }))}>
-                {PRIORITIES.map(p => <option key={p}>{p}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] text-slate-400 uppercase block mb-1">Status</label>
-              <select className={selectCls} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                {STATUSES.map(s => <option key={s}>{s}</option>)}
+                {["High", "Medium", "Low"].map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
             <div>
@@ -1293,10 +1297,6 @@ function AddTaskModal({ onClose, onAdd, initiatives }: AddTaskModalProps) {
               </select>
             </div>
             <div>
-              <label className="text-[10px] text-slate-400 uppercase block mb-1">Start Date</label>
-              <input type="date" className={inputCls} value={form.start} onChange={e => setForm(f => ({ ...f, start: e.target.value }))} />
-            </div>
-            <div className="col-span-2">
               <label className="text-[10px] text-slate-400 uppercase block mb-1">Target Date</label>
               <input type="date" className={inputCls} value={form.due} onChange={e => setForm(f => ({ ...f, due: e.target.value }))} />
             </div>
@@ -1312,8 +1312,10 @@ function AddTaskModal({ onClose, onAdd, initiatives }: AddTaskModalProps) {
             />
           </div>
           <div>
-            <label className="text-[10px] text-slate-400 uppercase block mb-1">Linked Companies</label>
-            <CompanyPicker cos={form.cos} onChange={cos => setForm(f => ({ ...f, cos }))} />
+            <label className="text-[10px] text-slate-400 uppercase block mb-1">Link Companies</label>
+            <div className="mt-0.5">
+              <CompanyPicker cos={form.cos} onChange={cos => setForm(f => ({ ...f, cos }))} />
+            </div>
           </div>
           <div className="flex gap-2 pt-2">
             <button type="submit" className="px-3 py-1.5 bg-slate-900 text-white text-xs rounded-md hover:bg-slate-700">
@@ -1474,20 +1476,26 @@ export function TasksClient() {
     list = list.filter(t => t.status !== "Completed" || justCompleted.has(t.id));
 
     switch (activeFilter) {
-      case "Fundraising": list = list.filter(t => t.cat === "Fundraising"); break;
+      case "Commercialization":    list = list.filter(t => t.cat === "Commercialization"); break;
+      case "Co-investment":        list = list.filter(t => t.cat === "Co-investment"); break;
+      case "Due diligence":        list = list.filter(t => t.cat === "Due diligence"); break;
+      case "Ecosystem":            list = list.filter(t => t.cat === "Ecosystem"); break;
+      case "Fundraising":          list = list.filter(t => t.cat === "Fundraising"); break;
+      case "Introduction":         list = list.filter(t => t.cat === "Introduction"); break;
+      case "Investment":           list = list.filter(t => t.cat === "Investment"); break;
+      case "Pilot":                list = list.filter(t => t.cat === "Pilot"); break;
+      case "Portfolio Management": list = list.filter(t => t.cat === "Portfolio Management"); break;
+      // legacy support
       case "Diligence":   list = list.filter(t => t.cat === "Diligence"); break;
       case "Portfolio":   list = list.filter(t => t.cat === "Portfolio"); break;
-      case "Ecosystem":   list = list.filter(t => t.cat === "Ecosystem"); break;
       case "IC Memo":     list = list.filter(t => t.cat === "IC Memo"); break;
-      case "Overdue":     list = list.filter(t => t.status === "Overdue"); break;
-      case "At Risk":     list = list.filter(t => t.status === "At risk"); break;
       case "Andrew":      list = list.filter(t => t.owner === "Andrew"); break;
       case "Gene":        list = list.filter(t => t.owner === "Gene"); break;
       case "Lance":       list = list.filter(t => t.owner === "Lance"); break;
     }
 
     return list;
-  }, [tasks, activeFilter, activeInitiative, search, showCompleted, showArchived]);
+  }, [tasks, activeFilter, activeInitiative, search, showCompleted, showArchived, justCompleted]);
 
   // All tasks respecting only search + initiative (for kanban completed column)
   const allSearchedTasks = useMemo(() => {
@@ -1529,8 +1537,9 @@ export function TasksClient() {
 
   const FILTER_PILLS = [
     "all", "completed", "archived",
-    "Diligence", "Fundraising", "Portfolio", "Ecosystem", "IC Memo",
-    "Andrew", "Lance", "Gene",
+    "Commercialization", "Co-investment", "Due diligence", "Ecosystem",
+    "Fundraising", "Introduction", "Investment", "Pilot", "Portfolio Management",
+    "Andrew", "Gene", "Lance",
   ];
 
   const pillLabel = (f: string) => {
@@ -1713,13 +1722,37 @@ export function TasksClient() {
               );
             })}
           </div>
-          {/* Add task — far right, blue */}
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-3 h-3" /> Add task
-          </button>
+          {/* Quick filter buttons + Add task — far right */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              onClick={() => setActiveFilter(activeFilter === "completed" ? "all" : "completed")}
+              className={cn(
+                "flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors",
+                activeFilter === "completed"
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              <CheckCircle2 className="w-3 h-3" /> Completed
+            </button>
+            <button
+              onClick={() => setActiveFilter(activeFilter === "archived" ? "all" : "archived")}
+              className={cn(
+                "flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors",
+                activeFilter === "archived"
+                  ? "bg-slate-700 text-white border-slate-700"
+                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              <Archive className="w-3 h-3" /> Archive
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Add task
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1734,6 +1767,7 @@ export function TasksClient() {
             onDuplicate={(t) => { const dup = { ...t, id: Date.now(), title: `${t.title} (copy)` }; setTasks(prev => [...prev, dup]); }}
             onStatusChange={(t, newStatus) => setTasks(prev => prev.map(task => task.id === t.id ? { ...task, status: newStatus } : task))}
             onArchive={handleArchiveTask}
+            justCompleted={justCompleted}
           />
         )}
         {view === "kanban" && (
