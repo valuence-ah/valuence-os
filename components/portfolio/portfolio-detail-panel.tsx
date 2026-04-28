@@ -217,7 +217,7 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
                 />
               </div>
 
-              <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide md:flex-wrap">
                 {/* Sector badge — click to edit */}
                 {primarySector ? (
                   <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium cursor-pointer hover:opacity-80 transition-opacity ${sectorBadgeClass(primarySector)}`}
@@ -305,7 +305,7 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
                 ) : (
                   <button
                     onClick={() => { setBoardDateDraft(company.next_board_date ?? ""); setEditingBoardDate(true); }}
-                    className="text-[11px] text-slate-400 hover:text-slate-600 flex items-center gap-0.5"
+                    className="hidden md:flex text-[11px] text-slate-400 hover:text-slate-600 items-center gap-0.5"
                   >
                     {company.next_board_date
                       ? `Board: ${new Date(company.next_board_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
@@ -318,7 +318,7 @@ export function PortfolioDetailPanel({ company, detail, onUploadSuccess, onDetai
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="hidden md:flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => setShowUpload(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-medium rounded-lg hover:bg-teal-700 transition-colors"

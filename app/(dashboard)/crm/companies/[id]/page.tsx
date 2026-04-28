@@ -90,7 +90,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
         title={company.name}
         subtitle={[company.type.replace("_", " "), company.location_city, company.location_country].filter(Boolean).join(" · ")}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2">
             <FindLogoButton companyId={companyId} />
             <ExaResearchButton companyId={companyId} />
             <GenerateMemoButton companyId={companyId} />

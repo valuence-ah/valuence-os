@@ -1506,7 +1506,7 @@ export function CompanyDetailClient({
           </div>
 
           {/* Links + Edit + Logo + Merge + Delete */}
-          <div className="flex gap-1.5 flex-shrink-0 items-start flex-wrap mt-2 md:mt-0">
+          <div className="hidden md:flex gap-1.5 flex-shrink-0 items-start flex-wrap mt-2 md:mt-0">
             {company.website && (
               <a href={company.website} target="_blank" rel="noopener noreferrer"
                 className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-blue-600 transition-colors" title="Website">

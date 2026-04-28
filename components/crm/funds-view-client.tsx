@@ -1312,7 +1312,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
             className="pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
           />
         </div>
-        <div className="flex gap-1 flex-wrap">
+        <div className="hidden md:flex gap-1 flex-wrap">
           {FILTER_PILLS.map(p => (
             <button
               key={p.id}
@@ -1365,7 +1365,10 @@ export function FundsViewClient({ initialCompanies }: Props) {
           {filtered.map(fund => (
             <div key={fund.id} onClick={() => setSelectedId(fund.id === selectedId ? null : fund.id)}
               className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-white cursor-pointer hover:bg-slate-50 active:bg-slate-100">
-              <span className="text-sm font-medium text-slate-800 truncate mr-3">{fund.co}</span>
+              <div className="flex items-center gap-2.5 min-w-0 mr-3">
+                <FundLogoImg name={fund.co} website={fund.website} logoUrl={fund.logo_url} size="sm" />
+                <span className="text-sm font-medium text-slate-800 truncate">{fund.co}</span>
+              </div>
               {fund.investorType
                 ? <span className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap flex-shrink-0"
                     style={INVESTOR_TYPE_STYLES[fund.investorType] ?? { background: "#f1f5f9", color: "#475569" }}>

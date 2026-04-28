@@ -1055,7 +1055,10 @@ export function StrategicViewClient({ initialCompanies }: Props) {
             return (
               <div key={co.id} onClick={() => selectCompany(co.id)}
                 className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-white cursor-pointer hover:bg-slate-50 active:bg-slate-100">
-                <span className="text-sm font-medium text-slate-800 truncate mr-3">{co.name}</span>
+                <div className="flex items-center gap-2.5 min-w-0 mr-3">
+                  <CompanyAvatar name={co.name} website={co.website} size="sm" />
+                  <span className="text-sm font-medium text-slate-800 truncate">{co.name}</span>
+                </div>
                 {stratType
                   ? <span className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap flex-shrink-0" style={style}>{stratType}</span>
                   : <span className="text-slate-300 text-xs flex-shrink-0">—</span>}

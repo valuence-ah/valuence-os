@@ -3097,7 +3097,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
             </section>
 
             {/* ── Drive Sync Tools ── */}
-            <section>
+            <section className="hidden md:block">
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] flex items-center gap-1.5 mr-1 flex-shrink-0">
                     <Link2 size={12} /> Drive Sync

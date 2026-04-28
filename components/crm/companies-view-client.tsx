@@ -902,14 +902,14 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
           <div className="flex items-center gap-2 ml-auto">
             <button
               onClick={() => setShowCustomize(true)}
-              className="flex items-center gap-2 px-3 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-sm font-medium rounded-lg transition-colors"
+              className="hidden md:flex items-center gap-2 px-3 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-sm font-medium rounded-lg transition-colors"
             >
               <Settings2 size={14} />
               Customize
             </button>
             <button
               onClick={() => { setForm({ type: cfg.defaultType, sectors: [] }); setShowModal(true); }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
+              className="hidden md:flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
             >
               <Plus size={15} />
               {cfg.addLabel}
@@ -945,14 +945,14 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
           )}
           {cfg.filters.includes("deal_status") && (
             <select value={fStatus} onChange={e => setFStatus(e.target.value)}
-              className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400">
+              className="hidden md:block text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400">
               <option value="">All Statuses</option>
               {DEAL_STATUS_OPTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
           )}
           {cfg.filters.includes("sector") && (
             <select value={fSector} onChange={e => setFSector(e.target.value)}
-              className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400">
+              className="hidden md:block text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400">
               <option value="">All Sectors</option>
               {SECTORS_OPTS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
             </select>
@@ -994,13 +994,34 @@ export function CompaniesViewClient({ initialCompanies, view, contactDetailsMap 
             </button>
           )}
 
-          <span className="ml-auto text-xs text-slate-400">{filtered.length} {filtered.length === 1 ? "result" : "results"}</span>
+          <span className="hidden md:block ml-auto text-xs text-slate-400">{filtered.length} {filtered.length === 1 ? "result" : "results"}</span>
         </div>
       </div>
 
+      {/* ── Mobile card list ── */}
+      <div className="md:hidden flex-1 overflow-auto bg-white">
+        {filtered.length === 0 ? (
+          <p className="px-4 py-12 text-center text-sm text-slate-400">{cfg.emptyText}</p>
+        ) : filtered.map(c => (
+          <div
+            key={c.id}
+            onClick={() => window.location.href = `/crm/companies/${c.id}`}
+            className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100 cursor-pointer hover:bg-slate-50 active:bg-slate-100"
+          >
+            <div className="flex items-center gap-2.5 min-w-0 mr-3">
+              <CompanyLogo company={c} />
+              <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
+            </div>
+            {c.sectors?.[0] && (
+              <span className="text-xs text-slate-400 flex-shrink-0 truncate max-w-[120px]">{c.sectors[0]}</span>
+            )}
+          </div>
+        ))}
+      </div>
+
       {/* ── Table — only the table body scrolls; toolbar + headers stay fixed ── */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="overflow-auto h-full bg-white">
+      <div className="hidden md:flex md:flex-1 md:min-h-0 md:overflow-hidden">
+        <div className="overflow-auto h-full bg-white w-full">
           <table
             className="border-collapse"
             style={{

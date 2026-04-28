@@ -1622,7 +1622,7 @@ export function LpViewClient({ initialCompanies }: Props) {
           <input className="pl-8 pr-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
             placeholder="Search LPs…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <div className="flex gap-1.5 flex-wrap">
+        <div className="hidden md:flex gap-1.5 flex-wrap">
           {FILTER_PILLS.map(pill => (
             <button key={pill.id} onClick={() => setActiveFilter(pill.id)}
               className={cn("px-3 py-1 text-xs font-medium rounded-full border transition-colors",
@@ -1633,20 +1633,20 @@ export function LpViewClient({ initialCompanies }: Props) {
         </div>
         {/* City filter */}
         <select value={filterCity} onChange={e => setFilterCity(e.target.value)}
-          className={cn("text-xs border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors",
+          className={cn("hidden md:block text-xs border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors",
             filterCity ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600")}>
           <option value="">All Cities</option>
           {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         {/* Country filter */}
         <select value={filterCountry} onChange={e => setFilterCountry(e.target.value)}
-          className={cn("text-xs border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors",
+          className={cn("hidden md:block text-xs border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors",
             filterCountry ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600")}>
           <option value="">All Countries</option>
           {uniqueCountries.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <div className="flex-1" />
-        <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
+        <div className="hidden md:flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
           {([["table", List], ["kanban", LayoutGrid], ["map", Globe]] as const).map(([mode, Icon]) => (
             <button key={mode} onClick={() => setViewMode(mode)}
               className={cn("px-2.5 py-1.5 text-xs flex items-center gap-1.5 transition-colors", viewMode === mode ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-50")}>
@@ -1654,7 +1654,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             </button>
           ))}
         </div>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
+        <button className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
           <Download size={12} /> Export CSV
         </button>
         <button onClick={() => setShowAddLP(true)} className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors">
@@ -1674,7 +1674,10 @@ export function LpViewClient({ initialCompanies }: Props) {
               {filtered.map(co => (
                 <div key={co.id} onClick={() => selectCompany(co.id)}
                   className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-white cursor-pointer hover:bg-slate-50 active:bg-slate-100">
-                  <span className="text-sm font-medium text-slate-800 truncate mr-3">{co.name}</span>
+                  <div className="flex items-center gap-2.5 min-w-0 mr-3">
+                    <CompanyLogo company={co} size="sm" />
+                    <span className="text-sm font-medium text-slate-800 truncate">{co.name}</span>
+                  </div>
                   {co.lp_type
                     ? <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap flex-shrink-0", getLpTypeBadge(co.lp_type))}>{co.lp_type}</span>
                     : <span className="text-slate-300 text-xs flex-shrink-0">—</span>}

@@ -847,7 +847,7 @@ export function MeetingsClient({
         </div>
 
         {/* Source filter */}
-        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value as typeof sourceFilter)} className={SEL_CLS}>
+        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value as typeof sourceFilter)} className={cn(SEL_CLS, "hidden md:block")}>
           <option value="all">All sources</option>
           <option value="fireflies">Fireflies</option>
           <option value="manual">Manual</option>
@@ -855,7 +855,7 @@ export function MeetingsClient({
 
         {/* Company filter */}
         {companyOptions.length > 0 && (
-          <select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)} className={SEL_CLS}>
+          <select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)} className={cn(SEL_CLS, "hidden md:block")}>
             <option value="all">All companies</option>
             {companyOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
           </select>
@@ -863,23 +863,23 @@ export function MeetingsClient({
 
         {/* Host filter */}
         {teamMembers.length > 0 && (
-          <select value={hostFilter} onChange={e => setHostFilter(e.target.value)} className={SEL_CLS}>
+          <select value={hostFilter} onChange={e => setHostFilter(e.target.value)} className={cn(SEL_CLS, "hidden md:block")}>
             <option value="all">All hosts</option>
             {teamMembers.map(m => <option key={m.id} value={m.id}>{m.full_name ?? m.email}</option>)}
           </select>
         )}
 
         {/* Date range */}
-        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={SEL_CLS} />
-        <span className="text-xs text-slate-400">–</span>
-        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={SEL_CLS} />
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={cn(SEL_CLS, "hidden md:block")} />
+        <span className="text-xs text-slate-400 hidden md:block">–</span>
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={cn(SEL_CLS, "hidden md:block")} />
 
         {/* Toggles */}
-        <label className="flex items-center gap-1 text-xs text-slate-500 cursor-pointer select-none">
+        <label className="hidden md:flex items-center gap-1 text-xs text-slate-500 cursor-pointer select-none">
           <input type="checkbox" checked={hasActionItems} onChange={e => setHasActionItems(e.target.checked)} className="rounded border-slate-300 accent-[#0D3D38]" />
           Actions
         </label>
-        <label className="flex items-center gap-1 text-xs text-slate-500 cursor-pointer select-none">
+        <label className="hidden md:flex items-center gap-1 text-xs text-slate-500 cursor-pointer select-none">
           <input type="checkbox" checked={hasTranscript} onChange={e => setHasTranscript(e.target.checked)} className="rounded border-slate-300 accent-[#0D3D38]" />
           Transcript
         </label>
@@ -887,14 +887,14 @@ export function MeetingsClient({
         <div className="flex-1" />
 
         {lastSynced && !syncing && (
-          <span className="text-[10px] text-slate-400">Synced {timeSince(lastSynced)}</span>
+          <span className="text-[10px] text-slate-400 hidden md:block">Synced {timeSince(lastSynced)}</span>
         )}
 
         {/* Archived toggle */}
         <button
           onClick={() => setShowArchived(v => !v)}
           className={cn(
-            "flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-md border transition-colors",
+            "hidden md:flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-md border transition-colors",
             showArchived
               ? "bg-amber-50 text-amber-700 border-amber-300"
               : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
@@ -909,7 +909,7 @@ export function MeetingsClient({
           onClick={handleBackfill}
           disabled={backfilling || syncing}
           title="Generate PDFs for resolved meetings without transcripts"
-          className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-white text-slate-500 border border-slate-200 rounded-md hover:bg-slate-50 disabled:opacity-50 transition-colors"
+          className="hidden md:flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-white text-slate-500 border border-slate-200 rounded-md hover:bg-slate-50 disabled:opacity-50 transition-colors"
         >
           <FileText size={11} className={cn(backfilling && "animate-pulse")} />
           {backfilling ? "Backfilling…" : "Backfill PDFs"}
@@ -948,7 +948,29 @@ export function MeetingsClient({
         </div>
       )}
 
+      {/* ── Mobile card list ─────────────────────────────────────────────────── */}
+      <div className="md:hidden flex-1 overflow-auto bg-white">
+        {filtered.length === 0 ? (
+          <p className="px-4 py-12 text-center text-sm text-slate-400">
+            {search ? `No meetings matching "${search}"` : "No meetings found"}
+          </p>
+        ) : filtered.map(m => (
+          <div
+            key={m.id}
+            onClick={() => setPanelMeeting(m)}
+            className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100 cursor-pointer hover:bg-slate-50 active:bg-slate-100"
+          >
+            <div className="min-w-0 flex-1 mr-3">
+              <p className="text-sm font-medium text-slate-800 truncate">{m.subject ?? "Untitled Meeting"}</p>
+              {m.company && <p className="text-xs text-slate-400 truncate mt-0.5">{m.company.name}</p>}
+            </div>
+            <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(m.date)}</span>
+          </div>
+        ))}
+      </div>
+
       {/* ── Table body (header is sticky inside so they share the same scroll width) ── */}
+      <div className="hidden md:flex md:flex-col md:flex-1 md:min-h-0">
       {(() => {
         const unresolvedMeetings = filtered.filter(m =>
           m.resolution_status == null ||
@@ -1125,6 +1147,7 @@ export function MeetingsClient({
           )}
         </div>
       )}
+      </div>{/* end hidden md:flex wrapper */}
 
       {/* ── Resolution modal ────────────────────────────────────────────────── */}
       {resolveMeeting && (
