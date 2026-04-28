@@ -422,7 +422,7 @@ export function ContactsClient({
     }).sort((a, b) => {
       let av = "", bv = "";
       switch (sortKey) {
-        case "name":        av = `${a.last_name} ${a.first_name}`.toLowerCase();  bv = `${b.last_name} ${b.first_name}`.toLowerCase();  break;
+        case "name":        av = `${a.last_name ?? ""} ${a.first_name ?? ""}`.toLowerCase().trim();  bv = `${b.last_name ?? ""} ${b.first_name ?? ""}`.toLowerCase().trim();  break;
         case "company":     av = (a.company?.name ?? "").toLowerCase();           bv = (b.company?.name ?? "").toLowerCase();           break;
         case "type":        av = a.type ?? "";                                    bv = b.type ?? "";                                    break;
         case "city":        av = a.location_city ?? "";                           bv = b.location_city ?? "";                           break;
@@ -683,10 +683,10 @@ export function ContactsClient({
       </div>
 
       {/* ── Main content ── */}
-      <div className={cn("flex-1 overflow-auto", selectedId ? "mr-[460px]" : "")}>
+      <div className={cn("flex flex-col flex-1 overflow-hidden", selectedId ? "mr-[460px]" : "")}>
 
-        {/* Toolbar */}
-        <div className="px-6 py-3 border-b border-slate-100 bg-white sticky top-0 z-10">
+        {/* Toolbar — outside scroll so thead sticky top-0 works cleanly */}
+        <div className="flex-shrink-0 px-6 py-3 border-b border-slate-100 bg-white">
           <div className="flex flex-wrap gap-2.5 items-center justify-between">
             <div className="flex gap-2 flex-wrap items-center">
               {/* Search */}
@@ -806,6 +806,7 @@ export function ContactsClient({
           )}
         </div>
 
+        <div className="flex-1 overflow-auto">
         {/* Mobile card list — each contact in its own row */}
         <div className="md:hidden overflow-y-auto flex-1">
           {filtered.length === 0 ? (
@@ -834,7 +835,7 @@ export function ContactsClient({
 
         {/* Table */}
         <div className="hidden md:block overflow-x-auto -mx-4 md:mx-0"><table className="w-full text-sm border-collapse min-w-[640px]">
-          <thead className="sticky top-[57px] z-10 bg-slate-50">
+          <thead className="sticky top-0 z-10 bg-slate-50">
             <tr>
               {COL_DEFS.filter(c => visibleCols.includes(c.key)).map(col => (
                 <th key={col.key}
@@ -999,7 +1000,8 @@ export function ContactsClient({
             </button>
           </div>
         )}
-      </div>
+        </div>{/* end scroll container */}
+      </div>{/* end content wrapper */}
 
       {/* ── Right Detail Panel ── */}
       {selectedId && selected && (

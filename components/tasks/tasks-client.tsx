@@ -1345,6 +1345,8 @@ export function TasksClient() {
   const [search, setSearch] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [confirmDeleteTaskId, setConfirmDeleteTaskId] = useState<number | null>(null);
+  // Track tasks just-checked-complete so they stay visible for archive/delete
+  const [justCompleted, setJustCompleted] = useState<Set<number>>(new Set());
 
   // ── localStorage bridge ──────────────────────────────────────────────────────
 
@@ -1413,6 +1415,11 @@ export function TasksClient() {
     const updated = { ...t, status: t.status === "Completed" ? "On track" as const : "Completed" as const };
     setTasks(prev => prev.map(x => x.id === t.id ? updated : x));
     if (selectedTask?.id === t.id) setSelectedTask(updated);
+    if (updated.status === "Completed") {
+      setJustCompleted(prev => new Set([...prev, t.id]));
+    } else {
+      setJustCompleted(prev => { const next = new Set(prev); next.delete(t.id); return next; });
+    }
   }
 
   function handleDeleteTask(t: Task) {
@@ -1421,6 +1428,7 @@ export function TasksClient() {
 
   function handleArchiveTask(t: Task) {
     setTasks(prev => prev.map(x => x.id === t.id ? { ...x, archived: true } : x));
+    setJustCompleted(prev => { const next = new Set(prev); next.delete(t.id); return next; });
     if (selectedTask?.id === t.id) setSelectedTask(null);
   }
 
@@ -1461,9 +1469,9 @@ export function TasksClient() {
       return list.filter(t => t.status === "Completed");
     }
 
-    // Exclude archived and completed unless pill active
+    // Exclude archived. Keep "just completed" tasks visible so user can archive/delete them.
     list = list.filter(t => !t.archived);
-    list = list.filter(t => t.status !== "Completed");
+    list = list.filter(t => t.status !== "Completed" || justCompleted.has(t.id));
 
     switch (activeFilter) {
       case "Fundraising": list = list.filter(t => t.cat === "Fundraising"); break;
@@ -1520,8 +1528,9 @@ export function TasksClient() {
   // ── Filter pills ─────────────────────────────────────────────────────────────
 
   const FILTER_PILLS = [
-    "all", "Fundraising", "Diligence", "Portfolio", "Ecosystem", "IC Memo",
-    "Overdue", "At Risk", "Andrew", "Gene", "Lance", "completed", "archived",
+    "all", "completed", "archived",
+    "Diligence", "Fundraising", "Portfolio", "Ecosystem", "IC Memo",
+    "Andrew", "Lance", "Gene",
   ];
 
   const pillLabel = (f: string) => {

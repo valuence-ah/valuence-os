@@ -1726,7 +1726,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
               <div className="flex border-b border-slate-200 flex-shrink-0 overflow-x-auto">
                 {([
                   { key: "overview",          label: "Overview" },
-                  { key: "opportunities",     label: "Opportunities" },
+                  { key: "opportunities",     label: "Opportunity/Task" },
                   { key: "fund_news",         label: "Fund News" },
                   { key: "fund_intelligence", label: "Fund Intel" },
                 ] as const).map(({ key, label }) => (
@@ -2731,23 +2731,45 @@ export function FundsViewClient({ initialCompanies }: Props) {
                       try {
                         const raw = localStorage.getItem("crm_tasks");
                         if (!raw) return null;
-                        const allTasks = JSON.parse(raw) as Array<{ id: number; title: string; status: string; prio: string; due: string; cos: string[]; cat: string }>;
+                        const allTasks = JSON.parse(raw) as Array<{ id: number; title: string; status: string; prio: string; due: string; cos: string[]; cat: string; archived?: boolean }>;
                         const linked = allTasks.filter(t => t.cos?.some((c: string) => c.toLowerCase() === (selected?.co ?? "").toLowerCase()));
                         if (linked.length === 0) return null;
+                        const outstanding = linked.filter(t => t.status !== "Completed" && !t.archived);
+                        const done = linked.filter(t => t.status === "Completed" || t.archived);
+                        const PRIO_DOT_F: Record<string, string> = { Critical: "bg-red-500", High: "bg-amber-500", Medium: "bg-blue-400", Low: "bg-slate-400" };
+                        const STATUS_CLS_F: Record<string, string> = {
+                          "On track": "bg-green-50 text-green-700", "At risk": "bg-amber-50 text-amber-700",
+                          "Overdue": "bg-red-50 text-red-700", "Completed": "bg-slate-100 text-slate-400", "Not started": "bg-slate-100 text-slate-500",
+                        };
                         return (
-                          <div>
-                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Linked Tasks</p>
-                            <div className="space-y-1.5">
-                              {linked.map(t => (
-                                <div key={t.id} className="border border-slate-200 rounded-lg p-2 bg-white flex items-start justify-between gap-2">
+                          <div className="border-t border-slate-100 mt-3 pt-3">
+                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Linked Tasks</p>
+                            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                              {outstanding.map(t => (
+                                <a key={t.id} href="/tasks" className="flex items-start gap-2 border border-slate-200 rounded-lg p-2 bg-white hover:bg-blue-50 hover:border-blue-200 transition-colors cursor-pointer">
+                                  <span className={cn("mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0", PRIO_DOT_F[t.prio] ?? "bg-slate-300")} />
                                   <div className="min-w-0 flex-1">
                                     <p className="text-xs font-medium text-slate-700 truncate">{t.title}</p>
-                                    {t.due && <p className="text-[10px] text-slate-400 mt-0.5">Due {t.due}</p>}
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", STATUS_CLS_F[t.status] ?? "bg-slate-100 text-slate-500")}>{t.status}</span>
+                                      {t.due && <span className="text-[10px] text-slate-400">Due {t.due}</span>}
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-1 flex-shrink-0">
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{t.status}</span>
-                                  </div>
+                                </a>
+                              ))}
+                              {done.length > 0 && outstanding.length > 0 && (
+                                <div className="border-t border-slate-100 pt-1.5 mt-1">
+                                  <p className="text-[9px] font-semibold text-slate-300 uppercase tracking-wide mb-1">Completed / Archived</p>
                                 </div>
+                              )}
+                              {done.map(t => (
+                                <a key={t.id} href="/tasks" className="flex items-start gap-2 border border-slate-100 rounded-lg p-2 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer opacity-60">
+                                  <span className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0 bg-slate-300" />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium text-slate-500 truncate line-through">{t.title}</p>
+                                    {t.due && <span className="text-[10px] text-slate-400">Due {t.due}</span>}
+                                  </div>
+                                </a>
                               ))}
                             </div>
                           </div>

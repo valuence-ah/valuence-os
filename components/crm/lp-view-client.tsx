@@ -587,7 +587,7 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [savingActivity, setSavingActivity] = useState(false);
 
   // LP Detail tab
-  const [lpDetailTab, setLpDetailTab] = useState<"overview" | "company_news" | "intelligence">("overview");
+  const [lpDetailTab, setLpDetailTab] = useState<"overview" | "tasks" | "company_news" | "intelligence">("overview");
 
   // Contact pop-out panel
   const [viewingContact, setViewingContact] = useState<Contact | null>(null);
@@ -1813,6 +1813,7 @@ export function LpViewClient({ initialCompanies }: Props) {
             <div className="flex border-b border-slate-200 px-5 flex-shrink-0">
               {([
                 { key: "overview",      label: "Overview",      icon: null },
+                { key: "tasks",         label: "Tasks",         icon: null },
                 { key: "company_news",  label: "Company News",  icon: <Newspaper size={11} /> },
                 { key: "intelligence",  label: "Intelligence",  icon: <Briefcase size={11} /> },
               ] as const).map(({ key, label, icon }) => (
@@ -1828,6 +1829,57 @@ export function LpViewClient({ initialCompanies }: Props) {
                 </button>
               ))}
             </div>
+
+            {/* Tasks tab */}
+            {lpDetailTab === "tasks" && (() => {
+              const companyName = selected?.name ?? "";
+              let allTasks: Array<{ id: number; title: string; status: string; prio: string; due: string; cos: string[]; cat: string; archived?: boolean }> = [];
+              try {
+                const raw = localStorage.getItem("crm_tasks");
+                if (raw) allTasks = JSON.parse(raw);
+              } catch {}
+              const linked = allTasks.filter(t => t.cos?.some((c: string) => c.toLowerCase() === companyName.toLowerCase()));
+              const outstanding = linked.filter(t => t.status !== "Completed" && !t.archived);
+              const done = linked.filter(t => t.status === "Completed" || t.archived);
+              const PRIO_DOT: Record<string, string> = { Critical: "bg-red-500", High: "bg-amber-500", Medium: "bg-blue-400", Low: "bg-slate-400" };
+              const STATUS_CLS: Record<string, string> = {
+                "On track": "bg-green-50 text-green-700", "At risk": "bg-amber-50 text-amber-700",
+                "Overdue": "bg-red-50 text-red-700", "Blocked": "bg-violet-50 text-violet-700",
+                "Completed": "bg-slate-100 text-slate-400", "Not started": "bg-slate-100 text-slate-500",
+              };
+              function TaskRow({ t, dim }: { t: typeof linked[number]; dim?: boolean }) {
+                return (
+                  <a href="/tasks" className={cn("block border border-slate-200 rounded-xl p-3 bg-white hover:bg-blue-50 hover:border-blue-200 transition-colors cursor-pointer", dim && "opacity-60")}>
+                    <div className="flex items-start gap-2 mb-1">
+                      <span className={cn("mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0", PRIO_DOT[t.prio] ?? "bg-slate-300")} />
+                      <p className={cn("text-xs font-medium text-slate-800 leading-snug flex-1", dim && "line-through text-slate-400")}>{t.title}</p>
+                    </div>
+                    <div className="flex items-center gap-2 ml-3.5">
+                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", STATUS_CLS[t.status] ?? "bg-slate-100 text-slate-500")}>{t.status}</span>
+                      {t.cat && <span className="text-[10px] text-slate-400">{t.cat}</span>}
+                      {t.due && <span className="text-[10px] text-slate-400 ml-auto">Due {t.due}</span>}
+                    </div>
+                  </a>
+                );
+              }
+              return (
+                <div className="px-4 py-4 space-y-4">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Outstanding Tasks ({outstanding.length})</p>
+                    {outstanding.length === 0
+                      ? <p className="text-xs text-slate-400 text-center py-6 border-2 border-dashed border-slate-200 rounded-xl">No outstanding tasks linked to this LP.<br /><span className="text-[11px]">Tag this company in the Tasks page to link tasks here.</span></p>
+                      : <div className="space-y-2">{outstanding.map(t => <TaskRow key={t.id} t={t} />)}</div>
+                    }
+                  </div>
+                  {done.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Completed / Archived ({done.length})</p>
+                      <div className="space-y-2">{done.map(t => <TaskRow key={t.id} t={t} dim />)}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Company News tab */}
             {lpDetailTab === "company_news" && (() => {
