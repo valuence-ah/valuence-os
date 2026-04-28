@@ -14,12 +14,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
   }
 
-  const { userId, outlook_mailbox, fireflies_email } = await req.json();
+  const { userId, outlook_mailbox, fireflies_email, fireflies_api_key } = await req.json();
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 
   const update: Record<string, string | null> = {};
-  if (outlook_mailbox !== undefined) update.outlook_mailbox = outlook_mailbox;
-  if (fireflies_email !== undefined) update.fireflies_email = fireflies_email;
+  if (outlook_mailbox  !== undefined) update.outlook_mailbox  = outlook_mailbox;
+  if (fireflies_email  !== undefined) update.fireflies_email  = fireflies_email;
+  if (fireflies_api_key !== undefined) update.fireflies_api_key = fireflies_api_key;
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }

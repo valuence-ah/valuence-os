@@ -1737,7 +1737,7 @@ interface AdminClientProps {
   initialCompanies: Company[];
   initialContacts: (Contact & { company: { name: string } | null })[];
   pendingRequests: Array<{ id: string; email: string; full_name: string; message: string | null; requested_at: string; status: string }>;
-  teamMembers: Array<{ id: string; email: string; full_name: string | null; role: string; created_at: string; outlook_mailbox: string | null; fireflies_email: string | null; initials: string | null }>;
+  teamMembers: Array<{ id: string; email: string; full_name: string | null; role: string; created_at: string; outlook_mailbox: string | null; fireflies_email: string | null; fireflies_api_key: string | null; fireflies_webhook_token: string; initials: string | null }>;
 }
 
 export function AdminClient({ initialCompanies, initialContacts, pendingRequests, teamMembers }: AdminClientProps) {

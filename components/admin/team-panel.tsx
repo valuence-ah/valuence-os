@@ -21,9 +21,11 @@ interface TeamMember {
   full_name: string | null;
   role: string;
   created_at: string;
-  outlook_mailbox: string | null;
-  fireflies_email: string | null;
-  initials:        string | null;
+  outlook_mailbox:         string | null;
+  fireflies_email:         string | null;
+  fireflies_api_key:       string | null;
+  fireflies_webhook_token: string;
+  initials:                string | null;
 }
 
 interface Props {
@@ -332,6 +334,67 @@ export function TeamPanel({ initialRequests, initialMembers }: Props) {
                         }}
                       />
                       <p className="text-[10px] text-slate-400 mt-0.5">Used to attribute meeting transcripts.</p>
+                    </div>
+
+                    {/* Fireflies API key — full width */}
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Fireflies API key
+                      </label>
+                      <input
+                        type="password"
+                        defaultValue={member.fireflies_api_key ?? ""}
+                        placeholder="Generate in Fireflies → Settings → Developer Settings → API Key"
+                        className="w-full px-2 py-1.5 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        onBlur={async (e) => {
+                          const val = e.target.value.trim() || null;
+                          if (val === member.fireflies_api_key) return;
+                          setLoadingAction(p => ({ ...p, [member.id]: true }));
+                          const res = await fetch("/api/admin/update-integrations", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ userId: member.id, fireflies_api_key: val }),
+                          });
+                          setLoadingAction(p => ({ ...p, [member.id]: false }));
+                          if (res.ok) {
+                            setMembers(p => p.map(m => m.id === member.id ? { ...m, fireflies_api_key: val } : m));
+                            showToast(`API key saved for ${member.full_name ?? member.email}`);
+                          } else showToast("Failed to save API key", false);
+                        }}
+                      />
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Stored securely. Used to fetch this user&apos;s meeting transcripts from Fireflies.
+                      </p>
+                    </div>
+
+                    {/* Unique webhook URL */}
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Personal Fireflies webhook URL
+                      </label>
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          readOnly
+                          value={`${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/fireflies-direct/${member.fireflies_webhook_token}`}
+                          className="flex-1 px-2 py-1.5 text-xs font-mono border border-slate-200 bg-slate-50 rounded-md cursor-default"
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = `${window.location.origin}/api/webhooks/fireflies-direct/${member.fireflies_webhook_token}`;
+                            navigator.clipboard.writeText(url);
+                            showToast("Webhook URL copied to clipboard");
+                          }}
+                          className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md text-slate-700 transition-colors"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Send to {member.full_name ?? member.email} — they paste it in Fireflies → Settings → Developer Settings → Webhook → Configure.
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -52,7 +52,7 @@ export default async function AdminPage() {
   // Fetch all team members (profiles)
   const { data: teamMembers } = await supabase
     .from("profiles")
-    .select("id, email, full_name, role, created_at, outlook_mailbox, fireflies_email, initials")
+    .select("id, email, full_name, role, created_at, outlook_mailbox, fireflies_email, fireflies_api_key, fireflies_webhook_token, initials")
     .order("created_at", { ascending: true });
 
   return (

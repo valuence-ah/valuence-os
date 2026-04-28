@@ -21,10 +21,12 @@ export interface Profile {
   role: "partner" | "principal" | "analyst" | "admin";
   created_at: string;
   updated_at: string;
-  outlook_mailbox:    string | null;
-  fireflies_email:    string | null;
-  fireflies_user_id:  string | null;
-  initials:           string | null;
+  outlook_mailbox:         string | null;
+  fireflies_email:         string | null;
+  fireflies_user_id:       string | null;
+  fireflies_api_key:       string | null;
+  fireflies_webhook_token: string;
+  initials:                string | null;
 }
 
 export interface Company {
