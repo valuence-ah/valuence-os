@@ -489,7 +489,6 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
   const [includePassed, setIncludePassed] = useState(false);
   const [filterType, setFilterType]     = useState<string | null>(null);
   const [filterSector, setFilterSector] = useState<string | null>(null);
-  const [filterSubSector, setFilterSubSector] = useState<string | null>(null);
   const [filterRound, setFilterRound]   = useState<string | null>(null);
   const [contacts, setContacts]           = useState<Contact[]>([]);
   const [interactions, setInteractions]   = useState<Interaction[]>([]);
@@ -678,7 +677,6 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
       if (!includePassed && !q && c.deal_status === "passed") return false;
       if (filterType && !(c.types ?? []).includes(filterType as CompanyType)) return false;
       if (filterSector && !(c.sectors ?? []).some(s => s.toLowerCase() === filterSector.toLowerCase())) return false;
-      if (filterSubSector && c.sub_sector?.toLowerCase() !== filterSubSector.toLowerCase()) return false;
       if (filterRound && c.stage?.toLowerCase() !== filterRound.toLowerCase()) return false;
       return (
         !q ||
@@ -705,7 +703,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
           return 0;
       }
     });
-  }, [companies, search, sortBy, includePassed, filterType, filterSector, filterSubSector, filterRound]);
+  }, [companies, search, sortBy, includePassed, filterType, filterSector, filterRound]);
 
   // ── Virtualizer for the company list (left panel) ─────────────────────────
   const rowVirtualizer = useVirtualizer({
@@ -1529,13 +1527,12 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   {includePassed ? "✕ Passed" : "+ Passed"}
                 </button>
               </div>
-              {/* Filter pills: Type / Sector / Sub-sector / Round */}
+              {/* Filter pills: Type / Sector / Round */}
               {(() => {
                 const allTypes = [...new Set(companies.flatMap(c => c.types ?? []))].filter(Boolean).sort();
                 const allSectors = [...new Set(companies.flatMap(c => c.sectors ?? []))].filter(Boolean).sort();
-                const allSubSectors = [...new Set(companies.map(c => c.sub_sector).filter(Boolean) as string[])].sort();
                 const allRounds = [...new Set(companies.map(c => c.stage).filter(Boolean) as string[])].sort();
-                const hasAnyFilter = filterType || filterSector || filterSubSector || filterRound;
+                const hasAnyFilter = filterType || filterSector || filterRound;
 
                 return (
                   <div className="space-y-1.5">
@@ -1559,16 +1556,6 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                         ))}
                       </div>
                     )}
-                    {allSubSectors.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {allSubSectors.slice(0, 5).map(s => (
-                          <button key={s} onClick={() => setFilterSubSector(filterSubSector === s ? null : s)}
-                            className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${filterSubSector === s ? "bg-violet-600 border-violet-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-violet-300"}`}>
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                     {allRounds.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {allRounds.slice(0, 6).map(r => (
@@ -1580,7 +1567,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                       </div>
                     )}
                     {hasAnyFilter && (
-                      <button onClick={() => { setFilterType(null); setFilterSector(null); setFilterSubSector(null); setFilterRound(null); }}
+                      <button onClick={() => { setFilterType(null); setFilterSector(null); setFilterRound(null); }}
                         className="text-[10px] text-slate-400 hover:text-red-500 underline">
                         Clear filters
                       </button>
@@ -1732,13 +1719,12 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
               {includePassed ? "✕ Passed" : "+ Passed"}
             </button>
           </div>
-          {/* Filter pills: Type / Sector / Sub-sector / Round */}
+          {/* Filter pills: Type / Sector / Round */}
           {(() => {
             const allTypes = [...new Set(companies.flatMap(c => c.types ?? []))].filter(Boolean).sort();
             const allSectors = [...new Set(companies.flatMap(c => c.sectors ?? []))].filter(Boolean).sort();
-            const allSubSectors = [...new Set(companies.map(c => c.sub_sector).filter(Boolean) as string[])].sort();
             const allRounds = [...new Set(companies.map(c => c.stage).filter(Boolean) as string[])].sort();
-            const hasAnyFilter = filterType || filterSector || filterSubSector || filterRound;
+            const hasAnyFilter = filterType || filterSector || filterRound;
 
             return (
               <div className="space-y-1.5">
@@ -1762,16 +1748,6 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     ))}
                   </div>
                 )}
-                {allSubSectors.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {allSubSectors.slice(0, 5).map(s => (
-                      <button key={s} onClick={() => setFilterSubSector(filterSubSector === s ? null : s)}
-                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${filterSubSector === s ? "bg-violet-600 border-violet-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-violet-300"}`}>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                )}
                 {allRounds.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {allRounds.slice(0, 6).map(r => (
@@ -1783,7 +1759,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   </div>
                 )}
                 {hasAnyFilter && (
-                  <button onClick={() => { setFilterType(null); setFilterSector(null); setFilterSubSector(null); setFilterRound(null); }}
+                  <button onClick={() => { setFilterType(null); setFilterSector(null); setFilterRound(null); }}
                     className="text-[10px] text-slate-400 hover:text-red-500 underline">
                     Clear filters
                   </button>
