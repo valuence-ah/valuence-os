@@ -29,6 +29,44 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
+
+    // Pre-flight: check whether this email is approved before sending OTP.
+    // This blocks unapproved users at the login page instead of letting
+    // Supabase send a link that then fails at the dashboard gating step.
+    try {
+      const res = await fetch("/api/auth/check-approval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const { approved, reason } = await res.json() as { approved: boolean; reason?: string };
+
+      if (!approved) {
+        setLoading(false);
+        if (reason === "pending") {
+          setMessage({
+            type: "error",
+            text: "Your access request is pending admin review. You'll get an email once approved.",
+          });
+        } else if (reason === "rejected") {
+          setMessage({
+            type: "error",
+            text: "Your access request was not approved. Contact andrew@valuence.vc for help.",
+          });
+        } else {
+          // Unknown email — invite them to request access
+          setMessage({
+            type: "error",
+            text: "This email doesn't have access yet. Request access below.",
+          });
+        }
+        return;
+      }
+    } catch {
+      // If the check fails (network error etc.), allow OTP to proceed —
+      // the dashboard layout will still gate unapproved users server-side.
+    }
+
     const callbackUrl = `${window.location.origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`;
     const { error } = await supabase.auth.signInWithOtp({
       email,

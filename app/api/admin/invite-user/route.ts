@@ -46,8 +46,9 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
 
   // Send Supabase invite email (this is the sign-in link email)
+  // admin_invited: true tells the auth callback to mark this user as approved immediately
   const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-    data: { full_name: fullName, role },
+    data: { full_name: fullName, role, admin_invited: true },
     redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/auth/callback?redirectTo=/dashboard`,
   });
 
@@ -62,12 +63,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: inviteError.message }, { status: 500 });
   }
 
-  // If user already exists, look them up by email and update their role
+  // Pre-create the profile as approved so the user can access the app
+  // as soon as they click their invite link (no second approval step needed)
+  if (inviteData?.user?.id) {
+    await admin.from("profiles").upsert({
+      id:          inviteData.user.id,
+      email:       email.trim().toLowerCase(),
+      full_name:   fullName,
+      role,
+      approved:    true,
+      approved_at: new Date().toISOString(),
+      approved_by: user.id,
+    }, { onConflict: "id" });
+  }
+
+  // If user already exists, look them up by email and update their profile
   if (alreadyRegistered) {
     const { data: existingUsers } = await admin.auth.admin.listUsers();
     const existingUser = existingUsers?.users?.find(u => u.email === email);
     if (existingUser) {
-      await admin.from("profiles").update({ role }).eq("id", existingUser.id);
+      await admin.from("profiles").upsert({
+        id:          existingUser.id,
+        email:       email.trim().toLowerCase(),
+        full_name:   fullName,
+        role,
+        approved:    true,
+        approved_at: new Date().toISOString(),
+        approved_by: user.id,
+      }, { onConflict: "id" });
     }
   }
 
@@ -130,6 +153,5 @@ export async function POST(req: NextRequest) {
 </html>`,
   });
 
-  void inviteData; // suppress unused variable warning
   return NextResponse.json({ ok: true });
 }
