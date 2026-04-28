@@ -23,6 +23,7 @@ interface TeamMember {
   created_at: string;
   outlook_mailbox: string | null;
   fireflies_email: string | null;
+  initials:        string | null;
 }
 
 interface Props {
