@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       .insert({
         company_id: companyId,
         file_name: fileName,
-        storage_path: body.storage_path,
+        storage_path: `portfolio-reports/${body.storage_path}`,
         report_type: reportType,
         period: period || null,
       })
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     reportId = r?.id ?? null;
 
     const { data: fileBlob, error: dlError } = await supabase.storage
-      .from("documents")
+      .from("portfolio-reports")
       .download(body.storage_path);
     if (dlError) {
       return NextResponse.json({ error: `Could not read uploaded file: ${dlError.message}` }, { status: 500 });

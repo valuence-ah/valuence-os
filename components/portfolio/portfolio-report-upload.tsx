@@ -56,9 +56,9 @@ export function PortfolioReportUpload({ company, onClose, onSuccess }: Props) {
         // Step 1: upload file directly from the browser to Supabase Storage.
         // This bypasses Vercel's 4.5 MB serverless body limit entirely.
         const supabase = createClient();
-        const storagePath = `portfolio-reports/${company.id}/${Date.now()}-${file!.name}`;
+        const storagePath = `${company.id}/${Date.now()}-${file!.name}`;
         const { error: storageError } = await supabase.storage
-          .from("documents")
+          .from("portfolio-reports")
           .upload(storagePath, file!, { contentType: file!.type, upsert: false });
         if (storageError) throw new Error(`Storage upload failed: ${storageError.message}`);
 
