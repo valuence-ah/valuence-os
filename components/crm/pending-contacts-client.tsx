@@ -39,20 +39,21 @@ function getInitialsFromName(name: string): string {
   return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
-// Deterministic color per owner — cycles through palette based on initials hash
-const OWNER_COLORS = [
-  "bg-violet-100 text-violet-700",
-  "bg-teal-100 text-teal-700",
-  "bg-orange-100 text-orange-700",
-  "bg-pink-100 text-pink-700",
-  "bg-sky-100 text-sky-700",
-  "bg-amber-100 text-amber-700",
-  "bg-emerald-100 text-emerald-700",
-  "bg-rose-100 text-rose-700",
+// Per-owner badge colors — AH=purple, GC=green, LP=blue, fallback cycles
+const OWNER_COLOR_MAP: Record<string, string> = {
+  AH: "bg-purple-100 text-purple-700",
+  GC: "bg-green-100  text-green-700",
+  LP: "bg-blue-100   text-blue-700",
+};
+const OWNER_COLOR_FALLBACK = [
+  "bg-purple-100 text-purple-700",
+  "bg-green-100  text-green-700",
+  "bg-blue-100   text-blue-700",
 ];
 function ownerColor(initials: string): string {
+  if (OWNER_COLOR_MAP[initials]) return OWNER_COLOR_MAP[initials];
   const hash = initials.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  return OWNER_COLORS[hash % OWNER_COLORS.length];
+  return OWNER_COLOR_FALLBACK[hash % OWNER_COLOR_FALLBACK.length];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
