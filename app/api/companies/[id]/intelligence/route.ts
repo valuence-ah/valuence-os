@@ -152,8 +152,6 @@ Return a JSON array ONLY (no markdown, no explanation):
       messages: [{ role: "user", content: finalPrompt }],
     });
 
-    console.log("[intelligence] raw response:", text.slice(0, 400));
-
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
       console.error("[intelligence] No JSON array in response:", text.slice(0, 200));
@@ -173,7 +171,6 @@ Return a JSON array ONLY (no markdown, no explanation):
           : null,
       }));
 
-    console.log(`[intelligence] returning ${items.length} items for company ${id}`);
     return NextResponse.json({ items });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

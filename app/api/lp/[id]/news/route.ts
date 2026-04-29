@@ -134,8 +134,6 @@ export async function POST(
       "Content-Type": "application/json",
     };
 
-    console.log(`[lp/news] Running ${queries.length} Exa searches for "${name}"`);
-
     // Run all Exa searches in parallel
     const settled = await Promise.allSettled(
       queries.map(query =>
@@ -167,8 +165,6 @@ export async function POST(
         allResults.push(item);
       }
     }
-
-    console.log(`[lp/news] Exa returned ${allResults.length} unique results for "${name}"`);
 
     // Sort by most recent publishedDate, take top 8
     const topResults = allResults
@@ -228,18 +224,14 @@ Return ONLY a JSON array — no markdown, no prose: [{"index":0,"summary":"..."}
         url:      r.url ?? null,
       }));
 
-      console.log(`[lp/news] Returning ${items.length} Exa items for "${name}"`);
       return NextResponse.json({ items, source: "exa" });
     }
 
     // Exa returned results but all were filtered — fall through to Claude
-    console.log(`[lp/news] Exa returned 0 usable results for "${name}", falling back to Claude`);
   }
 
   // ── FALLBACK: CLAUDE-ONLY GENERATION ──────────────────────────────────────
   // Used when EXA_API_KEY is not set, or Exa returned no results.
-  console.log(`[lp/news] Using Claude fallback for "${company.name}"`);
-
   const cutoff180 = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const contextLines = [

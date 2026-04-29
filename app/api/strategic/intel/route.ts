@@ -3,6 +3,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const maxDuration = 30;
 
@@ -35,9 +36,13 @@ export async function POST(req: NextRequest) {
     if (results.length > 0) {
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const combined = results.slice(0, 6).map((r, i) => `[${i}] ${r.title}\n${r.text?.slice(0, 300)}\nURL: ${r.url}\nDate: ${r.publishedDate}`).join("\n\n---\n\n");
+      const cfg = await getAiConfig("partnership_intelligence");
       try {
         const msg = await anthropic.messages.create({
-          model: "claude-haiku-4-5", max_tokens: 800,
+          model: cfg.model as "claude-sonnet-4-6" | "claude-haiku-4-5",
+          max_tokens: cfg.max_tokens,
+          temperature: cfg.temperature,
+          ...(cfg.system_prompt ? { system: cfg.system_prompt } : {}),
           messages: [{ role: "user", content: `You are a VC analyst. For each article below about ${name} (a strategic partner for a cleantech/techbio fund), determine if it is a relevant signal (new investment mandate, partnership, leadership change, R&D announcement, market expansion). Return a JSON array: [{"index": 0, "headline": "concise headline under 15 words", "summary": "1 sentence relevance to a VC fund", "is_signal": true/false}]. Only include articles that are genuinely about ${name}.\n\nArticles:\n${combined}\n\nReturn only the JSON array.` }],
         });
         const raw = msg.content[0].type === "text" ? msg.content[0].text : "[]";

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -100,11 +101,13 @@ export async function POST(request: NextRequest) {
 
   // 5. Call Claude Sonnet to extract structured data
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const cfg = await getAiConfig("ic_memo");
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 2000,
-    system: `You are a VC analyst extracting structured data from portfolio company reports for Valuence Ventures, an early-stage deeptech fund (cleantech, biotech, advanced materials). Extract ALL available data. Return ONLY valid JSON, no markdown fences.`,
+    model: cfg.model as "claude-sonnet-4-6" | "claude-haiku-4-5",
+    max_tokens: cfg.max_tokens,
+    temperature: cfg.temperature,
+    ...(cfg.system_prompt ? { system: cfg.system_prompt } : {}),
     messages: [{
       role: "user",
       content: `Extract structured data from this ${reportType} report for ${company?.name ?? "portfolio company"} (${(company?.sectors ?? []).join(", ")}, ${company?.stage ?? ""}).

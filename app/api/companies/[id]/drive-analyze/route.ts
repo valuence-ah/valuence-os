@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const maxDuration = 60;
 
@@ -75,9 +76,12 @@ Based on the document content above, provide a concise investment-grade analysis
 Be specific — reference actual content from the documents. Keep it sharp and actionable.`;
 
   try {
+    const cfg = await getAiConfig("company_intelligence");
     const { text } = await generateText({
-      model: anthropic("claude-sonnet-4-6"),
-      maxTokens: 1500,
+      model: anthropic(cfg.model as Parameters<typeof anthropic>[0]),
+      maxTokens: cfg.max_tokens,
+      temperature: cfg.temperature,
+      system: cfg.system_prompt ?? undefined,
       messages: [{ role: "user", content: prompt }],
     });
 

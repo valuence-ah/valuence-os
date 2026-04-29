@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const maxDuration = 30;
 
@@ -142,9 +143,12 @@ export async function POST(req: NextRequest) {
   // â”€â”€ STEP 2: Claude identifies the organisation that owns this domain â”€â”€â”€â”€â”€â”€â”€â”€
   let suggestion: string | null = null;
   try {
+    const cfg = await getAiConfig("company_description");
     const { text } = await generateText({
-      model: anthropic("claude-haiku-4-5"),
-      maxTokens: 60,
+      model: anthropic(cfg.model as Parameters<typeof anthropic>[0]),
+      maxTokens: cfg.max_tokens,
+      temperature: cfg.temperature,
+      system: cfg.system_prompt ?? undefined,
       messages: [
         {
           role: "user",

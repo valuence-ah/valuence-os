@@ -311,7 +311,6 @@ ${fullContext}`;
 
   // ── Stream response ────────────────────────────────────────────────────────
   const modelId = aiConfig.model;
-  console.log(`[pipeline-chat] model=${modelId} promptChars=${systemPrompt.length} msgs=${messages.length}`);
 
   // Trim system prompt if it exceeds ~400k chars (~100k tokens) to stay safe
   const trimmedPrompt = systemPrompt.length > 400_000

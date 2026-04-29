@@ -1104,7 +1104,7 @@ export function LpViewClient({ initialCompanies }: Props) {
       const data = await res.json();
       if (data.error) setBriefError(data.error);
       else setBriefContent(data.brief ?? "");
-    } catch (e: any) { setBriefError(e.message); }
+    } catch (e: unknown) { setBriefError(e instanceof Error ? e.message : "Unknown error"); }
     setBriefLoading(false);
   }
 
@@ -1126,7 +1126,7 @@ export function LpViewClient({ initialCompanies }: Props) {
       const data = await res.json();
       if (data.error) setOutreachError(data.error);
       else setOutreachContent(data.draft ?? "");
-    } catch (e: any) { setOutreachError(e.message); }
+    } catch (e: unknown) { setOutreachError(e instanceof Error ? e.message : "Unknown error"); }
     setOutreachLoading(false);
   }
 

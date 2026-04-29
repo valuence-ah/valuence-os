@@ -93,8 +93,6 @@ export async function POST(request: NextRequest) {
     }, { status: 400 });
   }
 
-  console.log(`[intelligence] Generating ${type} for: ${company.name} (${company_id})`);
-
   const kpi = kpisResult.data;
   const milestones = milestonesResult.data ?? [];
   const lpNames = (lpResult.data ?? []).map(l => l.name).join(", ");
@@ -369,8 +367,6 @@ Sort by fit_level (high = direct competitor first).`;
 
     await supabase.from("portfolio_intelligence").insert(rows);
   }
-
-  console.log(`[intelligence] Done for: ${company.name} — inserted ${parsed.length} results`);
 
   return NextResponse.json({ results: parsed, count: parsed.length });
 }

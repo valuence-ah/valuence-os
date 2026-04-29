@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getRecentEmails, GraphEmail } from "@/lib/microsoft-graph";
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const maxDuration = 30;
 
@@ -103,9 +104,12 @@ export async function GET(req: NextRequest) {
       preview: e.bodyPreview.slice(0, 200),
     }));
 
+    const cfg = await getAiConfig("lp_meeting_summary");
     const { text } = await generateText({
-      model: anthropic("claude-haiku-4-5"),
-      maxTokens: 600,
+      model: anthropic(cfg.model as Parameters<typeof anthropic>[0]),
+      maxTokens: cfg.max_tokens,
+      temperature: cfg.temperature,
+      system: cfg.system_prompt ?? undefined,
       messages: [{
         role: "user",
         content: `Summarize each email in exactly 5 words. Be factual, no filler words.\nReturn ONLY valid JSON array: [{"id":"...","summary":"..."}]\n\nEmails:\n${JSON.stringify(payload)}`,

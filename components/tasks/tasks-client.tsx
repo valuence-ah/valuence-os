@@ -426,7 +426,7 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
             >
               <td className="px-3 py-2" onClick={e => { e.stopPropagation(); onToggleComplete(t); }}>
                 <div className={cn(
-                  "w-3.5 h-3.5 border rounded-sm flex items-center justify-center cursor-pointer transition-colors",
+                  "w-3.5 h-3.5 border rounded-md flex items-center justify-center cursor-pointer transition-colors",
                   t.status === "Completed"
                     ? "bg-emerald-500 border-emerald-500"
                     : "border-slate-300 hover:border-blue-400"

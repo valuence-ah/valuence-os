@@ -8,6 +8,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import type { CoreMessage } from "ai";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const maxDuration = 60;
 
@@ -153,12 +154,13 @@ ${fileParts.length > 0
   ];
 
   // ── Stream ─────────────────────────────────────────────────────────────────
+  const cfg = await getAiConfig("pipeline_assistant");
   const result = streamText({
-    model: anthropic("claude-sonnet-4-6"),
+    model: anthropic(cfg.model as Parameters<typeof anthropic>[0]),
     system: systemPrompt,
     messages: augmentedMessages,
-    maxTokens: 2048,
-    temperature: 0.2,
+    maxTokens: cfg.max_tokens,
+    temperature: cfg.temperature,
   });
 
   return result.toDataStreamResponse();

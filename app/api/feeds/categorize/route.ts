@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const dynamic     = "force-dynamic";
 export const maxDuration = 60;
@@ -66,11 +67,9 @@ export async function POST(request: NextRequest) {
       keywordCategories = Object.fromEntries(
         kwRows.map(r => [r.keyword.toLowerCase(), r.category as string])
       );
-    } else {
-      console.log("[categorize] thesis_keywords empty or unavailable, using fallback list");
     }
   } catch {
-    console.log("[categorize] thesis_keywords table not found, using hardcoded fallback");
+    // thesis_keywords table not found — using hardcoded fallback
   }
 
   // 2. Fetch uncategorized articles — gracefully fall back if ai_categorized column missing
@@ -88,7 +87,6 @@ export async function POST(request: NextRequest) {
     articles = data;
   } catch {
     // Column might not exist — fall back to recent articles
-    console.log("[categorize] ai_categorized column unavailable, falling back to recent articles");
     try {
       const { data } = await supabase
         .from("feed_articles")
@@ -115,9 +113,9 @@ export async function POST(request: NextRequest) {
     watchlist = watchlistItems ?? [];
   } catch {
     // feed_watchlist table might not exist yet
-    console.log("[categorize] feed_watchlist not available");
   }
 
+  const cfg = await getAiConfig("sourcing_scorer");
   const BATCH_SIZE = 5;
   let processed = 0;
 
@@ -139,9 +137,10 @@ export async function POST(request: NextRequest) {
           );
 
           const response = await anthropic.messages.create({
-            model: "claude-haiku-4-5",
-            max_tokens: 600,
-            system: `You are a VC analyst at Valuence Ventures, a deeptech fund focused on cleantech, biotech, and advanced materials (pre-seed & seed). Categorize news articles and explain thesis relevance. Respond ONLY in valid JSON with no markdown fences.`,
+            model: cfg.model as "claude-sonnet-4-6" | "claude-haiku-4-5",
+            max_tokens: cfg.max_tokens,
+            temperature: cfg.temperature,
+            ...(cfg.system_prompt ? { system: cfg.system_prompt } : { system: "You are a VC analyst at Valuence Ventures, a deeptech fund focused on cleantech, biotech, and advanced materials (pre-seed & seed). Categorize news articles and explain thesis relevance. Respond ONLY in valid JSON with no markdown fences." }),
             messages: [
               {
                 role: "user",

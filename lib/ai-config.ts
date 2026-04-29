@@ -189,11 +189,11 @@ Return ONLY valid JSON (no markdown, no explanation):
 const DEFAULTS: Record<string, AiConfig> = {
   pipeline_assistant:  { model: SONNET, max_tokens: 2048,  temperature: 0.30, system_prompt: null, user_prompt: "" },
   company_description: { model: SONNET, max_tokens: 500,   temperature: 0.50, system_prompt: null, user_prompt: "" },
-  ic_memo:             { model: SONNET, max_tokens: 12000, temperature: 0.30, system_prompt: null, user_prompt: "" },
+  ic_memo:             { model: SONNET, max_tokens: 12000, temperature: 0.30, system_prompt: "You are a VC analyst extracting structured data from portfolio company reports for Valuence Ventures, an early-stage deeptech fund (cleantech, biotech, advanced materials). Extract ALL available data. Return ONLY valid JSON, no markdown fences.", user_prompt: "" },
   lp_outreach_draft:   { model: SONNET, max_tokens: 800,   temperature: 0.50, system_prompt: "You are an LP relations specialist at Valuence Ventures. Write professional, concise, personalised emails.", user_prompt: LP_OUTREACH_DEFAULT },
   lp_prep_brief:       { model: SONNET, max_tokens: 1500,  temperature: 0.30, system_prompt: "You are a senior VC analyst. Generate precise, actionable LP meeting briefs.", user_prompt: LP_PREP_BRIEF_DEFAULT },
   lp_meeting_summary:  { model: SONNET, max_tokens: 1000,  temperature: 0.30, system_prompt: "You are a VC analyst summarising LP meeting transcripts. Be factual and concise.", user_prompt: LP_MEETING_SUMMARY_DEFAULT },
-  sourcing_scorer:     { model: "claude-haiku-4-5", max_tokens: 2048, temperature: 0.10, system_prompt: SOURCING_SCORER_DEFAULT, user_prompt: "" },
+  sourcing_scorer:     { model: "claude-haiku-4-5", max_tokens: 2048, temperature: 0.10, system_prompt: "You are a VC analyst at Valuence Ventures, a deeptech fund focused on cleantech, biotech, and advanced materials (pre-seed & seed). Categorize news articles and explain thesis relevance. Respond ONLY in valid JSON with no markdown fences.", user_prompt: "" },
   exa_research:          { model: SONNET, max_tokens: 1024, temperature: 0.20, system_prompt: null, user_prompt: "" },
   company_intelligence:  { model: SONNET, max_tokens: 2048, temperature: 0.20, system_prompt: "You are a VC intelligence analyst. Return only valid JSON arrays as instructed.", user_prompt: "" },
   ma_intelligence:        { model: SONNET, max_tokens: 2500, temperature: 0.20, system_prompt: null, user_prompt: "" },

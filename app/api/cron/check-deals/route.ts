@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getRecentEmails } from "@/lib/microsoft-graph";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAiConfig } from "@/lib/ai-config";
 
 const DEALS_MAILBOX = "deals@valuence.vc";
 
@@ -27,7 +28,10 @@ async function parseDealEmail(
   fromName: string,
   fromEmail: string,
   subject: string,
-  body: string
+  body: string,
+  model: string,
+  max_tokens: number,
+  temperature: number
 ): Promise<ParsedDeal> {
   const client = new Anthropic();
 
@@ -50,8 +54,9 @@ Return JSON:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 512,
+    model: model as "claude-sonnet-4-6" | "claude-haiku-4-5",
+    max_tokens,
+    temperature,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -91,13 +96,15 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient();
   const results: { subject: string; action: string; company?: string }[] = [];
 
+  const cfg = await getAiConfig("company_intelligence");
+
   for (const msg of emails) {
     const fromEmail = msg.from.emailAddress.address.toLowerCase();
     const fromName = msg.from.emailAddress.name ?? "";
 
     let parsed: ParsedDeal;
     try {
-      parsed = await parseDealEmail(fromName, fromEmail, msg.subject, msg.body.content);
+      parsed = await parseDealEmail(fromName, fromEmail, msg.subject, msg.body.content, cfg.model, cfg.max_tokens, cfg.temperature);
     } catch {
       results.push({ subject: msg.subject, action: "parse failed" });
       continue;

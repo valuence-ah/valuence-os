@@ -59,7 +59,7 @@ export function SkeletonList({
 // Stat card skeleton matching the dashboard / summary bar style
 export function SkeletonStatCard() {
   return (
-    <div className="card p-4 space-y-3">
+    <div className="card p-5 space-y-3">
       <Skeleton className="h-8 w-8 rounded-lg" />
       <Skeleton className="h-7 w-16" />
       <Skeleton className="h-3 w-24" />

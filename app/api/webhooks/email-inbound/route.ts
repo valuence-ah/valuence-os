@@ -1,4 +1,4 @@
-﻿// â”€â”€â”€ Inbound Email Webhook (Postmark) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+﻿// â"€â"€â"€ Inbound Email Webhook (Postmark) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 // Handles emails forwarded through Postmark Inbound Parsing.
 // Routes by recipient:
 //   â†’ andrew@valuence.vc   â†’ extract contact, save as pending
@@ -17,8 +17,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient, validateWebhookSecret } from "@/lib/supabase/admin";
+import { getAiConfig } from "@/lib/ai-config";
 
-// â”€â”€ Postmark payload shape â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Postmark payload shape â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 interface PostmarkEmail {
   From: string;
   FromName: string;
@@ -32,7 +33,7 @@ interface PostmarkEmail {
   Attachments?: { Name: string; Content: string; ContentType: string }[];
 }
 
-// â”€â”€ Noise filter (skip newsletters, no-reply, etc.) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Noise filter (skip newsletters, no-reply, etc.) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const SKIP_RE = /no.?reply|noreply|donotreply|newsletter|notifications?@|updates?@|alerts?@|marketing@|bounce@/i;
 function isNoise(email: string, name: string) {
   return SKIP_RE.test(email) || SKIP_RE.test(name);
@@ -40,8 +41,8 @@ function isNoise(email: string, name: string) {
 
 const client = new Anthropic();
 
-// â”€â”€ Contact extraction (andrew@valuence.vc emails) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-async function extractContactInfo(msg: PostmarkEmail) {
+// â"€â"€ Contact extraction (andrew@valuence.vc emails) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+async function extractContactInfo(msg: PostmarkEmail, model: string, max_tokens: number, temperature: number) {
   const prompt = `Extract contact info from this email. Return ONLY valid JSON.
 
 From: ${msg.FromName} <${msg.From}>
@@ -59,8 +60,9 @@ JSON:
 }`;
 
   const res = await client.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 256,
+    model: model as "claude-sonnet-4-6" | "claude-haiku-4-5",
+    max_tokens,
+    temperature,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -78,8 +80,8 @@ JSON:
   };
 }
 
-// â”€â”€ Deal extraction (deals@valuence.vc emails) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-async function extractDealInfo(msg: PostmarkEmail) {
+// â"€â"€ Deal extraction (deals@valuence.vc emails) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+async function extractDealInfo(msg: PostmarkEmail, model: string, max_tokens: number, temperature: number) {
   const prompt = `Parse this pitch email. Return ONLY valid JSON.
 
 From: ${msg.FromName} <${msg.From}>
@@ -98,8 +100,9 @@ JSON:
 }`;
 
   const res = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 512,
+    model: model as "claude-sonnet-4-6" | "claude-haiku-4-5",
+    max_tokens,
+    temperature,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -118,7 +121,7 @@ JSON:
   };
 }
 
-// â”€â”€ Main handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Main handler â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 export async function POST(req: NextRequest) {
   if (!validateWebhookSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -136,7 +139,12 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  // â”€â”€ Route: andrew@valuence.vc â†’ New Contact â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const [cfgContact, cfgDeal] = await Promise.all([
+    getAiConfig("company_description"),
+    getAiConfig("ic_memo"),
+  ]);
+
+  // â"€â"€ Route: andrew@valuence.vc â†’ New Contact â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   if (recipient.includes("andrew@valuence")) {
     if (isNoise(fromEmail, fromName)) {
       return NextResponse.json({ skipped: true, reason: "noise" });
@@ -155,7 +163,7 @@ export async function POST(req: NextRequest) {
 
     let extracted;
     try {
-      extracted = await extractContactInfo(body);
+      extracted = await extractContactInfo(body, cfgContact.model, cfgContact.max_tokens, cfgContact.temperature);
     } catch {
       const parts = fromName.trim().split(" ");
       extracted = {
@@ -225,11 +233,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, contact_id: contact?.id });
   }
 
-  // â”€â”€ Route: deals@valuence.vc â†’ Deal Flow Parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â"€â"€ Route: deals@valuence.vc â†’ Deal Flow Parser â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   if (recipient.includes("deals@valuence")) {
     let parsed;
     try {
-      parsed = await extractDealInfo(body);
+      parsed = await extractDealInfo(body, cfgDeal.model, cfgDeal.max_tokens, cfgDeal.temperature);
     } catch {
       return NextResponse.json({ error: "Claude parse failed" }, { status: 500 });
     }

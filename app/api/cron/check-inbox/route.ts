@@ -190,17 +190,13 @@ export async function POST(req: NextRequest) {
   // Global dedup across all mailboxes in this cron run
   const processedThisRun = new Set<string>();
 
-  console.log("[check-inbox] config:", JSON.stringify({ MAILBOXES, lookbackHours, maxPerMailbox, since }));
-
   for (const mailbox of MAILBOXES) {
     perMailbox[mailbox] = { inbox: 0, errors: [] };
     const candidates: EmailCandidate[] = [];
 
     // Inbox â€” contact is the sender (inbound only)
     try {
-      console.log(`[check-inbox] fetching inbox for ${mailbox} since ${since}`);
       const inbox = await getRecentEmails(mailbox, since, maxPerMailbox, "inbox");
-      console.log(`[check-inbox] inbox fetched: ${inbox.length} emails`);
       perMailbox[mailbox].inbox = inbox.length;
       for (const msg of inbox) {
         candidates.push({

@@ -291,7 +291,7 @@ export function PortfolioAssistantTab({ companyId, companyName, investments }: P
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="w-9 h-9 flex items-center justify-center rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+            className="w-9 h-9 flex items-center justify-center rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
           >
             <Send size={14} className="text-white" />
           </button>

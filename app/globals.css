@@ -102,6 +102,27 @@
   .section-label {
     @apply text-xs font-semibold uppercase tracking-wider text-slate-400 px-3 mb-1;
   }
+
+  /* Button utilities — available for new components, do not replace existing styles */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5
+           text-xs font-medium rounded-lg
+           bg-blue-600 text-white hover:bg-blue-700
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5
+           text-xs font-medium rounded-lg
+           bg-white text-slate-700 border border-slate-200
+           hover:bg-slate-50 transition-colors disabled:opacity-50;
+  }
+
+  .btn-icon {
+    @apply inline-flex items-center justify-center w-8 h-8 rounded-lg
+           text-slate-600 hover:bg-slate-100 hover:text-slate-900
+           transition-colors;
+  }
 }
 
 /* Chat message animations */

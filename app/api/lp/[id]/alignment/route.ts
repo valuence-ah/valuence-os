@@ -137,11 +137,6 @@ export async function POST(
     pipeline:   companyList(pipeline),
   };
 
-  // Debug: log what we found so Vercel logs show the data
-  console.log("[lp/alignment] portfolio count:", portfolio?.length ?? 0, "| pipeline count:", pipeline?.length ?? 0);
-  console.log("[lp/alignment] portfolio list:\n", companyList(portfolio));
-  console.log("[lp/alignment] pipeline list:\n", companyList(pipeline).slice(0, 500));
-
   const rawPrompt    = cfg.user_prompt?.trim() ? cfg.user_prompt : DEFAULT_PROMPT;
   const finalPrompt  = interpolate(rawPrompt, templateVars);
   const systemPrompt = cfg.system_prompt ??
@@ -158,9 +153,6 @@ export async function POST(
       messages: [{ role: "user", content: finalPrompt }],
     });
 
-    // Log raw output so server logs show exactly what Claude returned
-    console.log("[lp/alignment] raw response:", text.slice(0, 600));
-
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error("[lp/alignment] no JSON found in:", text.slice(0, 300));
@@ -173,8 +165,6 @@ export async function POST(
       pipeline_picks?:  { name: string; reason: string }[];
     };
 
-    console.log("[lp/alignment] parsed picks — portfolio:", result.portfolio_picks?.length ?? 0,
-      "pipeline:", result.pipeline_picks?.length ?? 0);
 
     // Enrich picks with id/sector/stage/description.
     // Uses case-insensitive trimmed match so Claude's slight casing

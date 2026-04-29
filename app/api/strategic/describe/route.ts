@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getAiConfig } from "@/lib/ai-config";
 
 export async function POST(req: NextRequest) {
   const authClient = await createClient();
@@ -11,9 +12,12 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { company_id, name, sectors } = await req.json();
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const cfg = await getAiConfig("company_description");
   const msg = await anthropic.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 200,
+    model: cfg.model as "claude-sonnet-4-6" | "claude-haiku-4-5",
+    max_tokens: cfg.max_tokens,
+    temperature: cfg.temperature,
+    ...(cfg.system_prompt ? { system: cfg.system_prompt } : {}),
     messages: [{ role: "user", content: `Write a factual description of ${name} (sectors: ${(sectors ?? []).join(", ")}) in exactly 60 words or fewer. Be specific about what they do, their focus areas, and their relevance to a cleantech/techbio VC fund. No fluff. Just facts.` }],
   });
   const description = msg.content[0].type === "text" ? msg.content[0].text.trim() : "";

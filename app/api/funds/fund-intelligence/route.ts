@@ -124,8 +124,6 @@ export async function POST(req: NextRequest) {
     pipeline:            companyList(pipeline),
   };
 
-  console.log("[fund-intelligence] fund:", fund.name, "| recent investments:", recentInvestments?.length ?? 0);
-
   const rawPrompt    = cfg.user_prompt?.trim() ? cfg.user_prompt : "";
   if (!rawPrompt) {
     return NextResponse.json({ error: "No prompt configured for fund_intelligence" }, { status: 500 });
@@ -142,8 +140,6 @@ export async function POST(req: NextRequest) {
       system: systemPrompt,
       messages: [{ role: "user", content: finalPrompt }],
     });
-
-    console.log("[fund-intelligence] raw response:", text.slice(0, 400));
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
