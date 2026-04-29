@@ -62,9 +62,20 @@ export function PortfolioReportUpload({ company, onClose, onSuccess }: Props) {
         fd.append("period", period);
         res = await fetch("/api/portfolio/upload-report", { method: "POST", body: fd });
       }
-      const data = await res.json();
+      // Safe JSON parse — Vercel may return plain text (e.g. "Request Entity Too Large") on 413
+      let data: { error?: string; extracted?: { kpi_count: number; milestone_count: number; initiative_count: number } } = {};
+      const ct = res.headers.get("content-type") ?? "";
+      if (ct.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const rawText = await res.text();
+        if (!res.ok) {
+          const isTooBig = res.status === 413 || rawText.toLowerCase().includes("large") || rawText.toLowerCase().includes("limit");
+          throw new Error(isTooBig ? "File too large — please upload a PDF under 20 MB, or use the 'Paste text' tab instead." : `Server error (${res.status}): ${rawText.slice(0, 120)}`);
+        }
+      }
       if (!res.ok) throw new Error(data.error ?? "Upload failed");
-      setResult(data.extracted);
+      setResult(data.extracted ?? null);
       setUploadState("success");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Upload failed");

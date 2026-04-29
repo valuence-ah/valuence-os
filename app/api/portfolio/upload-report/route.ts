@@ -10,6 +10,7 @@ import { getAiConfig } from "@/lib/ai-config";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+export const maxRequestBodySize = "20mb"; // allow up to 20 MB PDFs
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -46,7 +47,17 @@ export async function POST(request: NextRequest) {
     reportId = r?.id ?? null;
   } else {
     // File upload mode
-    const formData = await request.formData();
+    let formData: FormData;
+    try {
+      formData = await request.formData();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isTooBig = msg.toLowerCase().includes("large") || msg.toLowerCase().includes("limit") || msg.toLowerCase().includes("413");
+      return NextResponse.json(
+        { error: isTooBig ? "File too large — please upload a PDF under 20 MB, or use the 'Paste text' option instead." : `Failed to read upload: ${msg}` },
+        { status: isTooBig ? 413 : 400 }
+      );
+    }
     const file = formData.get("file") as File | null;
     companyId = formData.get("company_id") as string | null;
     reportType = (formData.get("report_type") as string) || "quarterly";
