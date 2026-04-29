@@ -1,18 +1,27 @@
-// ─── Proxy (Next.js 16+ replacement for middleware.ts) ────────────────────────
+// ─── Proxy (Next.js 16 equivalent of middleware.ts) ───────────────────────────
 // Runs on every request BEFORE it hits the page. Responsibilities:
-//   1. Refresh the Supabase session (required by @supabase/ssr — without this,
-//      sessions expire and users get logged out unexpectedly).
-//   2. Redirect unauthenticated users to /auth/login, preserving the original
-//      path in ?redirectTo so they land back there after sign-in.
-//   3. Redirect already-authenticated users away from /auth/* pages.
-//
-// Note: layout.tsx also has an auth guard as defense-in-depth.
+//   1. Refresh the Supabase session (required by @supabase/ssr).
+//   2. Redirect unauthenticated users to /auth/login for protected routes.
+//   3. Redirect already-authenticated users away from /auth/login only.
+//      (request-access, pending, reset-password are always accessible.)
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Paths that don't require authentication
-const PUBLIC_PATHS = new Set(["/auth/login", "/auth/callback"]);
+// Auth routes accessible to EVERYONE (logged in or not)
+const OPEN_AUTH_PATHS = new Set([
+  "/auth/login",
+  "/auth/callback",
+  "/auth/request-access",
+  "/auth/pending",
+  "/auth/reset-password",
+]);
+
+// Auth routes to redirect AWAY from if already logged in
+const LOGIN_ONLY_PATHS = new Set([
+  "/auth/login",
+  "/auth/callback",
+]);
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -31,38 +40,52 @@ export async function proxy(request: NextRequest) {
           );
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options as Parameters<typeof supabaseResponse.cookies.set>[2])
+            supabaseResponse.cookies.set(
+              name,
+              value,
+              options as Parameters<typeof supabaseResponse.cookies.set>[2]
+            )
           );
         },
       },
     }
   );
 
-  // IMPORTANT: always call getUser() — this is what refreshes the session.
+  // IMPORTANT: always call getUser() — this refreshes the session cookie.
   const { data: { user } } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
 
-  // Let auth pages, API routes, and static assets through without a session check
-  const isPublic =
-    PUBLIC_PATHS.has(pathname) ||
+  // Always let through: API routes, Next.js internals, static assets
+  const isSystem =
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
-    pathname.startsWith("/favicon");
+    pathname.startsWith("/favicon") ||
+    pathname.startsWith("/icons/") ||
+    pathname.startsWith("/manifest") ||
+    pathname === "/sw.js";
 
-  if (!user && !isPublic) {
-    // Not logged in → redirect to login, preserving destination
+  if (isSystem) return supabaseResponse;
+
+  // Open auth paths — accessible to everyone
+  if (OPEN_AUTH_PATHS.has(pathname)) {
+    // If already logged in and hitting the login page, go to dashboard
+    if (user && LOGIN_ONLY_PATHS.has(pathname)) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+    return supabaseResponse;
+  }
+
+  // Root "/" — let page.tsx handle the redirect logic
+  if (pathname === "/") return supabaseResponse;
+
+  // Everything else requires authentication
+  if (!user) {
     const loginUrl = new URL("/auth/login", request.url);
-    // Only preserve same-origin relative paths (prevents open redirect)
-    if (pathname !== "/" && /^\/[^/\\]/.test(pathname)) {
+    if (/^\/[^/\\]/.test(pathname)) {
       loginUrl.searchParams.set("redirectTo", pathname);
     }
     return NextResponse.redirect(loginUrl);
-  }
-
-  if (user && PUBLIC_PATHS.has(pathname)) {
-    // Already logged in → skip auth pages, go to dashboard
-    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return supabaseResponse;
@@ -70,7 +93,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match all paths except Next.js internals and static files
     "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
