@@ -1797,7 +1797,7 @@ export function PendingContactsClient({ initialContacts, companies, currentUserI
             <div className="w-20 flex-shrink-0 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">City</div>
             <SortHeader label="Country ✦" sortKey="country" active={sortKey==="country"} dir={sortDir} onSort={handleSort} className="w-28 flex-shrink-0" />
             <SortHeader label="Added"   sortKey="added"   active={sortKey==="added"}   dir={sortDir} onSort={handleSort} className="w-20 flex-shrink-0 justify-end" />
-            <div className="w-8 flex-shrink-0 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Owner</div>
+            <div className="w-8 flex-shrink-0 text-[10px] font-semibold text-slate-400 uppercase tracking-wider text-center">Owner</div>
             <div className="w-24 flex-shrink-0" />
           </div>
 
