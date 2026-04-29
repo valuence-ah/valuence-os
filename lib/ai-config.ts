@@ -202,6 +202,8 @@ const DEFAULTS: Record<string, AiConfig> = {
   lp_intelligence:        { model: SONNET, max_tokens: 1500, temperature: 0.30, system_prompt: "You are an LP relations specialist. Return only valid JSON as instructed.", user_prompt: "" },
   partnership_intelligence: { model: SONNET, max_tokens: 1500, temperature: 0.30, system_prompt: "You are a strategic partnerships analyst. Return only valid JSON as instructed.", user_prompt: PARTNERSHIP_INTELLIGENCE_DEFAULT },
   fund_intelligence:        { model: SONNET, max_tokens: 2000, temperature: 0.30, system_prompt: "You are a VC fund analyst. Return only valid JSON as instructed.", user_prompt: FUND_INTELLIGENCE_DEFAULT },
+  email_contact_extract:    { model: "claude-haiku-4-5", max_tokens: 256, temperature: 0.10, system_prompt: null, user_prompt: "" },
+  pdf_extraction:           { model: SONNET, max_tokens: 4000, temperature: 0.10, system_prompt: null, user_prompt: "" },
 };
 
 /** Loads an AI config from Supabase, falling back to hardcoded defaults. */

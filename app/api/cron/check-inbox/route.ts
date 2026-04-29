@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getRecentEmails } from "@/lib/microsoft-graph";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAiConfig } from "@/lib/ai-config";
 
 // â”€â”€ Config defaults (overridden by agent_configs DB row) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -65,7 +66,10 @@ async function extractContact(
   senderName: string,
   senderEmail: string,
   subject: string,
-  bodyPreview: string
+  bodyPreview: string,
+  model: string,
+  max_tokens: number,
+  temperature: number
 ): Promise<ExtractedContact> {
   const client = new Anthropic();
   const prompt = `Extract contact information from this email metadata. Return ONLY valid JSON, nothing else.
@@ -86,8 +90,9 @@ Return JSON:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 256,
+    model: model as "claude-sonnet-4-6" | "claude-haiku-4-5",
+    max_tokens,
+    temperature,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -187,6 +192,9 @@ export async function POST(req: NextRequest) {
   const perMailbox: Record<string, { inbox: number; errors: string[] }> = {};
   const contactResults: { email: string; mailbox: string; action: string }[] = [];
 
+  // Load AI config once — used for every extractContact call in this run
+  const aiCfg = await getAiConfig("email_contact_extract");
+
   // Global dedup across all mailboxes in this cron run
   const processedThisRun = new Set<string>();
 
@@ -257,7 +265,10 @@ export async function POST(req: NextRequest) {
           candidate.name,
           candidate.email,
           candidate.subject,
-          candidate.bodyPreview
+          candidate.bodyPreview,
+          aiCfg.model,
+          aiCfg.max_tokens,
+          aiCfg.temperature
         );
       } catch {
         const parts = candidate.name.trim().split(" ");

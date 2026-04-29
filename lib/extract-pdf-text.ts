@@ -5,6 +5,7 @@
 
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { getAiConfig } from "@/lib/ai-config";
 
 export async function extractPdfText(buffer: Buffer): Promise<string> {
   // ── Pass 1: pdf-parse ─────────────────────────────────────────────────────
@@ -21,11 +22,11 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
   }
 
   // ── Pass 2: Claude vision (handles image-only PDFs) ───────────────────────
-  console.log("pdf-parse returned no usable text — falling back to Claude vision");
   try {
+    const cfg = await getAiConfig("pdf_extraction");
     const { text } = await generateText({
-      model: anthropic("claude-sonnet-4-6"),
-      maxTokens: 4000,
+      model: anthropic(cfg.model as Parameters<typeof anthropic>[0]),
+      maxTokens: cfg.max_tokens,
       messages: [
         {
           role: "user",
