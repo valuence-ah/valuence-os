@@ -559,6 +559,20 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
   const [showStagePicker,    setShowStagePicker]    = useState(false);
   const [showStatusPicker,   setShowStatusPicker]   = useState(false);
 
+  // Popup for expanded opportunity/task detail
+  const [oppTaskPopup, setOppTaskPopup] = useState<{
+    type: "task" | "portco" | "manual";
+    id: string | number;
+    title: string;
+    company?: string;
+    category?: string;
+    createdDate?: string;
+    targetDate?: string;
+    status?: string;
+    priority?: string;
+    notes?: string;
+  } | null>(null);
+
   // Strategic Partnerships (populated from portco_strategic_map localStorage)
   const [crmTasks, setCrmTasks] = useState<Array<{ id: number; title: string; cat: string; cos: string[]; due: string; start: string; prio: string }>>([]);
   const [portcoPartnerships, setPortcoPartnerships] = useState<{ strategicId: string; strategicName: string; portcoId: string; status: string; due: string }[]>([]);
@@ -2952,7 +2966,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
               </div>
 
               {/* Content: Opportunities / Tasks */}
-              <div className="h-[220px] overflow-y-auto pr-1 bg-slate-50 rounded-xl p-3">
+              <div className="h-[150px] overflow-y-auto pr-1 bg-slate-50 rounded-xl p-3">
                 {showAddPartnership && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
                     <div className="flex gap-2">
@@ -3007,73 +3021,87 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   }
 
                   return (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {/* CRM Tasks linked to this company */}
                       {linkedTasks.map(t => (
-                        <div key={`task-${t.id}`} className="bg-white border border-slate-200 rounded-lg p-2.5 hover:border-blue-300 transition-colors">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold text-slate-800 leading-tight truncate">{t.title}</p>
-                              {(t.cos ?? []).length > 0 && (
-                                <p className="text-[10px] text-slate-500 mt-0.5 truncate">{(t.cos ?? []).join(", ")}</p>
-                              )}
-                              {t.cat && (
-                                <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">{t.cat}</span>
-                              )}
-                            </div>
-                            <div className="flex-shrink-0 text-right">
-                              {t.start && <p className="text-[10px] text-slate-400">{t.start}</p>}
-                              {t.due && <p className="text-[10px] text-slate-500 font-medium">{t.due}</p>}
-                            </div>
+                        <button
+                          key={`task-${t.id}`}
+                          onClick={() => setOppTaskPopup({
+                            type: "task",
+                            id: t.id,
+                            title: t.title,
+                            company: (t.cos ?? []).join(", ") || undefined,
+                            category: t.cat || undefined,
+                            createdDate: t.start || undefined,
+                            targetDate: t.due || undefined,
+                            priority: t.prio || undefined,
+                            status: (t as { status?: string }).status || undefined,
+                            notes: (t as { notes?: string }).notes || undefined,
+                          })}
+                          className="w-full text-left bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <p className="text-[11px] font-semibold text-slate-800 truncate flex-1 leading-tight">{t.title}</p>
+                            {t.cat && (
+                              <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium whitespace-nowrap">{t.cat}</span>
+                            )}
                           </div>
-                        </div>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            {t.start && <span className="text-[9px] text-slate-400">Created {t.start}</span>}
+                            {t.due && <span className="text-[9px] text-slate-500 font-medium">Target {t.due}</span>}
+                          </div>
+                        </button>
                       ))}
-                      {/* Portco partnerships from strategic map */}
+                      {/* Portco partnerships */}
                       {portcoPartnerships.map(p => (
-                        <div key={`portco-${p.strategicId}`} className="bg-white border border-slate-200 rounded-lg p-2.5 hover:border-blue-300 transition-colors">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold text-slate-800 leading-tight truncate">{p.strategicName}</p>
-                              <span className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500"}`}>{p.status}</span>
-                            </div>
-                            <div className="flex-shrink-0 text-right">
-                              {p.due && <p className="text-[10px] text-slate-500 font-medium">{formatDate(p.due)}</p>}
-                            </div>
+                        <button
+                          key={`portco-${p.strategicId}`}
+                          onClick={() => setOppTaskPopup({
+                            type: "portco",
+                            id: p.strategicId,
+                            title: p.strategicName,
+                            category: p.status,
+                            targetDate: p.due ? formatDate(p.due) : undefined,
+                          })}
+                          className="w-full text-left bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <p className="text-[11px] font-semibold text-slate-800 truncate flex-1 leading-tight">{p.strategicName}</p>
+                            <span className={cn("flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>
                           </div>
-                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "portco", id: p.strategicId }); }} className="mt-1 text-[10px] text-slate-300 hover:text-red-400 cursor-pointer">Remove</span>
-                          {confirmDeletePartner?.type === "portco" && confirmDeletePartner.id === p.strategicId && (
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[10px] text-slate-500 flex-1 italic">Delete?</span>
-                              <button onMouseDown={() => { deletePortcoPartnership(p.strategicId); setConfirmDeletePartner(null); }} className="text-[10px] text-red-600 hover:underline font-medium">Yes</button>
-                              <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-[10px] text-slate-400 hover:underline">No</button>
+                          {p.due && (
+                            <div className="mt-0.5">
+                              <span className="text-[9px] text-slate-500 font-medium">Target {formatDate(p.due)}</span>
                             </div>
                           )}
-                        </div>
+                        </button>
                       ))}
                       {/* Manual partnerships */}
                       {manualPartnerships.map(p => (
-                        <div key={`manual-${p.id}`} className="bg-white border border-slate-200 rounded-lg p-2.5 hover:border-blue-300 transition-colors">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold text-slate-800 leading-tight truncate">{p.name}</p>
-                              {p.note && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{p.note}</p>}
-                              {p.status && (
-                                <span className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500"}`}>{p.status}</span>
-                              )}
-                            </div>
-                            <div className="flex-shrink-0 text-right">
-                              {p.date && <p className="text-[10px] text-slate-500 font-medium">{formatDate(p.date)}</p>}
-                            </div>
+                        <button
+                          key={`manual-${p.id}`}
+                          onClick={() => setOppTaskPopup({
+                            type: "manual",
+                            id: p.id,
+                            title: p.name,
+                            category: p.status,
+                            targetDate: p.date ? formatDate(p.date) : undefined,
+                            notes: p.note || undefined,
+                          })}
+                          className="w-full text-left bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <p className="text-[11px] font-semibold text-slate-800 truncate flex-1 leading-tight">{p.name}</p>
+                            {p.status && (
+                              <span className={cn("flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap", PARTNER_STATUS_COLORS[p.status] ?? "bg-slate-100 text-slate-500")}>{p.status}</span>
+                            )}
                           </div>
-                          <span onClick={e => { e.stopPropagation(); setConfirmDeletePartner({ type: "manual", id: p.id }); }} className="mt-1 text-[10px] text-slate-300 hover:text-red-400 cursor-pointer">Remove</span>
-                          {confirmDeletePartner?.type === "manual" && confirmDeletePartner.id === p.id && (
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[10px] text-slate-500 flex-1 italic">Delete?</span>
-                              <button onMouseDown={() => { deleteManualPartnership(p.id); setConfirmDeletePartner(null); }} className="text-[10px] text-red-600 hover:underline font-medium">Yes</button>
-                              <button onMouseDown={() => setConfirmDeletePartner(null)} className="text-[10px] text-slate-400 hover:underline">No</button>
+                          {p.date && (
+                            <div className="mt-0.5">
+                              <span className="text-[9px] text-slate-500 font-medium">Target {formatDate(p.date)}</span>
                             </div>
                           )}
-                        </div>
+                        </button>
                       ))}
                     </div>
                   );
@@ -3633,6 +3661,99 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
           </div>
         </div>
       ) : null}
+
+      {/* ── Opp/Task Detail Popup ─────────────────────────────────────── */}
+      {oppTaskPopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setOppTaskPopup(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 space-y-3"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-sm font-bold text-slate-900 leading-snug flex-1">{oppTaskPopup.title}</h3>
+              <button onClick={() => setOppTaskPopup(null)} className="text-slate-400 hover:text-slate-600 flex-shrink-0 mt-0.5">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Category & Priority badges */}
+            <div className="flex flex-wrap gap-1.5">
+              {oppTaskPopup.category && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium border border-blue-200">{oppTaskPopup.category}</span>
+              )}
+              {oppTaskPopup.priority && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium border border-amber-200">{oppTaskPopup.priority}</span>
+              )}
+              {oppTaskPopup.status && oppTaskPopup.status !== oppTaskPopup.category && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">{oppTaskPopup.status}</span>
+              )}
+            </div>
+
+            {/* Company */}
+            {oppTaskPopup.company && (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-400 w-16 flex-shrink-0">Company</span>
+                <span className="text-xs text-slate-700 font-medium">{oppTaskPopup.company}</span>
+              </div>
+            )}
+
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-3">
+              {oppTaskPopup.createdDate && (
+                <div className="bg-slate-50 rounded-lg p-2">
+                  <p className="text-[9px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Created</p>
+                  <p className="text-xs text-slate-700 font-medium">{oppTaskPopup.createdDate}</p>
+                </div>
+              )}
+              {oppTaskPopup.targetDate && (
+                <div className="bg-slate-50 rounded-lg p-2">
+                  <p className="text-[9px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Target</p>
+                  <p className="text-xs text-slate-700 font-medium">{oppTaskPopup.targetDate}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Notes */}
+            {oppTaskPopup.notes && (
+              <div>
+                <p className="text-[9px] text-slate-400 uppercase tracking-wide font-semibold mb-1">Notes</p>
+                <p className="text-xs text-slate-500 leading-relaxed">{oppTaskPopup.notes}</p>
+              </div>
+            )}
+
+            {/* Remove button (for portco/manual only) */}
+            {(oppTaskPopup.type === "portco" || oppTaskPopup.type === "manual") && (
+              <button
+                onClick={() => {
+                  if (oppTaskPopup.type === "portco") {
+                    setConfirmDeletePartner({ type: "portco", id: String(oppTaskPopup.id) });
+                  } else {
+                    setConfirmDeletePartner({ type: "manual", id: String(oppTaskPopup.id) });
+                  }
+                  setOppTaskPopup(null);
+                }}
+                className="w-full text-xs text-red-500 hover:text-red-700 hover:bg-red-50 py-1.5 rounded-lg transition-colors border border-transparent hover:border-red-200"
+              >
+                Remove
+              </button>
+            )}
+
+            {/* Link to tasks page for CRM tasks */}
+            {oppTaskPopup.type === "task" && (
+              <a
+                href="/tasks"
+                className="block w-full text-center text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 py-1.5 rounded-lg transition-colors border border-transparent hover:border-blue-200"
+              >
+                Open in Tasks page →
+              </a>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           ADD COMPANY MODAL
