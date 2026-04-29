@@ -26,7 +26,7 @@ type PendingContact = Contact & {
   company?: CompanyStub | null;
   received_by?: { id: string; full_name: string | null; email: string; initials: string | null } | null;
 };
-type SortKey = "name" | "email" | "type" | "title" | "country" | "added";
+type SortKey = "name" | "email" | "type" | "title" | "country" | "added" | "owner";
 type SortDir = "asc" | "desc";
 
 interface Props {
@@ -37,6 +37,22 @@ interface Props {
 
 function getInitialsFromName(name: string): string {
   return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+}
+
+// Deterministic color per owner — cycles through palette based on initials hash
+const OWNER_COLORS = [
+  "bg-violet-100 text-violet-700",
+  "bg-teal-100 text-teal-700",
+  "bg-orange-100 text-orange-700",
+  "bg-pink-100 text-pink-700",
+  "bg-sky-100 text-sky-700",
+  "bg-amber-100 text-amber-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-rose-100 text-rose-700",
+];
+function ownerColor(initials: string): string {
+  const hash = initials.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return OWNER_COLORS[hash % OWNER_COLORS.length];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1477,14 +1493,19 @@ const ContactRow = memo(function ContactRow({
       </span>
 
       {/* Owner badge */}
-      <div className="flex-shrink-0 w-8 flex items-center justify-center">
+      <div className="flex-shrink-0 w-14 flex items-center justify-center">
         {contact.received_by ? (
-          <span
-            className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700"
-            title={`Received by ${contact.received_by.full_name ?? contact.received_by.email}`}
-          >
-            {contact.received_by.initials ?? getInitialsFromName(contact.received_by.full_name ?? contact.received_by.email)}
-          </span>
+          (() => {
+            const ini = contact.received_by.initials ?? getInitialsFromName(contact.received_by.full_name ?? contact.received_by.email);
+            return (
+              <span
+                className={cn("inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-semibold", ownerColor(ini))}
+                title={`Received by ${contact.received_by.full_name ?? contact.received_by.email}`}
+              >
+                {ini}
+              </span>
+            );
+          })()
         ) : (
           <span className="text-[10px] text-slate-300">—</span>
         )}
@@ -1635,6 +1656,7 @@ export function PendingContactsClient({ initialContacts, companies, currentUserI
       if (sortKey === "title")   { av = a.title ?? ""; bv = b.title ?? ""; }
       if (sortKey === "country") { av = a.location_country ?? ""; bv = b.location_country ?? ""; }
       if (sortKey === "added")   { av = a.created_at ?? ""; bv = b.created_at ?? ""; }
+      if (sortKey === "owner")   { av = a.received_by?.full_name ?? ""; bv = b.received_by?.full_name ?? ""; }
       const cmp = av.localeCompare(bv);
       return sortDir === "asc" ? cmp : -cmp;
     });
@@ -1797,7 +1819,7 @@ export function PendingContactsClient({ initialContacts, companies, currentUserI
             <div className="w-20 flex-shrink-0 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">City</div>
             <SortHeader label="Country ✦" sortKey="country" active={sortKey==="country"} dir={sortDir} onSort={handleSort} className="w-28 flex-shrink-0" />
             <SortHeader label="Added"   sortKey="added"   active={sortKey==="added"}   dir={sortDir} onSort={handleSort} className="w-20 flex-shrink-0 justify-end" />
-            <div className="w-8 flex-shrink-0 text-[10px] font-semibold text-slate-400 uppercase tracking-wider text-center">Owner</div>
+            <SortHeader label="Owner" sortKey="owner" active={sortKey==="owner"} dir={sortDir} onSort={handleSort} className="w-14 flex-shrink-0 justify-center" />
             <div className="w-24 flex-shrink-0" />
           </div>
 
