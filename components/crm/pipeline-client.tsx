@@ -13,6 +13,7 @@ import {
   User, FileText, Link2, MapPin, Calendar, Mail, Phone,
   Building2, Sparkles, Paperclip, Tag, Upload, Loader2, ImageIcon, Bot,
   List, LayoutGrid, Eye, Download, CheckSquare, Clock, RefreshCw,
+  CheckCircle2, AlertCircle,
 } from "lucide-react";
 import { PdfCover } from "@/components/ui/pdf-cover";
 import { formatMeetingSummary } from "@/lib/format-meeting-summary";
@@ -571,7 +572,12 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
     status?: string;
     priority?: string;
     notes?: string;
+    linkedCompanies?: string[];
   } | null>(null);
+
+  const [showUpdateInput, setShowUpdateInput] = useState(false);
+  const [oppTaskUpdateText, setOppTaskUpdateText] = useState("");
+  const [taskUpdatesMap, setTaskUpdatesMap] = useState<Record<string, Array<{ author: string; date: string; text: string }>>>({});
 
   // Strategic Partnerships (populated from portco_strategic_map localStorage)
   const [crmTasks, setCrmTasks] = useState<Array<{ id: number; title: string; cat: string; cos: string[]; due: string; start: string; prio: string }>>([]);
@@ -904,6 +910,11 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
       } catch {}
     }
     loadCrmTasks();
+    // Also load task updates map
+    const storedUpdates = localStorage.getItem("crm_task_updates");
+    if (storedUpdates) {
+      try { setTaskUpdatesMap(JSON.parse(storedUpdates)); } catch {}
+    }
     function handleStorage(e: StorageEvent) {
       if (e.key === "crm_tasks") loadCrmTasks();
     }
@@ -1464,6 +1475,60 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
       setCompanies(prev => prev.map(c => c.id === boardDragItem ? { ...c, deal_status: company.deal_status } : c));
     }
     setBoardDragItem(null);
+  }
+
+  // ── Opp/Task popup helpers ────────────────────────────────────────────────
+  function getDaysLeft(dueStr?: string): number | null {
+    if (!dueStr) return null;
+    let due = new Date(dueStr);
+    if (isNaN(due.getTime())) {
+      const parts = dueStr.split("/");
+      if (parts.length === 3) due = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+    }
+    if (isNaN(due.getTime())) return null;
+    const today = new Date(); today.setHours(0,0,0,0); due.setHours(0,0,0,0);
+    return Math.round((due.getTime() - today.getTime()) / 86400000);
+  }
+
+  function markTaskComplete(id: number | string) {
+    const stored = localStorage.getItem("crm_tasks");
+    if (!stored) return;
+    try {
+      const tasks = JSON.parse(stored);
+      localStorage.setItem("crm_tasks", JSON.stringify(
+        tasks.map((t: { id: number | string }) => t.id === id ? { ...t, status: "Completed" } : t)
+      ));
+      window.dispatchEvent(new Event("storage"));
+    } catch {}
+    setOppTaskPopup(null);
+  }
+
+  function deleteTaskEntry(id: number | string) {
+    const stored = localStorage.getItem("crm_tasks");
+    if (!stored) return;
+    try {
+      const tasks = JSON.parse(stored);
+      localStorage.setItem("crm_tasks", JSON.stringify(
+        tasks.filter((t: { id: number | string }) => t.id !== id)
+      ));
+      window.dispatchEvent(new Event("storage"));
+    } catch {}
+    setOppTaskPopup(null);
+  }
+
+  function submitTaskUpdate(taskId: number | string, text: string) {
+    if (!text.trim()) return;
+    const key = String(taskId);
+    const entry = {
+      author: "Andrew",
+      date: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+      text: text.trim(),
+    };
+    const newMap = { ...taskUpdatesMap, [key]: [...(taskUpdatesMap[key] ?? []), entry] };
+    setTaskUpdatesMap(newMap);
+    localStorage.setItem("crm_task_updates", JSON.stringify(newMap));
+    setOppTaskUpdateText("");
+    setShowUpdateInput(false);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -3037,6 +3102,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                             priority: t.prio || undefined,
                             status: (t as { status?: string }).status || undefined,
                             notes: (t as { notes?: string }).notes || undefined,
+                            linkedCompanies: t.cos ?? [],
                           })}
                           className="w-full text-left bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
                         >
@@ -3663,97 +3729,262 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
       ) : null}
 
       {/* ── Opp/Task Detail Popup ─────────────────────────────────────── */}
-      {oppTaskPopup && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setOppTaskPopup(null)}
-        >
+      {oppTaskPopup && (() => {
+        const daysLeft = getDaysLeft(oppTaskPopup.targetDate);
+        const isOverdue = daysLeft !== null && daysLeft < 0;
+        const computedStatus = oppTaskPopup.status || (isOverdue ? "Overdue" : "Active");
+        const statusColors: Record<string, string> = {
+          "Overdue": "bg-red-50 text-red-600",
+          "Active": "bg-emerald-50 text-emerald-600",
+          "In Progress": "bg-blue-50 text-blue-600",
+          "Completed": "bg-slate-100 text-slate-500",
+        };
+        const statusCls = statusColors[computedStatus] ?? "bg-slate-100 text-slate-600";
+        const prioColors: Record<string, string> = {
+          Critical: "text-red-500", High: "text-orange-500",
+          Medium: "text-amber-500", Low: "text-slate-400",
+        };
+        const prioDot = prioColors[oppTaskPopup.priority ?? ""] ?? "text-slate-400";
+
+        const riskFlags: Array<{ title: string; subtitle: string }> = [];
+        if (isOverdue && daysLeft !== null) {
+          riskFlags.push({ title: "Overdue", subtitle: `Target date passed ${Math.abs(daysLeft)} day${Math.abs(daysLeft) !== 1 ? "s" : ""} ago` });
+        }
+        if (!oppTaskPopup.targetDate) {
+          riskFlags.push({ title: "No deadline set", subtitle: "Add a target date to track progress" });
+        }
+
+        const updates = taskUpdatesMap[String(oppTaskPopup.id)] ?? [];
+
+        return (
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 space-y-3"
-            onClick={e => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            onClick={() => { setOppTaskPopup(null); setShowUpdateInput(false); setOppTaskUpdateText(""); }}
           >
-            {/* Header */}
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="text-sm font-bold text-slate-900 leading-snug flex-1">{oppTaskPopup.title}</h3>
-              <button onClick={() => setOppTaskPopup(null)} className="text-slate-400 hover:text-slate-600 flex-shrink-0 mt-0.5">
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Category & Priority badges */}
-            <div className="flex flex-wrap gap-1.5">
-              {oppTaskPopup.category && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium border border-blue-200">{oppTaskPopup.category}</span>
-              )}
-              {oppTaskPopup.priority && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium border border-amber-200">{oppTaskPopup.priority}</span>
-              )}
-              {oppTaskPopup.status && oppTaskPopup.status !== oppTaskPopup.category && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">{oppTaskPopup.status}</span>
-              )}
-            </div>
-
-            {/* Company */}
-            {oppTaskPopup.company && (
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-400 w-16 flex-shrink-0">Company</span>
-                <span className="text-xs text-slate-700 font-medium">{oppTaskPopup.company}</span>
-              </div>
-            )}
-
-            {/* Dates */}
-            <div className="grid grid-cols-2 gap-3">
-              {oppTaskPopup.createdDate && (
-                <div className="bg-slate-50 rounded-lg p-2">
-                  <p className="text-[9px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Created</p>
-                  <p className="text-xs text-slate-700 font-medium">{oppTaskPopup.createdDate}</p>
+            <div
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* ── Header ──────────────────────────────────────────────────────── */}
+              <div className="px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <h3 className="text-[15px] font-bold text-slate-900 leading-snug flex-1 pr-2">
+                    {oppTaskPopup.title}
+                  </h3>
+                  <button
+                    onClick={() => { setOppTaskPopup(null); setShowUpdateInput(false); setOppTaskUpdateText(""); }}
+                    className="text-slate-400 hover:text-slate-600 flex-shrink-0 mt-0.5"
+                  >
+                    <X size={15} />
+                  </button>
                 </div>
-              )}
-              {oppTaskPopup.targetDate && (
-                <div className="bg-slate-50 rounded-lg p-2">
-                  <p className="text-[9px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Target</p>
-                  <p className="text-xs text-slate-700 font-medium">{oppTaskPopup.targetDate}</p>
+                <div className="flex items-center gap-2">
+                  {oppTaskPopup.type === "task" && (
+                    <button
+                      onClick={() => markTaskComplete(oppTaskPopup.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
+                    >
+                      <CheckCircle2 size={13} /> Mark Complete
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setShowUpdateInput(v => !v); setOppTaskUpdateText(""); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+                  >
+                    <Plus size={12} /> Add Update
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (oppTaskPopup.type === "task") {
+                        deleteTaskEntry(oppTaskPopup.id);
+                      } else if (oppTaskPopup.type === "portco") {
+                        setConfirmDeletePartner({ type: "portco", id: String(oppTaskPopup.id) });
+                        setOppTaskPopup(null);
+                      } else {
+                        setConfirmDeletePartner({ type: "manual", id: String(oppTaskPopup.id) });
+                        setOppTaskPopup(null);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-red-200 text-red-500 hover:bg-red-50 rounded-lg transition-colors ml-auto"
+                  >
+                    <X size={12} /> Delete
+                  </button>
                 </div>
-              )}
-            </div>
-
-            {/* Notes */}
-            {oppTaskPopup.notes && (
-              <div>
-                <p className="text-[9px] text-slate-400 uppercase tracking-wide font-semibold mb-1">Notes</p>
-                <p className="text-xs text-slate-500 leading-relaxed">{oppTaskPopup.notes}</p>
               </div>
-            )}
 
-            {/* Remove button (for portco/manual only) */}
-            {(oppTaskPopup.type === "portco" || oppTaskPopup.type === "manual") && (
-              <button
-                onClick={() => {
-                  if (oppTaskPopup.type === "portco") {
-                    setConfirmDeletePartner({ type: "portco", id: String(oppTaskPopup.id) });
-                  } else {
-                    setConfirmDeletePartner({ type: "manual", id: String(oppTaskPopup.id) });
-                  }
-                  setOppTaskPopup(null);
-                }}
-                className="w-full text-xs text-red-500 hover:text-red-700 hover:bg-red-50 py-1.5 rounded-lg transition-colors border border-transparent hover:border-red-200"
-              >
-                Remove
-              </button>
-            )}
+              {/* ── Scrollable body ──────────────────────────────────────────────── */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
-            {/* Link to tasks page for CRM tasks */}
-            {oppTaskPopup.type === "task" && (
-              <a
-                href="/tasks"
-                className="block w-full text-center text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 py-1.5 rounded-lg transition-colors border border-transparent hover:border-blue-200"
-              >
-                Open in Tasks page →
-              </a>
-            )}
+                {/* OVERVIEW */}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-3">Overview</p>
+                  <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Category</p>
+                      {oppTaskPopup.category
+                        ? <span className="text-[11px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">{oppTaskPopup.category}</span>
+                        : <span className="text-[11px] text-slate-400">—</span>}
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Initiative</p>
+                      {oppTaskPopup.category
+                        ? <span className="text-[11px] px-2 py-0.5 rounded bg-violet-50 text-violet-700 font-medium">{oppTaskPopup.category}</span>
+                        : <span className="text-[11px] text-slate-400">—</span>}
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Status</p>
+                      <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${statusCls}`}>{computedStatus}</span>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Priority</p>
+                      {oppTaskPopup.priority
+                        ? <span className="text-[11px] text-slate-700 flex items-center gap-1">
+                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${prioDot.replace("text-", "bg-")}`} />
+                            {oppTaskPopup.priority}
+                          </span>
+                        : <span className="text-[11px] text-slate-400">—</span>}
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Owner</p>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 rounded-full bg-slate-500 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0">A</div>
+                        <span className="text-[11px] text-slate-700">Andrew</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Days left</p>
+                      {daysLeft === null
+                        ? <span className="text-[11px] text-slate-400">—</span>
+                        : daysLeft < 0
+                          ? <span className="text-[11px] font-semibold text-red-500">{Math.abs(daysLeft)}d overdue</span>
+                          : daysLeft === 0
+                            ? <span className="text-[11px] font-semibold text-amber-500">Due today</span>
+                            : <span className="text-[11px] font-medium text-slate-600">{daysLeft}d left</span>
+                      }
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Start</p>
+                      <span className="text-[11px] text-slate-700">{oppTaskPopup.createdDate || "—"}</span>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Target</p>
+                      <span className="text-[11px] text-slate-700">{oppTaskPopup.targetDate || "—"}</span>
+                    </div>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[10px] text-slate-400">Progress</p>
+                      <span className="text-[10px] text-slate-500">0%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-blue-500 rounded-full" style={{ width: "0%" }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* NOTES */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Notes</p>
+                    <button className="text-slate-400 hover:text-slate-600 transition-colors"><Plus size={13} /></button>
+                  </div>
+                  {oppTaskPopup.notes
+                    ? <p className="text-xs text-slate-600 leading-relaxed">{oppTaskPopup.notes}</p>
+                    : <p className="text-xs text-slate-400 italic">No notes added yet.</p>}
+                </div>
+
+                {/* LINKED COMPANIES */}
+                {(oppTaskPopup.linkedCompanies ?? []).length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Linked Companies</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(oppTaskPopup.linkedCompanies ?? []).map(c => (
+                        <span key={c} className="flex items-center gap-1 text-[11px] px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-medium">
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* RISK FLAGS */}
+                {riskFlags.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Risk Flags</p>
+                    <div className="space-y-2">
+                      {riskFlags.map((flag, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <AlertCircle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs font-semibold text-slate-800">{flag.title}</p>
+                            <p className="text-[11px] text-slate-500">{flag.subtitle}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* UPDATES & COMMENTS */}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Updates &amp; Comments</p>
+
+                  {/* Add update form */}
+                  {showUpdateInput && (
+                    <div className="mb-3 space-y-2">
+                      <textarea
+                        value={oppTaskUpdateText}
+                        onChange={e => setOppTaskUpdateText(e.target.value)}
+                        placeholder="Write an update..."
+                        className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-300"
+                        rows={3}
+                        autoFocus
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => submitTaskUpdate(oppTaskPopup.id, oppTaskUpdateText)}
+                          className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                        >
+                          Submit
+                        </button>
+                        <button
+                          onClick={() => { setShowUpdateInput(false); setOppTaskUpdateText(""); }}
+                          className="px-3 py-1.5 text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {updates.length > 0 ? (
+                    <div className="space-y-3">
+                      {updates.map((u, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <div className="w-6 h-6 rounded-full bg-slate-500 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0">
+                            {u.author.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-[11px] font-semibold text-slate-700">{u.author}</span>
+                              <span className="text-[10px] text-slate-400">{u.date}</span>
+                            </div>
+                            <p className="text-xs text-slate-600 leading-relaxed">{u.text}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    !showUpdateInput && <p className="text-xs text-slate-400 italic">No updates yet.</p>
+                  )}
+                </div>
+
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           ADD COMPANY MODAL
