@@ -10,7 +10,6 @@ import { getAiConfig } from "@/lib/ai-config";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-export const maxRequestBodySize = "20mb"; // allow up to 20 MB PDFs
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -26,67 +25,38 @@ export async function POST(request: NextRequest) {
   let extractedText = "";
   let reportId: string | null = null;
 
-  if (isJsonBody) {
-    // Text paste mode — no file upload needed
-    const body = await request.json() as { text_content?: string; company_id?: string; report_type?: string; period?: string };
-    companyId = body.company_id ?? null;
-    reportType = body.report_type ?? "quarterly";
-    period = body.period ?? "";
-    extractedText = (body.text_content ?? "").substring(0, 15000);
+  if (!isJsonBody) {
+    return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
 
-    if (!companyId || !extractedText.trim()) {
-      return NextResponse.json({ error: "company_id and text_content required" }, { status: 400 });
-    }
+  const body = await request.json() as {
+    text_content?: string;
+    storage_path?: string;
+    file_name?: string;
+    company_id?: string;
+    report_type?: string;
+    period?: string;
+  };
 
-    // Create a lightweight report record for text-paste mode
-    const { data: r } = await supabase
-      .from("portfolio_reports")
-      .insert({ company_id: companyId, file_name: "pasted-text", storage_path: "text-paste", report_type: reportType, period: period || null })
-      .select("id")
-      .single();
-    reportId = r?.id ?? null;
-  } else {
-    // File upload mode
-    let formData: FormData;
-    try {
-      formData = await request.formData();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      const isTooBig = msg.toLowerCase().includes("large") || msg.toLowerCase().includes("limit") || msg.toLowerCase().includes("413");
-      return NextResponse.json(
-        { error: isTooBig ? "File too large — please upload a PDF under 20 MB, or use the 'Paste text' option instead." : `Failed to read upload: ${msg}` },
-        { status: isTooBig ? 413 : 400 }
-      );
-    }
-    const file = formData.get("file") as File | null;
-    companyId = formData.get("company_id") as string | null;
-    reportType = (formData.get("report_type") as string) || "quarterly";
-    period = (formData.get("period") as string) || "";
+  companyId  = body.company_id  ?? null;
+  reportType = body.report_type ?? "quarterly";
+  period     = body.period      ?? "";
 
-    if (!file || !companyId) {
-      return NextResponse.json({ error: "File and company_id required" }, { status: 400 });
-    }
+  if (!companyId) {
+    return NextResponse.json({ error: "company_id required" }, { status: 400 });
+  }
 
-    // 1. Upload to Supabase storage
-    const fileName = `${Date.now()}-${file.name}`;
-    const storagePath = `portfolio-reports/${companyId}/${fileName}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
+  if (body.storage_path) {
+    // ── File-upload path: browser already wrote the file to Supabase Storage ──
+    // Download it server-side and extract text. No Vercel body limit applies.
+    const fileName = body.file_name ?? "report";
 
-    const { error: uploadError } = await supabase.storage
-      .from("documents")
-      .upload(storagePath, buffer, { contentType: file.type });
-
-    if (uploadError) {
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
-    }
-
-    // 2. Create report record
     const { data: r } = await supabase
       .from("portfolio_reports")
       .insert({
         company_id: companyId,
-        file_name: file.name,
-        storage_path: storagePath,
+        file_name: fileName,
+        storage_path: body.storage_path,
         report_type: reportType,
         period: period || null,
       })
@@ -94,13 +64,34 @@ export async function POST(request: NextRequest) {
       .single();
     reportId = r?.id ?? null;
 
-    // 3. Extract text from PDF
+    const { data: fileBlob, error: dlError } = await supabase.storage
+      .from("documents")
+      .download(body.storage_path);
+    if (dlError) {
+      return NextResponse.json({ error: `Could not read uploaded file: ${dlError.message}` }, { status: 500 });
+    }
+
+    const buffer = Buffer.from(await fileBlob.arrayBuffer());
     try {
       const { extractPdfText } = await import("@/lib/extract-pdf-text");
       extractedText = await extractPdfText(buffer);
     } catch {
       extractedText = buffer.toString("utf-8").substring(0, 15000);
     }
+
+  } else if (body.text_content?.trim()) {
+    // ── Text-paste path ───────────────────────────────────────────────────────
+    extractedText = body.text_content.trim().substring(0, 15000);
+
+    const { data: r } = await supabase
+      .from("portfolio_reports")
+      .insert({ company_id: companyId, file_name: "pasted-text", storage_path: "text-paste", report_type: reportType, period: period || null })
+      .select("id")
+      .single();
+    reportId = r?.id ?? null;
+
+  } else {
+    return NextResponse.json({ error: "Provide either storage_path (file upload) or text_content (paste)" }, { status: 400 });
   }
 
   // 4. Get company context

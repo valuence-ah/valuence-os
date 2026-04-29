@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useCallback } from "react";
 import { X, Upload, Loader2, CheckCircle } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import type { Company } from "@/lib/types";
 
 interface Props {
@@ -9,7 +10,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-type UploadState = "idle" | "uploading" | "success" | "error";
+type UploadState = "idle" | "uploading" | "extracting" | "success" | "error";
 
 export function PortfolioReportUpload({ company, onClose, onSuccess }: Props) {
   const [reportType, setReportType] = useState("quarterly");
@@ -42,38 +43,43 @@ export function PortfolioReportUpload({ company, onClose, onSuccess }: Props) {
     setErrorMsg("");
 
     try {
-      let res: Response;
+      let body: Record<string, string>;
+
       if (inputMode === "text") {
-        res = await fetch("/api/portfolio/upload-report", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text_content: textContent.trim(),
-            company_id: company.id,
-            report_type: reportType,
-            period,
-          }),
-        });
+        body = {
+          text_content: textContent.trim(),
+          company_id: company.id,
+          report_type: reportType,
+          period,
+        };
       } else {
-        const fd = new FormData();
-        fd.append("file", file!);
-        fd.append("company_id", company.id);
-        fd.append("report_type", reportType);
-        fd.append("period", period);
-        res = await fetch("/api/portfolio/upload-report", { method: "POST", body: fd });
+        // Step 1: upload file directly from the browser to Supabase Storage.
+        // This bypasses Vercel's 4.5 MB serverless body limit entirely.
+        const supabase = createClient();
+        const storagePath = `portfolio-reports/${company.id}/${Date.now()}-${file!.name}`;
+        const { error: storageError } = await supabase.storage
+          .from("documents")
+          .upload(storagePath, file!, { contentType: file!.type, upsert: false });
+        if (storageError) throw new Error(`Storage upload failed: ${storageError.message}`);
+
+        // Step 2: tell the API where the file lives — no file bytes cross Vercel.
+        setUploadState("extracting");
+        body = {
+          storage_path: storagePath,
+          file_name: file!.name,
+          company_id: company.id,
+          report_type: reportType,
+          period,
+        };
       }
-      // Safe JSON parse — Vercel may return plain text (e.g. "Request Entity Too Large") on 413
-      let data: { error?: string; extracted?: { kpi_count: number; milestone_count: number; initiative_count: number } } = {};
-      const ct = res.headers.get("content-type") ?? "";
-      if (ct.includes("application/json")) {
-        data = await res.json();
-      } else {
-        const rawText = await res.text();
-        if (!res.ok) {
-          const isTooBig = res.status === 413 || rawText.toLowerCase().includes("large") || rawText.toLowerCase().includes("limit");
-          throw new Error(isTooBig ? "File too large — please upload a PDF under 20 MB, or use the 'Paste text' tab instead." : `Server error (${res.status}): ${rawText.slice(0, 120)}`);
-        }
-      }
+
+      const res = await fetch("/api/portfolio/upload-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json() as { error?: string; extracted?: { kpi_count: number; milestone_count: number; initiative_count: number } };
       if (!res.ok) throw new Error(data.error ?? "Upload failed");
       setResult(data.extracted ?? null);
       setUploadState("success");
@@ -225,14 +231,13 @@ export function PortfolioReportUpload({ company, onClose, onSuccess }: Props) {
               </button>
               <button
                 onClick={handleUpload}
-                disabled={(inputMode === "file" ? !file : !textContent.trim()) || uploadState === "uploading"}
+                disabled={(inputMode === "file" ? !file : !textContent.trim()) || uploadState === "uploading" || uploadState === "extracting"}
                 className="flex-1 py-2.5 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
               >
                 {uploadState === "uploading" ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    Extracting…
-                  </>
+                  <><Loader2 size={14} className="animate-spin" />Uploading…</>
+                ) : uploadState === "extracting" ? (
+                  <><Loader2 size={14} className="animate-spin" />Extracting…</>
                 ) : inputMode === "file" ? "Upload + Extract" : "Extract from text"}
               </button>
             </div>
