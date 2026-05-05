@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     const userId = authData.user.id;
 
     // ── Create profile (approved: false — access blocked until admin approves) ─
-    const initials = cleanName.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+    const initials = cleanName.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
     await admin.from("profiles").upsert({
       id:        userId,
       email:     cleanEmail,
