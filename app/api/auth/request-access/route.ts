@@ -1,6 +1,8 @@
 // ─── POST /api/auth/request-access ────────────────────────────────────────────
-// Public endpoint — inserts a pending access request. No auth required.
-// After a successful insert, sends an email notification to the admin.
+// Public endpoint — creates a Supabase auth user + pending profile + access request.
+// The user can sign in immediately but will be blocked at the dashboard until
+// an admin approves their request (profiles.approved = true).
+// No auth required to call this endpoint.
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
@@ -8,7 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 // ── Email helper (uses Resend if RESEND_API_KEY is set, silently skips if not) ─
 async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return; // skip gracefully if not configured
+  if (!apiKey) return;
   try {
     await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -24,66 +26,102 @@ async function sendEmail({ to, subject, html }: { to: string; subject: string; h
       }),
     });
   } catch (err) {
-    // Email failures should never break the main flow
     console.warn("[request-access] email send failed:", err);
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { fullName, email, message } = await req.json();
+    const { fullName, email, password, message } = await req.json();
+
+    // ── Validate inputs ──────────────────────────────────────────────────────
     if (!fullName?.trim() || !email?.trim()) {
       return NextResponse.json({ error: "Name and email are required." }, { status: 400 });
     }
+    if (!password || password.length < 8) {
+      return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+    }
 
-    const supabase = createAdminClient();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName  = fullName.trim();
+    const admin      = createAdminClient();
 
-    // Check if already requested or already a user
-    const { data: existing } = await supabase
+    // ── Check for duplicate requests ─────────────────────────────────────────
+    const { data: existing } = await admin
       .from("access_requests")
       .select("id, status")
-      .eq("email", email.trim().toLowerCase())
+      .eq("email", cleanEmail)
       .maybeSingle();
 
-    if (existing) {
-      if (existing.status === "pending") {
-        return NextResponse.json({ error: "A request for this email is already pending." }, { status: 409 });
-      }
-      if (existing.status === "approved") {
-        return NextResponse.json({ error: "This email has already been approved. Check your inbox for a sign-in link." }, { status: 409 });
-      }
-      // rejected → allow re-request by updating the record
-      await supabase
-        .from("access_requests")
-        .update({ full_name: fullName.trim(), message: message?.trim() || null, status: "pending", requested_at: new Date().toISOString(), reviewed_at: null, reviewed_by: null })
-        .eq("id", existing.id);
-
-      // Notify admin of re-request
-      await sendEmail({
-        to: "andrew@valuence.vc",
-        subject: `🔔 Valuence OS — New Access Request from ${fullName.trim()}`,
-        html: buildAdminNotificationHtml({ fullName: fullName.trim(), email: email.trim(), message }),
-      });
-
-      return NextResponse.json({ ok: true });
+    if (existing?.status === "pending") {
+      return NextResponse.json({ error: "A request for this email is already pending." }, { status: 409 });
+    }
+    if (existing?.status === "approved") {
+      return NextResponse.json({ error: "This email has already been approved. Sign in at /auth/login." }, { status: 409 });
     }
 
-    const { error } = await supabase.from("access_requests").insert({
-      email:     email.trim().toLowerCase(),
-      full_name: fullName.trim(),
-      message:   message?.trim() || null,
+    // ── Create Supabase auth user (email auto-confirmed, no verification email) ─
+    // The user can sign in immediately but dashboard blocks until approved.
+    const { data: authData, error: createError } = await admin.auth.admin.createUser({
+      email:         cleanEmail,
+      password,
+      email_confirm: true, // skip email verification — admin approval is the gate
+      user_metadata: { full_name: cleanName },
     });
 
-    if (error) {
-      console.error("[request-access]", error);
-      return NextResponse.json({ error: "Failed to submit request. Please try again." }, { status: 500 });
+    if (createError) {
+      const alreadyExists =
+        createError.message.toLowerCase().includes("already") ||
+        createError.message.toLowerCase().includes("exists") ||
+        createError.message.toLowerCase().includes("registered");
+
+      if (alreadyExists) {
+        return NextResponse.json(
+          { error: "An account with this email already exists. Try signing in, or contact andrew@valuence.vc." },
+          { status: 409 }
+        );
+      }
+      console.error("[request-access] createUser error:", createError);
+      return NextResponse.json({ error: "Failed to create account. Please try again." }, { status: 500 });
     }
 
-    // ── Notify admin (Andrew) that a new access request was submitted ─────────
+    const userId = authData.user.id;
+
+    // ── Create profile (approved: false — access blocked until admin approves) ─
+    const initials = cleanName.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+    await admin.from("profiles").upsert({
+      id:        userId,
+      email:     cleanEmail,
+      full_name: cleanName,
+      role:      "analyst", // default role; admin can change when approving
+      approved:  false,
+      initials,
+    }, { onConflict: "id" });
+
+    // ── Insert or update access_request ──────────────────────────────────────
+    if (existing) {
+      // Re-request after rejection
+      await admin.from("access_requests").update({
+        full_name:    cleanName,
+        message:      message?.trim() || null,
+        status:       "pending",
+        requested_at: new Date().toISOString(),
+        reviewed_at:  null,
+        reviewed_by:  null,
+      }).eq("id", existing.id);
+    } else {
+      await admin.from("access_requests").insert({
+        email:     cleanEmail,
+        full_name: cleanName,
+        message:   message?.trim() || null,
+      });
+    }
+
+    // ── Notify admin ─────────────────────────────────────────────────────────
     await sendEmail({
-      to: "andrew@valuence.vc",
-      subject: `🔔 Valuence OS — New Access Request from ${fullName.trim()}`,
-      html: buildAdminNotificationHtml({ fullName: fullName.trim(), email: email.trim(), message }),
+      to:      "andrew@valuence.vc",
+      subject: `🔔 Valuence OS — New Access Request from ${cleanName}`,
+      html:    buildAdminNotificationHtml({ fullName: cleanName, email: cleanEmail, message }),
     });
 
     return NextResponse.json({ ok: true });
@@ -108,7 +146,7 @@ function buildAdminNotificationHtml({
     </div>
     <div style="padding: 28px;">
       <p style="margin: 0 0 20px; font-size: 15px; color: #475569;">
-        A new user has requested access to <strong>Valuence OS</strong>. Review and approve or reject them from the Admin panel.
+        A new user has registered and is requesting access to <strong>Valuence OS</strong>. Their account has been created but is pending your approval.
       </p>
       <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 24px;">
         <tr>
@@ -127,11 +165,11 @@ function buildAdminNotificationHtml({
       </table>
       <a href="${appUrl}/admin"
         style="display: inline-block; background: #0D3D38; color: white; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 24px; border-radius: 8px;">
-        Review Request in Admin Panel →
+        Approve in Admin Panel →
       </a>
     </div>
     <div style="padding: 16px 28px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; font-size: 12px; color: #94a3b8;">This notification was sent automatically by Valuence OS. Only you receive this email.</p>
+      <p style="margin: 0; font-size: 12px; color: #94a3b8;">This notification was sent automatically by Valuence OS.</p>
     </div>
   </div>
 </body>

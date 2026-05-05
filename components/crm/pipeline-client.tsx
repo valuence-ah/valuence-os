@@ -473,13 +473,14 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
   // ── State ────────────────────────────────────────────────────────────────────
   const [companies, setCompanies]         = useState<Company[]>(initialCompanies);
   const [selectedId, setSelectedId]       = useState<string | null>(() => {
-    // Restore last-viewed company on mount (client-only)
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem(`pipeline_last_company_${currentUserId}`);
-        if (saved && initialCompanies.some(c => c.id === saved)) return saved;
-      } catch {}
-    }
+    if (typeof window === "undefined") return null; // SSR
+    // Mobile: always start with the company list (never restore last-viewed)
+    if (window.innerWidth < 768) return null;
+    // Desktop: restore last-viewed company, default to first
+    try {
+      const saved = localStorage.getItem(`pipeline_last_company_${currentUserId}`);
+      if (saved && initialCompanies.some(c => c.id === saved)) return saved;
+    } catch {}
     return initialCompanies[0]?.id ?? null;
   });
   const [search, setSearch]               = useState("");
@@ -2213,7 +2214,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                       </div>
                     </>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5 mt-0.5">
+                    <div className="flex flex-wrap gap-1.5 mt-0.5 min-h-[28px] items-center">
                       {TYPE_OPTIONS.map(o => {
                         const viewTypes = (selected.types ?? []).length > 0
                           ? (selected.types ?? [])
@@ -2233,7 +2234,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                 <div className="order-3 md:order-7">
                 <Field label="Status">
                   {editing ? (
-                    <select className="select text-xs" value={editForm.deal_status ?? ""} onChange={e => setEF("deal_status", e.target.value as DealStatus || null)}>
+                    <select className="select text-xs w-full" value={editForm.deal_status ?? ""} onChange={e => setEF("deal_status", e.target.value as DealStatus || null)}>
                       <option value="">Not set</option>
                       {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                     </select>
@@ -2249,7 +2250,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                       {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                     </select>
                   ) : (
-                    <div onDoubleClick={() => setEditField("deal_status")} title="Double-click to edit" className="cursor-pointer">
+                    <div onDoubleClick={() => setEditField("deal_status")} title="Double-click to edit" className="cursor-pointer min-h-[28px] flex items-center">
                       {selected.deal_status
                         ? <span className={cn("inline-block text-xs px-2 py-1 rounded-md font-medium", STATUS_COLORS[selected.deal_status])}>{STATUS_LABELS[selected.deal_status]}</span>
                         : <span className="text-xs text-slate-300 italic">double-click to set</span>}
@@ -2320,7 +2321,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                 <div className="order-5 md:order-4">
                 <Field label="Sub-sector">
                   {editing ? (
-                    <select className="select text-xs" value={editForm.sub_type ?? ""} onChange={e => setEF("sub_type", e.target.value || null)}>
+                    <select className="select text-xs w-full" value={editForm.sub_type ?? ""} onChange={e => setEF("sub_type", e.target.value || null)}>
                       <option value="">Select sub-sector</option>
                       {SUB_SECTOR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
@@ -2350,7 +2351,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                 <div className="order-6">
                 <Field label="Investment Round">
                   {editing ? (
-                    <select className="select text-xs" value={editForm.stage ?? ""} onChange={e => setEF("stage", e.target.value || null)}>
+                    <select className="select text-xs w-full" value={editForm.stage ?? ""} onChange={e => setEF("stage", e.target.value || null)}>
                       <option value="">Not set</option>
                       {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
                     </select>
@@ -3268,7 +3269,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
                   const desktopCols = cols === 1 ? "md:grid-cols-1" : cols === 2 ? "md:grid-cols-2" : cols === 3 ? "md:grid-cols-3" : "md:grid-cols-4";
                   return (
-                    <div className={`grid grid-cols-2 ${desktopCols} gap-2 h-28 overflow-hidden`}>
+                    <div className={`grid grid-cols-2 ${desktopCols} gap-2 auto-rows-[112px] max-h-60 overflow-y-auto md:max-h-none md:h-28 md:overflow-hidden`}>
                       {decks.map(doc => {
                         const url = doc.storage_path
                           ? supabase.storage.from("decks").getPublicUrl(doc.storage_path).data.publicUrl
@@ -3333,7 +3334,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
                   const desktopColsT = cols === 1 ? "md:grid-cols-1" : cols === 2 ? "md:grid-cols-2" : cols === 3 ? "md:grid-cols-3" : "md:grid-cols-4";
                   return (
-                    <div className={`grid grid-cols-2 ${desktopColsT} gap-2 h-24`}>
+                    <div className={`grid grid-cols-2 ${desktopColsT} gap-2 auto-rows-[96px] max-h-52 overflow-y-auto md:max-h-none md:h-24 md:overflow-hidden`}>
                       {transcripts.map(doc => {
                         const url = doc.storage_path
                           ? supabase.storage.from("transcripts").getPublicUrl(doc.storage_path).data.publicUrl
