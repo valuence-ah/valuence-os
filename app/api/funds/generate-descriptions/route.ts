@@ -10,11 +10,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAiConfig } from "@/lib/ai-config";
 import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 300;
-
-const MODEL = "claude-haiku-4-5";
 
 function buildPrompt(name: string, loc: string, stage: string, sectors: string[], website: string): string {
   const parts: string[] = [];
@@ -45,6 +44,7 @@ export async function POST(req: NextRequest) {
   const force = body.force !== false;
   const supabase = createAdminClient();
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const { model } = await getAiConfig("fund_descriptions");
 
   // ── Fetch target companies ─────────────────────────────────────────────────
   const selectFields = "id, name, type, types, stage, sectors, description, website, location_city, location_country";
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
       const prompt = buildPrompt(name, loc, stage, sectors, website);
 
       const msg = await anthropic.messages.create({
-        model: MODEL,
+        model,
         max_tokens: 100,
         messages: [{ role: "user", content: prompt }],
       });

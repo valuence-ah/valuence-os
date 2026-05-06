@@ -32,7 +32,7 @@ async function tryLogoDev(domain: string): Promise<string | null> {
     const res = await fetch(url, { method: "GET", redirect: "follow" });
     // Accept any 2xx response — Logo.dev always returns an image for known domains
     if (res.ok) return url;
-  } catch {}
+  } catch (err) { console.warn("[logo-finder] Logo.dev fetch failed for", domain, ":", err instanceof Error ? err.message : String(err)); }
   return null;
 }
 

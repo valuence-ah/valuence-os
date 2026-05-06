@@ -21,7 +21,9 @@ export function MobileNavProvider({ children }: { children: React.ReactNode }) {
           content is never clipped behind browser chrome. Falls back to h-screen
           on browsers that don't support dvh (pre-iOS 15.4 Safari). */}
       <div
-        className="flex-1 flex flex-col h-[100dvh] overflow-hidden min-w-0 md:ml-[240px]"
+        id="main-content"
+        tabIndex={-1}
+        className="flex-1 flex flex-col h-[100dvh] overflow-hidden min-w-0 md:ml-[240px] focus:outline-none"
       >
         {children}
       </div>

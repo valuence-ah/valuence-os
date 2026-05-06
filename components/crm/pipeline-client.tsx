@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { PdfCover } from "@/components/ui/pdf-cover";
 import { formatMeetingSummary } from "@/lib/format-meeting-summary";
+import { PipelineFilterBar } from "@/components/crm/pipeline-filter-bar";
 
 // ── Contact title options ─────────────────────────────────────────────────────
 const CONTACT_TITLE_OPTIONS = [
@@ -1653,48 +1654,30 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                 </button>
               </div>
               {/* Filter dropdowns: Type / Sector / Round */}
-              {(() => {
-                const allTypes = [...new Set(companies.flatMap(c => c.types ?? []))].filter(Boolean).sort();
-                const allSectors = [...new Set(companies.flatMap(c => c.sectors ?? []))].filter(Boolean).sort();
-                const allRounds = [...new Set(companies.map(c => c.stage).filter(Boolean) as string[])].sort();
-                const hasAnyFilter = filterType || filterSector || filterRound;
-                const sel = "text-xs border border-slate-200 rounded-md px-2 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer";
-                return (
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <select value={filterType ?? ""} onChange={e => setFilterType(e.target.value || null)} className={sel}>
-                      <option value="">All Types</option>
-                      {allTypes.map(t => <option key={t} value={t}>{t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</option>)}
-                    </select>
-                    <select value={filterSector ?? ""} onChange={e => setFilterSector(e.target.value || null)} className={sel}>
-                      <option value="">All Sectors</option>
-                      {allSectors.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <select value={filterRound ?? ""} onChange={e => setFilterRound(e.target.value || null)} className={sel}>
-                      <option value="">All Rounds</option>
-                      {allRounds.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                    {hasAnyFilter && (
-                      <button onClick={() => { setFilterType(null); setFilterSector(null); setFilterRound(null); }}
-                        className="text-[10px] text-slate-400 hover:text-red-500 flex items-center gap-0.5">
-                        <X size={10} /> Clear
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
+              <PipelineFilterBar
+                companies={companies}
+                filterType={filterType}
+                filterSector={filterSector}
+                filterRound={filterRound}
+                setFilterType={setFilterType}
+                setFilterSector={setFilterSector}
+                setFilterRound={setFilterRound}
+              />
             </div>
             {/* Hidden in board view — just takes up the sidebar space for layout consistency */}
             <div className="flex-1" />
           </div>
 
           {/* Board columns */}
-          <div className="flex-1 overflow-x-auto flex gap-3 p-4 h-full bg-slate-50">
+          <div role="list" aria-label="Pipeline board" className="flex-1 overflow-x-auto flex gap-3 p-4 h-full bg-slate-50">
             {BOARD_STAGES.map(stageKey => {
               const stageCompanies = filtered.filter(c => (c.deal_status ?? "identified_introduced") === stageKey);
               const isDragTarget = boardDragOver === stageKey;
               return (
                 <div
                   key={stageKey}
+                  role="listitem"
+                  aria-label={`${STATUS_LABELS[stageKey]} — ${stageCompanies.length} ${stageCompanies.length === 1 ? "company" : "companies"}`}
                   className={`flex-shrink-0 w-64 flex flex-col rounded-xl border transition-colors ${isDragTarget ? "bg-blue-50 border-blue-300" : "bg-white border-slate-200"}`}
                   onDragOver={e => { e.preventDefault(); setBoardDragOver(stageKey); }}
                   onDragLeave={() => setBoardDragOver(null)}
@@ -1703,22 +1686,27 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   {/* Column header */}
                   <div className="px-3 py-2.5 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
                     <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${STAGE_DOT[stageKey] ?? "bg-slate-400"}`} />
+                      <div className={`w-2 h-2 rounded-full ${STAGE_DOT[stageKey] ?? "bg-slate-400"}`} aria-hidden="true" />
                       <span className="text-xs font-semibold text-slate-700">{STATUS_LABELS[stageKey]}</span>
                     </div>
-                    <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-1.5 py-0.5 font-medium">
+                    <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-1.5 py-0.5 font-medium" aria-label={`${stageCompanies.length} companies`}>
                       {stageCompanies.length}
                     </span>
                   </div>
                   {/* Cards */}
-                  <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
+                  <div role="list" aria-label={`${STATUS_LABELS[stageKey]} companies`} className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
                     {stageCompanies.map(company => (
                       <div
                         key={company.id}
+                        role="listitem"
+                        tabIndex={0}
+                        aria-label={`${company.name}${company.stage ? `, ${company.stage}` : ""}`}
+                        aria-pressed={selectedId === company.id}
                         draggable
                         onDragStart={() => setBoardDragItem(company.id)}
                         onDragEnd={() => setBoardDragItem(null)}
                         onClick={() => setSelectedId(company.id)}
+                        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedId(company.id); } }}
                         className={`bg-white rounded-lg border p-2.5 cursor-pointer hover:shadow-sm transition-all select-none
                           ${selectedId === company.id ? "border-blue-400 shadow-sm ring-1 ring-blue-100" : "border-slate-200 hover:border-slate-300"}
                           ${boardDragItem === company.id ? "opacity-50" : ""}`}
@@ -1729,10 +1717,10 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                         </div>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {company.stage && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded font-medium">{company.stage}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded font-medium" aria-label={`Stage: ${company.stage}`}>{company.stage}</span>
                           )}
                           {(company.sectors ?? []).slice(0, 1).map(s => (
-                            <span key={s} className={`text-[10px] px-1.5 py-0.5 rounded font-medium capitalize ${SECTOR_COLORS[s.toLowerCase()] ?? "bg-slate-100 text-slate-600"}`}>{s}</span>
+                            <span key={s} className={`text-[10px] px-1.5 py-0.5 rounded font-medium capitalize ${SECTOR_COLORS[s.toLowerCase()] ?? "bg-slate-100 text-slate-600"}`} aria-label={`Sector: ${s}`}>{s}</span>
                           ))}
                         </div>
                       </div>
@@ -1827,35 +1815,16 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
             </button>
           </div>
           {/* Filter dropdowns: Type / Sector / Round */}
-          {(() => {
-            const allTypes = [...new Set(companies.flatMap(c => c.types ?? []))].filter(Boolean).sort();
-            const allSectors = [...new Set(companies.flatMap(c => c.sectors ?? []))].filter(Boolean).sort();
-            const allRounds = [...new Set(companies.map(c => c.stage).filter(Boolean) as string[])].sort();
-            const hasAnyFilter = filterType || filterSector || filterRound;
-            const sel = "text-xs border border-slate-200 rounded-md px-2 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer";
-            return (
-              <div className="flex flex-wrap gap-2 items-center pb-1">
-                <select value={filterType ?? ""} onChange={e => setFilterType(e.target.value || null)} className={sel}>
-                  <option value="">All Types</option>
-                  {allTypes.map(t => <option key={t} value={t}>{t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</option>)}
-                </select>
-                <select value={filterSector ?? ""} onChange={e => setFilterSector(e.target.value || null)} className={sel}>
-                  <option value="">All Sectors</option>
-                  {allSectors.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <select value={filterRound ?? ""} onChange={e => setFilterRound(e.target.value || null)} className={sel}>
-                  <option value="">All Rounds</option>
-                  {allRounds.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-                {hasAnyFilter && (
-                  <button onClick={() => { setFilterType(null); setFilterSector(null); setFilterRound(null); }}
-                    className="text-[10px] text-slate-400 hover:text-red-500 flex items-center gap-0.5">
-                    <X size={10} /> Clear
-                  </button>
-                )}
-              </div>
-            );
-          })()}
+          <PipelineFilterBar
+            companies={companies}
+            filterType={filterType}
+            filterSector={filterSector}
+            filterRound={filterRound}
+            setFilterType={setFilterType}
+            setFilterSector={setFilterSector}
+            setFilterRound={setFilterRound}
+            className="pb-1"
+          />
         </div>
 
         {/* Company list — virtualized for performance with 200+ companies */}

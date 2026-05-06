@@ -36,7 +36,7 @@ async function fetchItems(feedUrl: string): Promise<NormItem[]> {
         snippet: (i.contentSnippet ?? "").slice(0, 500),
       }));
     }
-  } catch {}
+  } catch (err) { console.warn("[feeds/fetch] Direct fetch failed, trying proxy:", err instanceof Error ? err.message : String(err)); }
 
   // ── Attempt 2: allorigins.win raw proxy ────────────────────────────────────
   try {
@@ -56,7 +56,7 @@ async function fetchItems(feedUrl: string): Promise<NormItem[]> {
         }));
       }
     }
-  } catch {}
+  } catch (err) { console.warn("[feeds/fetch] allorigins proxy failed, trying rss2json:", err instanceof Error ? err.message : String(err)); }
 
   // ── Attempt 3: rss2json.com proxy ──────────────────────────────────────────
   const proxyRes = await fetch(

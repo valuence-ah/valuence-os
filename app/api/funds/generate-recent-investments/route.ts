@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
           const d = await r.json();
           results.push(...(d.results ?? []));
         }
-      } catch {}
+      } catch (err) { console.warn("[generate-recent-investments] Exa query failed:", err instanceof Error ? err.message : String(err)); }
     }
 
     if (results.length > 0) {
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
             .filter(i => i.name.length > 0)
             .slice(0, 6);
         }
-      } catch {}
+      } catch (err) { console.error("[generate-recent-investments] Exa Claude extraction failed:", err instanceof Error ? err.message : String(err)); }
     }
   }
 
@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
           .filter(i => i.name.length > 0)
           .slice(0, 5);
       }
-    } catch {}
+    } catch (err) { console.error("[generate-recent-investments] Fallback Claude call failed:", err instanceof Error ? err.message : String(err)); }
   }
 
   // Persist to fund_investments table

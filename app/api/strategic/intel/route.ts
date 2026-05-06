@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify({ query: q, numResults: 4, contents: { text: { maxCharacters: 500 } } }),
         });
         if (r.ok) { const d = await r.json(); results.push(...(d.results ?? [])); }
-      } catch {}
+      } catch (err) { console.warn("[strategic/intel] Exa query failed:", err instanceof Error ? err.message : String(err)); }
     }
 
     // Use Claude to identify signals and summarize
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
             is_signal: p.is_signal,
           });
         }
-      } catch {}
+      } catch (err) { console.error("[strategic/intel] Claude summarization failed:", err instanceof Error ? err.message : String(err)); }
     }
   }
 
