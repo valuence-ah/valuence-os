@@ -513,6 +513,13 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
   const [savingNote, setSavingNote]         = useState(false);
   const [noteContactIds, setNoteContactIds] = useState<string[]>([]);
   const [noteContactsOpen, setNoteContactsOpen] = useState(false);
+  const [noteVVAttendees, setNoteVVAttendees] = useState<string[]>([]);
+  const [noteTranscriptFile, setNoteTranscriptFile] = useState<File | null>(null);
+  const [noteTranscriptMode, setNoteTranscriptMode] = useState<"upload" | "paste">("upload");
+  const [noteTranscriptText, setNoteTranscriptText] = useState("");
+  const noteTranscriptInputRef = useRef<HTMLInputElement>(null);
+
+  const VV_TEAM = ["Andrew Hyung", "Gene Cho", "Lance Park"];
 
   // Interaction edit/delete
   const [editingInteractionId, setEditingInteractionId] = useState<string | null>(null);
@@ -1160,18 +1167,52 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
     setSavingNote(true);
     const { data: { user } } = await supabase.auth.getUser();
     const typeLabel = eventType.charAt(0).toUpperCase() + eventType.slice(1);
+
+    // ── For meetings: build attendees list + optionally upload transcript ──
+    let transcriptUrl: string | null = null;
+    const vvAttendees = noteVVAttendees.map(name => ({ name }));
+
+    if (eventType === "meeting") {
+      // Upload transcript file if provided
+      if (noteTranscriptFile) {
+        const path = `${selected.id}/${Date.now()}-${noteTranscriptFile.name}`;
+        const { error: upErr } = await supabase.storage.from("transcripts").upload(path, noteTranscriptFile);
+        if (!upErr) {
+          transcriptUrl = supabase.storage.from("transcripts").getPublicUrl(path).data.publicUrl;
+          // Also save as a document row
+          await supabase.from("documents").insert({
+            company_id:    selected.id,
+            name:          noteTranscriptFile.name,
+            type:          "transcript",
+            storage_path:  path,
+            created_by:    user?.id,
+          });
+        }
+      }
+      // If paste mode, save transcript text as body fallback
+    }
+
+    // Determine body: for meetings, noteText is the summary
+    const bodyText = eventType === "meeting"
+      ? (noteText.trim() || null)
+      : (noteText.trim() || null);
+
     await supabase.from("interactions").insert({
       company_id:        selected.id,
       type:              eventType,
       subject:           typeLabel,
-      body:              noteText.trim() || null,
+      body:              noteTranscriptMode === "paste" && noteTranscriptText.trim() ? noteTranscriptText.trim() : bodyText,
+      summary:           bodyText,
       date:              new Date(eventDate).toISOString(),
       sentiment:         "neutral",
       created_by:        user?.id,
       contact_ids:       noteContactIds.length > 0 ? noteContactIds : null,
+      attendees:         eventType === "meeting" && vvAttendees.length > 0 ? vvAttendees : null,
+      transcript_url:    transcriptUrl,
       // Meetings logged here are considered resolved — they appear in Meetings page under "Resolved"
       resolution_status: eventType === "meeting" ? "resolved" : null,
     });
+
     // Update last_contact_date on the company and any tagged contacts
     const contactDateISO = new Date(eventDate).toISOString();
     await supabase.from("companies").update({ last_contact_date: contactDateISO }).eq("id", selected.id);
@@ -1184,6 +1225,10 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
     setEventType("call");
     setNoteContactIds([]);
     setNoteContactsOpen(false);
+    setNoteVVAttendees([]);
+    setNoteTranscriptFile(null);
+    setNoteTranscriptText("");
+    setNoteTranscriptMode("upload");
     setAddingNote(false);
     setSavingNote(false);
     await loadDetail(selected.id);
@@ -1607,49 +1652,31 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   {includePassed ? "✕ Passed" : "+ Passed"}
                 </button>
               </div>
-              {/* Filter pills: Type / Sector / Round */}
+              {/* Filter dropdowns: Type / Sector / Round */}
               {(() => {
                 const allTypes = [...new Set(companies.flatMap(c => c.types ?? []))].filter(Boolean).sort();
                 const allSectors = [...new Set(companies.flatMap(c => c.sectors ?? []))].filter(Boolean).sort();
                 const allRounds = [...new Set(companies.map(c => c.stage).filter(Boolean) as string[])].sort();
                 const hasAnyFilter = filterType || filterSector || filterRound;
-
+                const sel = "text-xs border border-slate-200 rounded-md px-2 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer";
                 return (
-                  <div className="space-y-1.5">
-                    {allTypes.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {allTypes.slice(0, 5).map(t => (
-                          <button key={t} onClick={() => setFilterType(filterType === t ? null : t)}
-                            className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors capitalize ${filterType === t ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-blue-300"}`}>
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {allSectors.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {allSectors.slice(0, 6).map(s => (
-                          <button key={s} onClick={() => setFilterSector(filterSector === s ? null : s)}
-                            className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors capitalize ${filterSector === s ? "bg-emerald-600 border-emerald-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-emerald-300"}`}>
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {allRounds.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {allRounds.slice(0, 6).map(r => (
-                          <button key={r} onClick={() => setFilterRound(filterRound === r ? null : r)}
-                            className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${filterRound === r ? "bg-amber-500 border-amber-500 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-amber-300"}`}>
-                            {r}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <select value={filterType ?? ""} onChange={e => setFilterType(e.target.value || null)} className={sel}>
+                      <option value="">All Types</option>
+                      {allTypes.map(t => <option key={t} value={t}>{t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</option>)}
+                    </select>
+                    <select value={filterSector ?? ""} onChange={e => setFilterSector(e.target.value || null)} className={sel}>
+                      <option value="">All Sectors</option>
+                      {allSectors.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <select value={filterRound ?? ""} onChange={e => setFilterRound(e.target.value || null)} className={sel}>
+                      <option value="">All Rounds</option>
+                      {allRounds.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
                     {hasAnyFilter && (
                       <button onClick={() => { setFilterType(null); setFilterSector(null); setFilterRound(null); }}
-                        className="text-[10px] text-slate-400 hover:text-red-500 underline">
-                        Clear filters
+                        className="text-[10px] text-slate-400 hover:text-red-500 flex items-center gap-0.5">
+                        <X size={10} /> Clear
                       </button>
                     )}
                   </div>
@@ -1799,49 +1826,31 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
               {includePassed ? "✕ Passed" : "+ Passed"}
             </button>
           </div>
-          {/* Filter pills: Type / Sector / Round */}
+          {/* Filter dropdowns: Type / Sector / Round */}
           {(() => {
             const allTypes = [...new Set(companies.flatMap(c => c.types ?? []))].filter(Boolean).sort();
             const allSectors = [...new Set(companies.flatMap(c => c.sectors ?? []))].filter(Boolean).sort();
             const allRounds = [...new Set(companies.map(c => c.stage).filter(Boolean) as string[])].sort();
             const hasAnyFilter = filterType || filterSector || filterRound;
-
+            const sel = "text-xs border border-slate-200 rounded-md px-2 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer";
             return (
-              <div className="space-y-1.5">
-                {allTypes.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {allTypes.slice(0, 5).map(t => (
-                      <button key={t} onClick={() => setFilterType(filterType === t ? null : t)}
-                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors capitalize ${filterType === t ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-blue-300"}`}>
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {allSectors.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {allSectors.slice(0, 6).map(s => (
-                      <button key={s} onClick={() => setFilterSector(filterSector === s ? null : s)}
-                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors capitalize ${filterSector === s ? "bg-emerald-600 border-emerald-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-emerald-300"}`}>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {allRounds.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {allRounds.slice(0, 6).map(r => (
-                      <button key={r} onClick={() => setFilterRound(filterRound === r ? null : r)}
-                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${filterRound === r ? "bg-amber-500 border-amber-500 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-amber-300"}`}>
-                        {r}
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <div className="flex flex-wrap gap-2 items-center pb-1">
+                <select value={filterType ?? ""} onChange={e => setFilterType(e.target.value || null)} className={sel}>
+                  <option value="">All Types</option>
+                  {allTypes.map(t => <option key={t} value={t}>{t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</option>)}
+                </select>
+                <select value={filterSector ?? ""} onChange={e => setFilterSector(e.target.value || null)} className={sel}>
+                  <option value="">All Sectors</option>
+                  {allSectors.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select value={filterRound ?? ""} onChange={e => setFilterRound(e.target.value || null)} className={sel}>
+                  <option value="">All Rounds</option>
+                  {allRounds.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
                 {hasAnyFilter && (
                   <button onClick={() => { setFilterType(null); setFilterSector(null); setFilterRound(null); }}
-                    className="text-[10px] text-slate-400 hover:text-red-500 underline">
-                    Clear filters
+                    className="text-[10px] text-slate-400 hover:text-red-500 flex items-center gap-0.5">
+                    <X size={10} /> Clear
                   </button>
                 )}
               </div>
@@ -2616,13 +2625,94 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                       </select>
                     </div>
                   </div>
+                  {/* Summary / Notes textarea */}
                   <textarea
                     className="w-full text-sm border border-slate-200 rounded-lg p-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
                     rows={2}
-                    placeholder="Notes (optional)…"
+                    placeholder={eventType === "meeting" ? "Meeting summary (optional)…" : "Notes (optional)…"}
                     value={noteText}
                     onChange={e => setNoteText(e.target.value)}
                   />
+
+                  {/* ── Meeting-only extras ── */}
+                  {eventType === "meeting" && (
+                    <>
+                      {/* Valuence Ventures attendees */}
+                      <div>
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Valuence Attendees</p>
+                        <div className="flex flex-wrap gap-2">
+                          {VV_TEAM.map(name => {
+                            const initials = name.split(" ").map((w: string) => w[0]).join("");
+                            const checked = noteVVAttendees.includes(name);
+                            return (
+                              <label key={name}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full border cursor-pointer text-xs font-medium transition-colors select-none",
+                                  checked
+                                    ? "bg-violet-600 border-violet-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-600 hover:border-violet-300"
+                                )}>
+                                <input type="checkbox" className="sr-only" checked={checked}
+                                  onChange={e => setNoteVVAttendees(prev =>
+                                    e.target.checked ? [...prev, name] : prev.filter(n => n !== name)
+                                  )} />
+                                <span className={cn("w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0",
+                                  checked ? "bg-white/20 text-white" : "bg-violet-100 text-violet-600"
+                                )}>{initials}</span>
+                                {name.split(" ")[0]}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Transcript upload / paste */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Transcript</p>
+                          <div className="flex items-center gap-1 bg-slate-100 rounded-md p-0.5">
+                            <button onClick={() => setNoteTranscriptMode("upload")}
+                              className={cn("text-[10px] px-2 py-0.5 rounded transition-colors font-medium",
+                                noteTranscriptMode === "upload" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600")}>
+                              Upload
+                            </button>
+                            <button onClick={() => setNoteTranscriptMode("paste")}
+                              className={cn("text-[10px] px-2 py-0.5 rounded transition-colors font-medium",
+                                noteTranscriptMode === "paste" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600")}>
+                              Paste
+                            </button>
+                          </div>
+                        </div>
+                        {noteTranscriptMode === "upload" ? (
+                          <div>
+                            <input ref={noteTranscriptInputRef} type="file" accept=".txt,.pdf,.docx,.vtt" className="hidden"
+                              onChange={e => setNoteTranscriptFile(e.target.files?.[0] ?? null)} />
+                            {noteTranscriptFile ? (
+                              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                                <Paperclip size={12} className="text-violet-500 flex-shrink-0" />
+                                <span className="text-xs text-slate-700 truncate flex-1">{noteTranscriptFile.name}</span>
+                                <button onClick={() => setNoteTranscriptFile(null)} className="text-slate-300 hover:text-red-500"><X size={11} /></button>
+                              </div>
+                            ) : (
+                              <button onClick={() => noteTranscriptInputRef.current?.click()}
+                                className="w-full flex items-center justify-center gap-2 border border-dashed border-slate-300 rounded-lg py-2.5 text-xs text-slate-400 hover:border-violet-400 hover:text-violet-500 transition-colors">
+                                <Upload size={12} /> Upload transcript file
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <textarea
+                            className="w-full text-xs border border-slate-200 rounded-lg p-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                            rows={3}
+                            placeholder="Paste transcript text here…"
+                            value={noteTranscriptText}
+                            onChange={e => setNoteTranscriptText(e.target.value)}
+                          />
+                        )}
+                      </div>
+                    </>
+                  )}
+
                   {/* Tag contacts — always visible */}
                   <div>
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Tag Contacts</p>
@@ -2648,7 +2738,10 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     )}
                   </div>
                   <div className="flex gap-2 justify-end">
-                    <button onClick={() => { setAddingNote(false); setNoteText(""); setNoteContactIds([]); setNoteContactsOpen(false); }} className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-100">Cancel</button>
+                    <button onClick={() => {
+                      setAddingNote(false); setNoteText(""); setNoteContactIds([]); setNoteContactsOpen(false);
+                      setNoteVVAttendees([]); setNoteTranscriptFile(null); setNoteTranscriptText(""); setNoteTranscriptMode("upload");
+                    }} className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-100">Cancel</button>
                     <button onClick={handleAddNote} disabled={savingNote} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 flex items-center gap-1">
                       {savingNote ? <><Loader2 size={10} className="animate-spin" /> Saving…</> : <><Check size={10} /> Save</>}
                     </button>
@@ -2935,14 +3028,24 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                         <div>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Attendees</p>
                           <div className="flex flex-wrap gap-1.5">
-                            {attendees.map((a, i) => (
-                              <span key={i} className="inline-flex items-center gap-1 text-xs bg-white border border-slate-200 rounded-full px-2 py-0.5">
-                                <span className="w-4 h-4 rounded-full bg-violet-100 flex items-center justify-center text-[9px] font-bold text-violet-600">
-                                  {((a.name ?? a.email ?? "?")[0]).toUpperCase()}
+                            {attendees.map((a, i) => {
+                              const name = a.name ?? a.email ?? "Unknown";
+                              const isVV = VV_TEAM.includes(name);
+                              return (
+                                <span key={i} className={cn(
+                                  "inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 border",
+                                  isVV ? "bg-violet-50 border-violet-200 text-violet-700 font-medium" : "bg-white border-slate-200 text-slate-700"
+                                )}>
+                                  <span className={cn("w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold",
+                                    isVV ? "bg-violet-200 text-violet-700" : "bg-slate-100 text-slate-600"
+                                  )}>
+                                    {name[0].toUpperCase()}
+                                  </span>
+                                  {name}
+                                  {isVV && <span className="text-[9px] text-violet-400 font-normal">VV</span>}
                                 </span>
-                                {a.name ?? a.email ?? "Unknown"}
-                              </span>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -3334,7 +3437,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   const cols = total <= 1 ? 1 : total === 2 ? 2 : total === 3 ? 3 : 4;
                   const desktopColsT = cols === 1 ? "md:grid-cols-1" : cols === 2 ? "md:grid-cols-2" : cols === 3 ? "md:grid-cols-3" : "md:grid-cols-4";
                   return (
-                    <div className={`grid grid-cols-2 ${desktopColsT} gap-2 auto-rows-[96px] max-h-52 overflow-y-auto md:max-h-none md:h-24 md:overflow-hidden`}>
+                    <div className={`grid grid-cols-2 ${desktopColsT} gap-2 auto-rows-[112px] max-h-60 overflow-y-auto md:max-h-none md:h-28 md:overflow-hidden`}>
                       {transcripts.map(doc => {
                         const url = doc.storage_path
                           ? supabase.storage.from("transcripts").getPublicUrl(doc.storage_path).data.publicUrl
