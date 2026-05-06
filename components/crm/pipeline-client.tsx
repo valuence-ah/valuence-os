@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { PdfCover } from "@/components/ui/pdf-cover";
 import { formatMeetingSummary } from "@/lib/format-meeting-summary";
-import { PipelineFilterBar } from "@/components/crm/pipeline-filter-bar";
+import { PipelineFilterBar, normalizeRound } from "@/components/crm/pipeline-filter-bar";
 
 // ── Contact title options ─────────────────────────────────────────────────────
 const CONTACT_TITLE_OPTIONS = [
@@ -490,9 +490,9 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
   const [boardDragOver, setBoardDragOver] = useState<string | null>(null);
   const [sortBy, setSortBy]               = useState<"name" | "status" | "last_contact" | "date_added">("name");
   const [includePassed, setIncludePassed] = useState(false);
-  const [filterType, setFilterType]     = useState<string | null>(null);
-  const [filterSector, setFilterSector] = useState<string | null>(null);
-  const [filterRound, setFilterRound]   = useState<string | null>(null);
+  const [filterTypes,   setFilterTypes]   = useState<string[]>([]);
+  const [filterSectors, setFilterSectors] = useState<string[]>([]);
+  const [filterRounds,  setFilterRounds]  = useState<string[]>([]);
   const [contacts, setContacts]           = useState<Contact[]>([]);
   const [interactions, setInteractions]   = useState<Interaction[]>([]);
   const [documents, setDocuments]         = useState<Array<{id:string;name:string;type:string;storage_path:string|null;google_drive_url:string|null;created_at:string}>>([]);
@@ -704,9 +704,9 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
       // Hide passed companies by default — but never hide them when the user
       // is actively searching (so searching "Westwood" still surfaces it).
       if (!includePassed && !q && c.deal_status === "passed") return false;
-      if (filterType && !(c.types ?? []).includes(filterType as CompanyType)) return false;
-      if (filterSector && !(c.sectors ?? []).some(s => s.toLowerCase() === filterSector.toLowerCase())) return false;
-      if (filterRound && c.stage?.toLowerCase() !== filterRound.toLowerCase()) return false;
+      if (filterTypes.length > 0 && !filterTypes.some(t => (c.types ?? []).includes(t as CompanyType))) return false;
+      if (filterSectors.length > 0 && !filterSectors.some(t => (c.sectors ?? []).some(s => s.toLowerCase() === t.toLowerCase()))) return false;
+      if (filterRounds.length > 0 && !filterRounds.includes(normalizeRound(c.stage ?? ""))) return false;
       return (
         !q ||
         c.name.toLowerCase().includes(q) ||
@@ -732,7 +732,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
           return 0;
       }
     });
-  }, [companies, search, sortBy, includePassed, filterType, filterSector, filterRound]);
+  }, [companies, search, sortBy, includePassed, filterTypes, filterSectors, filterRounds]);
 
   // ── Virtualizer for the company list (left panel) ─────────────────────────
   const rowVirtualizer = useVirtualizer({
@@ -1656,12 +1656,12 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
               {/* Filter dropdowns: Type / Sector / Round */}
               <PipelineFilterBar
                 companies={companies}
-                filterType={filterType}
-                filterSector={filterSector}
-                filterRound={filterRound}
-                setFilterType={setFilterType}
-                setFilterSector={setFilterSector}
-                setFilterRound={setFilterRound}
+                filterTypes={filterTypes}
+                filterSectors={filterSectors}
+                filterRounds={filterRounds}
+                setFilterTypes={setFilterTypes}
+                setFilterSectors={setFilterSectors}
+                setFilterRounds={setFilterRounds}
               />
             </div>
             {/* Hidden in board view — just takes up the sidebar space for layout consistency */}
@@ -1817,13 +1817,13 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
           {/* Filter dropdowns: Type / Sector / Round */}
           <PipelineFilterBar
             companies={companies}
-            filterType={filterType}
-            filterSector={filterSector}
-            filterRound={filterRound}
-            setFilterType={setFilterType}
-            setFilterSector={setFilterSector}
-            setFilterRound={setFilterRound}
-            className="pb-1"
+            filterTypes={filterTypes}
+            filterSectors={filterSectors}
+            filterRounds={filterRounds}
+            setFilterTypes={setFilterTypes}
+            setFilterSectors={setFilterSectors}
+            setFilterRounds={setFilterRounds}
+            className="pb-2"
           />
         </div>
 
@@ -2727,11 +2727,14 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
               ) : (() => {
                 // Merge interactions + document uploads into a single timeline
                 type TEvent = { id: string; kind: string; title: string; body?: string | null; date: string; url?: string | null; meta?: string | null; contact_ids?: string[] | null; meeting_type?: string | null };
+                const KIND_DEFAULT: Record<string, string> = {
+                  meeting: "Meeting", call: "Call", email: "Email", note: "Note", event: "Event",
+                };
                 const events: TEvent[] = [
-                  ...interactions.filter(i => i.type === "meeting").map(i => ({
+                  ...interactions.map(i => ({
                     id: i.id,
                     kind: i.type,
-                    title: i.subject ?? "Meeting",
+                    title: i.subject ?? KIND_DEFAULT[i.type] ?? i.type,
                     body: i.body ?? i.summary ?? null,
                     date: i.date,
                     url: i.transcript_url ?? null,
