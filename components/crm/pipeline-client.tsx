@@ -2192,17 +2192,21 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                       </div>
                     </>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5 mt-0.5 min-h-[28px] items-center">
+                    <div
+                      className="flex flex-wrap gap-1.5 mt-0.5 min-h-[28px] items-center cursor-pointer"
+                      onDoubleClick={startEdit}
+                      title="Double-click to edit"
+                    >
                       {TYPE_OPTIONS.map(o => {
                         const viewTypes = (selected.types ?? []).length > 0
                           ? (selected.types ?? [])
                           : (selected.type ? [selected.type] : []);
                         const active = viewTypes.includes(o.value);
                         return active ? (
-                          <span key={o.value} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{o.label}</span>
+                          <span key={o.value} className="inline-block text-xs px-2 py-1 rounded-md font-medium bg-indigo-100 text-indigo-700">{o.label}</span>
                         ) : null;
                       })}
-                      {!(selected.types ?? []).length && !selected.type && <span className="text-xs text-slate-300">—</span>}
+                      {!(selected.types ?? []).length && !selected.type && <span className="text-xs text-slate-300 italic">double-click to set</span>}
                     </div>
                   )}
                 </Field>
@@ -2275,7 +2279,7 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     </>
                   ) : (
                     <div
-                      className="flex flex-wrap gap-1.5 mt-0.5 cursor-text min-h-[28px] items-center"
+                      className="flex flex-wrap gap-1.5 mt-0.5 cursor-pointer min-h-[28px] items-center"
                       onDoubleClick={() => setEditField("sectors")}
                       title="Double-click to edit"
                     >
@@ -2283,13 +2287,11 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                         const lower = s.toLowerCase();
                         const active = (selected.sectors ?? []).map(s => s.toLowerCase()).includes(lower);
                         return active ? (
-                          <span key={s} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">{s}</span>
+                          <span key={s} className="inline-block text-xs px-2 py-1 rounded-md font-medium bg-indigo-100 text-indigo-700">{s}</span>
                         ) : null;
                       })}
                       {!(selected.sectors ?? []).length && (
-                        <span className="text-xs text-slate-400 border border-dashed border-slate-300 rounded-full px-2.5 py-1 hover:border-indigo-400 hover:text-indigo-500 transition-colors">
-                          + double-click to set
-                        </span>
+                        <span className="text-xs text-slate-300 italic">double-click to set</span>
                       )}
                     </div>
                   )}
@@ -2315,10 +2317,10 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                       {SUB_SECTOR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5 mt-0.5 min-h-[28px] items-center cursor-text" onDoubleClick={() => setEditField("sub_type")} title="Double-click to edit">
+                    <div className="flex flex-wrap gap-1.5 mt-0.5 min-h-[28px] items-center cursor-pointer" onDoubleClick={() => setEditField("sub_type")} title="Double-click to edit">
                       {selected.sub_type
-                        ? <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">{selected.sub_type}</span>
-                        : <span className="text-xs text-slate-400 border border-dashed border-slate-300 rounded-full px-2.5 py-1 hover:border-purple-400 hover:text-purple-500 transition-colors">+ double-click to set</span>
+                        ? <span className="inline-block text-xs px-2 py-1 rounded-md font-medium bg-purple-100 text-purple-700">{selected.sub_type}</span>
+                        : <span className="text-xs text-slate-300 italic">double-click to set</span>
                       }
                     </div>
                   )}
@@ -2345,10 +2347,10 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                       {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
                     </select>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5 mt-0.5 min-h-[28px] items-center cursor-text" onDoubleClick={() => setEditField("stage")} title="Double-click to edit">
+                    <div className="flex flex-wrap gap-1.5 mt-0.5 min-h-[28px] items-center cursor-pointer" onDoubleClick={() => setEditField("stage")} title="Double-click to edit">
                       {selected.stage
-                        ? <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200">{selected.stage.replace("_", " ")}</span>
-                        : <span className="text-xs text-slate-400 border border-dashed border-slate-300 rounded-full px-2.5 py-1 hover:border-sky-400 hover:text-sky-500 transition-colors">+ double-click to set</span>
+                        ? <span className="inline-block text-xs px-2 py-1 rounded-md font-medium bg-sky-100 text-sky-700">{selected.stage.replace("_", " ")}</span>
+                        : <span className="text-xs text-slate-300 italic">double-click to set</span>
                       }
                     </div>
                   )}
@@ -2603,8 +2605,8 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                     onChange={e => setNoteText(e.target.value)}
                   />
 
-                  {/* ── Meeting-only extras ── */}
-                  {eventType === "meeting" && (
+                  {/* ── Meeting & Call extras: VV Attendees + Transcript ── */}
+                  {(eventType === "meeting" || eventType === "call") && (
                     <>
                       {/* Valuence Ventures attendees */}
                       <div>
