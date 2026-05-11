@@ -642,6 +642,10 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     setShowIntelForm(false);
     setShowTaskForm(false);
     setChangeTypePos(null);
+    // Clear previous company's intelligence so it never bleeds into the next company
+    setPartnerAlign(null);
+    setPartnerAlignGeneratedAt(null);
+    setPartnerAlignLoading(false);
     loadDetail(id);
   }
 
