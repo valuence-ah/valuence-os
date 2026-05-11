@@ -6,7 +6,7 @@ import {
   Search, X, AlertCircle, Clock, CheckCircle2, TrendingUp,
   Users, Flag, ChevronRight, AlignLeft, LayoutGrid, GitBranch,
   Minus, ArrowUp, ArrowDown, Circle, Plus, Check, Building2,
-  MoreHorizontal, Archive,
+  MoreHorizontal, Archive, SlidersHorizontal, ArrowUpDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -368,9 +368,188 @@ function MoreMenu({ task, onEdit, onDuplicate, onDelete }: {
   );
 }
 
+// ── Sort dropdown ─────────────────────────────────────────────────────────────
+
+function SortDropdown({ sortKey, sortDir, onChange }: {
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  onChange: (key: string, dir: "asc" | "desc") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const SORT_OPTIONS = [
+    { key: "due",    label: "Due date" },
+    { key: "prio",   label: "Priority" },
+    { key: "status", label: "Status" },
+    { key: "owner",  label: "Owner" },
+  ];
+
+  const isActive = sortKey !== "due" || sortDir !== "asc";
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={cn(
+          "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border rounded-md transition-colors",
+          isActive
+            ? "bg-slate-900 text-white border-slate-900"
+            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+        )}
+      >
+        <ArrowUpDown className="w-3 h-3" /> Sort
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1.5 z-50 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 min-w-[160px]">
+          <p className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Sort by</p>
+          {SORT_OPTIONS.map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => {
+                onChange(opt.key, sortKey === opt.key && sortDir === "asc" ? "desc" : "asc");
+                setOpen(false);
+              }}
+              className={cn(
+                "w-full text-left px-3 py-1.5 text-xs flex items-center justify-between",
+                sortKey === opt.key ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-slate-50"
+              )}
+            >
+              {opt.label}
+              {sortKey === opt.key && (
+                sortDir === "asc"
+                  ? <ArrowUp className="w-3 h-3" />
+                  : <ArrowDown className="w-3 h-3" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Filter dropdown ───────────────────────────────────────────────────────────
+
+function FilterDropdown({ activeFilter, onFilter }: {
+  activeFilter: string;
+  onFilter: (f: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const isActive = activeFilter !== "all";
+
+  const VIEW_OPTIONS = [
+    { key: "all",       label: "All active" },
+    { key: "completed", label: "Completed" },
+    { key: "archived",  label: "Archived" },
+  ];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={cn(
+          "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border rounded-md transition-colors",
+          isActive
+            ? "bg-slate-900 text-white border-slate-900"
+            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+        )}
+      >
+        <SlidersHorizontal className="w-3 h-3" /> Filter
+        {isActive && (
+          <span className="w-3.5 h-3.5 bg-blue-500 text-white rounded-full text-[9px] flex items-center justify-center font-bold">1</span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1.5 z-50 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 min-w-[180px] max-h-96 overflow-y-auto">
+          {/* View */}
+          <p className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">View</p>
+          {VIEW_OPTIONS.map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => { onFilter(opt.key); setOpen(false); }}
+              className={cn(
+                "w-full text-left px-3 py-1.5 text-xs flex items-center justify-between",
+                activeFilter === opt.key ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-slate-50"
+              )}
+            >
+              {opt.label}
+              {activeFilter === opt.key && <Check className="w-3 h-3" />}
+            </button>
+          ))}
+          {/* Category */}
+          <div className="border-t border-slate-100 my-1" />
+          <p className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Category</p>
+          {CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              onClick={() => { onFilter(cat); setOpen(false); }}
+              className={cn(
+                "w-full text-left px-3 py-1.5 text-xs flex items-center justify-between",
+                activeFilter === cat ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-slate-50"
+              )}
+            >
+              {cat}
+              {activeFilter === cat && <Check className="w-3 h-3" />}
+            </button>
+          ))}
+          {/* Owner */}
+          <div className="border-t border-slate-100 my-1" />
+          <p className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Owner</p>
+          {OWNERS.map(owner => (
+            <button
+              key={owner}
+              onClick={() => { onFilter(owner); setOpen(false); }}
+              className={cn(
+                "w-full text-left px-3 py-1.5 text-xs flex items-center justify-between",
+                activeFilter === owner ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-slate-50"
+              )}
+            >
+              {owner}
+              {activeFilter === owner && <Check className="w-3 h-3" />}
+            </button>
+          ))}
+          {/* Clear */}
+          {isActive && (
+            <>
+              <div className="border-t border-slate-100 my-1" />
+              <button
+                onClick={() => { onFilter("all"); setOpen(false); }}
+                className="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50"
+              >
+                Clear filter
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Table view ────────────────────────────────────────────────────────────────
 
-function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, onStatusChange, onArchive, justCompleted, selectedIds, onToggleSelect, onSelectAll }: {
+function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, onStatusChange, onArchive, justCompleted, selectedIds, onToggleSelect, onSelectAll, sortKey, sortDir }: {
   tasks: Task[];
   onSelect: (t: Task) => void;
   onToggleComplete: (t: Task) => void;
@@ -382,17 +561,25 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
   selectedIds: Set<number>;
   onToggleSelect: (id: number) => void;
   onSelectAll: (ids: number[]) => void;
+  sortKey: string;
+  sortDir: "asc" | "desc";
 }) {
+  const PRIO_ORDER: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+  const STATUS_ORDER: Record<string, number> = { Overdue: 0, "At risk": 1, Blocked: 2, "Not started": 2, "On track": 3, Completed: 4 };
+
   const sorted = [...tasks].sort((a, b) => {
-    // Just-completed tasks stay at top (position 0) so they stay visible
+    // Just-completed tasks stay at top so they remain visible
     const aJust = justCompleted.has(a.id) ? -1 : 0;
     const bJust = justCompleted.has(b.id) ? -1 : 0;
     if (aJust !== bJust) return aJust - bJust;
-    const order: Record<string, number> = { Overdue: 0, "At risk": 1, Blocked: 2, "Not started": 2, "On track": 3, Completed: 4 };
-    const oa = order[a.status] ?? 3;
-    const ob = order[b.status] ?? 3;
-    if (oa !== ob) return oa - ob;
-    return a.daysLeft - b.daysLeft;
+
+    let cmp = 0;
+    if (sortKey === "prio")        cmp = (PRIO_ORDER[a.prio] ?? 2)   - (PRIO_ORDER[b.prio] ?? 2);
+    else if (sortKey === "status") cmp = (STATUS_ORDER[a.status] ?? 3) - (STATUS_ORDER[b.status] ?? 3);
+    else if (sortKey === "owner")  cmp = a.owner.localeCompare(b.owner);
+    else /* due */                 cmp = a.daysLeft - b.daysLeft;
+
+    return sortDir === "asc" ? cmp : -cmp;
   });
 
   const INIT_LABELS: Record<string, string> = {
@@ -493,17 +680,16 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
                 </div>
               </td>
               <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                <button
-                  onClick={() => {
-                    const idx = STATUSES.indexOf(t.status);
-                    const next = STATUSES[(idx + 1) % STATUSES.length];
-                    onStatusChange(t, next);
-                  }}
-                  className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity", STATUS_STYLES[t.status] ?? "bg-slate-100 text-slate-500")}
-                  title="Click to change status"
+                <select
+                  value={t.status}
+                  onChange={e => onStatusChange(t, e.target.value)}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer appearance-none focus:outline-none focus:ring-1 focus:ring-blue-300",
+                    STATUS_STYLES[t.status] ?? "bg-slate-100 text-slate-500"
+                  )}
                 >
-                  {t.status}
-                </button>
+                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </td>
               <td className="px-3 py-2">
                 <div className="flex items-center gap-1.5 min-w-[60px]">
@@ -1407,6 +1593,9 @@ export function TasksClient() {
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  // Sort
+  const [sortKey, setSortKey] = useState("due");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // ── localStorage bridge ──────────────────────────────────────────────────────
   // crm_tasks is the single source of truth (written below on every change).
@@ -1589,22 +1778,6 @@ export function TasksClient() {
     setShowNewInit(false);
   }
 
-  // ── Filter pills ─────────────────────────────────────────────────────────────
-
-  const FILTER_PILLS = [
-    "all", "completed", "archived",
-    "Commercialization", "Co-investment", "Due diligence", "Ecosystem",
-    "Fundraising", "Introduction", "Investment", "Pilot", "Portfolio Management",
-    "Andrew", "Gene", "Lance",
-  ];
-
-  const pillLabel = (f: string) => {
-    if (f === "all") return "All";
-    if (f === "completed") return "Completed";
-    if (f === "archived") return "Archived";
-    return f;
-  };
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top bar */}
@@ -1722,7 +1895,7 @@ export function TasksClient() {
           )}
         </div>
 
-        {/* Filters + search + add task + view toggle */}
+        {/* Search + Sort + Filter + View toggle + Add task */}
         <div className="flex items-center gap-2">
           {/* Search */}
           <div className="relative flex-shrink-0">
@@ -1740,23 +1913,14 @@ export function TasksClient() {
               </button>
             )}
           </div>
-          {/* Filter pills */}
-          <div className="flex gap-1 overflow-x-auto pb-0.5 flex-1">
-            {FILTER_PILLS.map(f => (
-              <button
-                key={f}
-                onClick={() => setActiveFilter(f)}
-                className={cn(
-                  "px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0",
-                  activeFilter === f
-                    ? "bg-slate-900 text-white"
-                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                {pillLabel(f)}
-              </button>
-            ))}
-          </div>
+          {/* Sort + Filter */}
+          <SortDropdown
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onChange={(key, dir) => { setSortKey(key); setSortDir(dir); }}
+          />
+          <FilterDropdown activeFilter={activeFilter} onFilter={setActiveFilter} />
+          <div className="flex-1" />
           {/* View toggle */}
           <div className="flex gap-1 flex-shrink-0">
             {(["table", "kanban", "timeline"] as const).map(v => {
@@ -1778,37 +1942,13 @@ export function TasksClient() {
               );
             })}
           </div>
-          {/* Quick filter buttons + Add task — far right */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <button
-              onClick={() => setActiveFilter(activeFilter === "completed" ? "all" : "completed")}
-              className={cn(
-                "flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors",
-                activeFilter === "completed"
-                  ? "bg-emerald-600 text-white border-emerald-600"
-                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-              )}
-            >
-              <CheckCircle2 className="w-3 h-3" /> Completed
-            </button>
-            <button
-              onClick={() => setActiveFilter(activeFilter === "archived" ? "all" : "archived")}
-              className={cn(
-                "flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors",
-                activeFilter === "archived"
-                  ? "bg-slate-700 text-white border-slate-700"
-                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-              )}
-            >
-              <Archive className="w-3 h-3" /> Archive
-            </button>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-3 h-3" /> Add task
-            </button>
-          </div>
+          {/* Add task */}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
+          >
+            <Plus className="w-3 h-3" /> Add task
+          </button>
         </div>
       </div>
 
@@ -1827,6 +1967,8 @@ export function TasksClient() {
             selectedIds={selectedIds}
             onToggleSelect={id => setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; })}
             onSelectAll={ids => setSelectedIds(new Set(ids))}
+            sortKey={sortKey}
+            sortDir={sortDir}
           />
         )}
         {view === "kanban" && (
