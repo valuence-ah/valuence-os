@@ -87,6 +87,8 @@ export interface Company {
   raise_target_close: string | null;
   investors_approached: number | null;
   term_sheets: number | null;
+  // Confirmation gate (migration 035): false = auto-created from email, not yet reviewed
+  confirmed: boolean;
 }
 
 export interface Contact {

@@ -16,6 +16,7 @@ export default async function FundsPage() {
     .from("companies")
     .select("*")
     .or('type.ilike.%investor%,type.ilike.%fund%,types.cs.{investor},types.cs.{fund}')
+    .eq("confirmed", true)
     .order("name", { ascending: true })
     .limit(1000)
   ) as unknown as { data: Company[] | null; error: unknown };

@@ -15,6 +15,7 @@ export default async function LpsPage() {
   const { data: allCompanies } = (await supabase
     .from("companies")
     .select("*")
+    .eq("confirmed", true)
     .order("name", { ascending: true })
     .limit(5000)
   ) as unknown as { data: Company[] | null; error: unknown };

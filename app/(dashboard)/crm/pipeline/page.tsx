@@ -18,6 +18,7 @@ export default async function PipelinePage() {
     .from("companies")
     .select("*")
     .or('type.eq.startup,types.cs.{startup}')
+    .eq("confirmed", true)
     .order("updated_at", { ascending: false })
     .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };

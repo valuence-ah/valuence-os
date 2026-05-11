@@ -1365,10 +1365,20 @@ const ContactRow = memo(function ContactRow({
       });
     })();
 
+    // Mark the company as confirmed so it becomes visible in Pipeline / Strategic /
+    // Funds / LPs now that a human has reviewed it.
+    const companyConfirm = resolvedCompanyId
+      ? supabase.from("companies").update({ confirmed: true }).eq("id", resolvedCompanyId)
+      : Promise.resolve({ error: null });
+
     const [{ error: ce }, coRes] = await Promise.all([
       contactSave,
       companyTypeUpdate ?? Promise.resolve(new Response(null, { status: 200 })),
     ]);
+    // Fire company confirm in parallel — non-blocking (don't hold up the UX)
+    companyConfirm.then(({ error }) => {
+      if (error) console.warn("[confirm] company confirmed flag update failed:", error.message);
+    });
     if (ce) {
       console.error("[confirm] contact save error:", ce);
       setBusy(false);

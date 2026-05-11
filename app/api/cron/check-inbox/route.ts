@@ -347,10 +347,11 @@ export async function POST(req: NextRequest) {
         const { data: newCo } = await supabase
           .from("companies")
           .insert({
-            name: contact.company_name,
-            type: "other",
-            source: "email",
-            website: domain ? `https://${domain}` : null,
+            name:      contact.company_name,
+            type:      "other",
+            source:    "email",
+            website:   domain ? `https://${domain}` : null,
+            confirmed: false,   // hidden from all CRM views until user reviews in Pending
           })
           .select("id")
           .single();

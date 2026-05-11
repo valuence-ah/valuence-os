@@ -11,6 +11,7 @@ export default async function StrategicPage() {
   const { data: all } = (await supabase
     .from("companies")
     .select("*")
+    .eq("confirmed", true)
     .order("name", { ascending: true })
     .limit(10000)
   ) as unknown as { data: Company[] | null; error: unknown };
