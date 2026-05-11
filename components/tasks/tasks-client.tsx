@@ -1550,21 +1550,30 @@ function AddTaskModal({ onClose, onAdd, initiatives }: AddTaskModalProps) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function TasksClient() {
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    // Try to restore from localStorage first — preserves archive/delete/edits across refreshes.
-    // Fall back to INITIAL_TASKS only on first-ever load (nothing saved yet).
+  // Start empty — populated from localStorage in useEffect (client-only).
+  // This prevents the SSR flash where Next.js renders INITIAL_TASKS on the
+  // server and the user sees 30 stale hardcoded tasks before hydration.
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  // Load tasks from localStorage once on mount (never during SSR).
+  useEffect(() => {
     try {
       const saved = localStorage.getItem("crm_tasks");
       if (saved) {
         const parsed = JSON.parse(saved) as Task[];
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Re-compute daysLeft so it's always fresh relative to today
-          return parsed.map(t => ({ ...t, daysLeft: calcDaysLeft(t.due) }));
+          setTasks(parsed.map(t => ({ ...t, daysLeft: calcDaysLeft(t.due) })));
+          setMounted(true);
+          return;
         }
       }
     } catch { /* ignore parse errors */ }
-    return INITIAL_TASKS.map(t => ({ ...t, daysLeft: calcDaysLeft(t.due) }));
-  });
+    // Nothing saved yet — seed with defaults
+    setTasks(INITIAL_TASKS.map(t => ({ ...t, daysLeft: calcDaysLeft(t.due) })));
+    setMounted(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [initiatives, setInitiatives] = useState(DEFAULT_INITIATIVES);
   const [newInitLabel, setNewInitLabel] = useState("");
   const [showNewInit, setShowNewInit] = useState(false);
@@ -1763,6 +1772,22 @@ export function TasksClient() {
     setInitiatives(prev => [...prev, { key, label }]);
     setNewInitLabel("");
     setShowNewInit(false);
+  }
+
+  // Don't render until localStorage has been read — prevents flash of stale tasks
+  if (!mounted) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex-shrink-0 bg-white border-b border-slate-200 px-5 pt-4 pb-3">
+          <div className="h-24 bg-slate-100 rounded-xl animate-pulse" />
+        </div>
+        <div className="flex-1 p-5 space-y-2">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-10 bg-slate-100 rounded-lg animate-pulse" style={{ opacity: 1 - i * 0.12 }} />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
