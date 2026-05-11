@@ -254,6 +254,35 @@ export async function POST(req: NextRequest) {
               .eq("id", existing.company_id);
           }
         }
+
+        // Create an interaction record for this email so it appears in the Activity Timeline.
+        // Deduplicate: one interaction per contact per date to avoid spamming on re-runs.
+        if (existing.company_id) {
+          const emailDateStr = candidate.emailDate.slice(0, 10);
+          // Dedup: skip if an email interaction already exists for this company on this date
+          const { data: existingInt } = await supabase
+            .from("interactions")
+            .select("id")
+            .eq("company_id", existing.company_id)
+            .eq("type", "email")
+            .eq("date", emailDateStr)
+            .limit(1)
+            .maybeSingle();
+
+          if (!existingInt) {
+            const subjLine = candidate.subject?.trim() || "(no subject)";
+            const direction = candidate.direction === "inbound" ? "From" : "To";
+            await supabase.from("interactions").insert({
+              company_id:  existing.company_id,
+              type:        "email",
+              date:        emailDateStr,
+              subject:     `Email: ${subjLine}`,
+              body:        `${direction}: ${candidate.email} · Seen in ${mailbox}`,
+              contact_ids: [existing.id],
+            });
+          }
+        }
+
         contactResults.push({ email: candidate.email, mailbox, action: "updated last_contact" });
         continue;
       }
@@ -319,7 +348,7 @@ export async function POST(req: NextRequest) {
           .from("companies")
           .insert({
             name: contact.company_name,
-            type: "startup",
+            type: "other",
             source: "email",
             website: domain ? `https://${domain}` : null,
           })

@@ -760,11 +760,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
   const [fundContactOrder, setFundContactOrder] = useState<Record<string, string[]>>({});
   const fundContactDragIdx = useRef<number | null>(null);
 
-  // Relationship timeline
-  const [showAddRelationship, setShowAddRelationship] = useState(false);
-  const [newRelTitle, setNewRelTitle]   = useState("");
-  const [newRelDate, setNewRelDate]     = useState("");
-  const [fundTimelines, setFundTimelines] = useState<Record<string, { icon: string; title: string; date: string; colorClass: string }[]>>({});
+  // (Relationship Timeline removed — merged into Interaction Timeline)
 
   // Opportunities / Tasks tab
   const [fundOpps, setFundOpps] = useState<Record<string, { id: string; title: string; type: string; urgency: string; desc: string; due: string }[]>>({});
@@ -922,7 +918,6 @@ export function FundsViewClient({ initialCompanies }: Props) {
           }
         } catch {}
       }
-      setShowAddRelationship(false);
       setShowFundOppForm(false);
 
       // Fetch contacts if not already loaded
@@ -1183,22 +1178,6 @@ export function FundsViewClient({ initialCompanies }: Props) {
     setConfirmRemoveOverlap(null);
   }
 
-  // Get merged timeline (manual entries first)
-  function getMergedTimeline() {
-    if (!selectedId || !baseSelected) return [];
-    const manual = fundTimelines[selectedId] ?? [];
-    return [...manual, ...baseSelected.timeline];
-  }
-
-  function addRelationshipEntry() {
-    if (!selectedId || !newRelTitle.trim()) return;
-    const entry = { icon: "●", title: newRelTitle.trim(), date: newRelDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), colorClass: "bg-amber-100 text-amber-700" };
-    setFundTimelines(prev => ({
-      ...prev,
-      [selectedId]: [entry, ...(prev[selectedId] ?? [])],
-    }));
-    setNewRelTitle(""); setNewRelDate(""); setShowAddRelationship(false);
-  }
 
   function addFundOpportunity() {
     if (!selectedId || !fundOppTitle.trim()) return;
@@ -2478,7 +2457,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
 
                       {fundAddingNote && (
                         <div className="mb-3 p-3 border border-blue-200 rounded-xl bg-blue-50 space-y-2">
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <div>
                               <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block">Date</label>
                               <input type="date" className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" value={fundNoteDate} onChange={e => setFundNoteDate(e.target.value)} />
@@ -2536,26 +2515,26 @@ export function FundsViewClient({ initialCompanies }: Props) {
                           call:    "border-green-100 bg-green-50",
                         };
                         return (
-                          <div className="relative pl-4 max-h-[280px] overflow-y-auto pr-1">
+                          <div className="relative pl-4 max-h-[280px] overflow-y-auto overflow-x-hidden pr-1">
                             <div className="absolute left-1.5 top-0 bottom-0 w-px bg-slate-100" />
                             <div className="space-y-2">
                               {ints.map(int => {
                                 const liveContacts = selectedId ? (fundContacts[selectedId] ?? []) : [];
                                 return (
                                   <div key={int.id} className="relative flex gap-2">
-                                    <div className="absolute -left-4 mt-0.5 w-3 h-3 rounded-full bg-white border-2 border-slate-200" />
-                                    <div className={cn("flex-1 rounded-lg border px-2.5 py-2 min-w-0", kindColor[int.type] ?? "border-slate-200 bg-slate-50")}>
-                                      <div className="flex items-start justify-between gap-1">
-                                        <div className="flex items-center gap-1.5 min-w-0">
+                                    <div className="absolute -left-[13px] mt-1 w-2.5 h-2.5 rounded-full bg-white border-2 border-slate-300 flex-shrink-0" />
+                                    <div className={cn("flex-1 rounded-lg border px-2.5 py-2 min-w-0 overflow-hidden", kindColor[int.type] ?? "border-slate-200 bg-slate-50")}>
+                                      <div className="flex items-start gap-1 flex-wrap">
+                                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                           {kindIcon[int.type] ?? <FileText size={12} className="text-slate-400" />}
                                           <span className="text-xs font-medium text-slate-700 truncate">{int.subject ?? int.type.charAt(0).toUpperCase() + int.type.slice(1)}</span>
                                         </div>
-                                        <div className="flex items-center gap-1 flex-shrink-0">
-                                          <span className="text-[10px] text-slate-400">{formatDate(int.date)}</span>
-                                          <button onClick={async () => { if (!confirm("Delete this interaction?")) return; await supabase.from("interactions").delete().eq("id", int.id); setFundInteractions(prev => ({ ...prev, [selectedId!]: (prev[selectedId!] ?? []).filter(i => i.id !== int.id) })); }} className="text-slate-300 hover:text-red-400 ml-1"><X size={10} /></button>
+                                        <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+                                          <span className="text-[10px] text-slate-400 whitespace-nowrap">{formatDate(int.date)}</span>
+                                          <button onClick={async () => { if (!confirm("Delete this interaction?")) return; await supabase.from("interactions").delete().eq("id", int.id); setFundInteractions(prev => ({ ...prev, [selectedId!]: (prev[selectedId!] ?? []).filter(i => i.id !== int.id) })); }} className="text-slate-300 hover:text-red-400 ml-0.5 p-0.5"><X size={10} /></button>
                                         </div>
                                       </div>
-                                      {int.body && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{int.body}</p>}
+                                      {int.body && <p className="text-xs text-slate-500 mt-1 line-clamp-2 break-words">{int.body}</p>}
                                       {int.contact_ids && int.contact_ids.length > 0 && (
                                         <div className="flex flex-wrap gap-1 mt-1">
                                           {int.contact_ids.map((cid: string) => {
@@ -2575,63 +2554,7 @@ export function FundsViewClient({ initialCompanies }: Props) {
                       })()}
                     </div>
 
-                    {/* 8. Relationship Timeline — with + Add button */}
-                    <div className="px-4 py-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Relationship Timeline</p>
-                        <button onClick={() => setShowAddRelationship(v => !v)} className="text-blue-600 hover:text-blue-700">
-                          <Plus size={13} />
-                        </button>
-                      </div>
-
-                      {showAddRelationship && (
-                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3 space-y-2">
-                          <input
-                            value={newRelTitle}
-                            onChange={e => setNewRelTitle(e.target.value)}
-                            placeholder="Relationship event title"
-                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
-                          />
-                          <input
-                            type="date"
-                            value={newRelDate}
-                            onChange={e => setNewRelDate(e.target.value)}
-                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
-                          />
-                          <div className="flex gap-2">
-                            <button onClick={addRelationshipEntry} className="flex-1 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">Add</button>
-                            <button onClick={() => { setShowAddRelationship(false); setNewRelTitle(""); setNewRelDate(""); }} className="flex-1 py-1 bg-white border border-slate-200 text-slate-600 text-xs rounded hover:bg-slate-50">Cancel</button>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex flex-col">
-                        {getMergedTimeline().map((entry, i) => {
-                          const allEntries = getMergedTimeline();
-                          return (
-                            <div key={i} className="flex items-start gap-2 relative">
-                              {i < allEntries.length - 1 && (
-                                <div className="absolute left-2.5 top-5 w-px bg-slate-200" style={{ height: "calc(100% - 4px)" }} />
-                              )}
-                              <div
-                                className={cn(
-                                  "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[9px] font-bold z-10",
-                                  entry.colorClass
-                                )}
-                              >
-                                {entry.icon}
-                              </div>
-                              <div className="pb-3 min-w-0">
-                                <p className="text-xs font-medium text-slate-800">{entry.title}</p>
-                                <p className="text-[10px] text-slate-400">{entry.date}</p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* 9. Meeting Transcripts */}
+                    {/* 8. Meeting Transcripts */}
                     <div className="px-4 py-3 border-t border-slate-100">
                       <MeetingTranscripts companyId={selectedId} />
                     </div>

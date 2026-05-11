@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
         .from("companies")
         .insert({
           name:   company_name,
-          type:   "startup",
+          type:   "other",
           source: "email",
           website: domain ? `https://${domain}` : null,
         })

@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
         const domain = fromEmail.split("@")[1];
         const { data: newCo } = await supabase
           .from("companies")
-          .insert({ name: extracted.company_name, type: "startup", source: "email", website: domain ? `https://${domain}` : null })
+          .insert({ name: extracted.company_name, type: "other", source: "email", website: domain ? `https://${domain}` : null })
           .select("id")
           .single();
         companyId = newCo?.id ?? null;
@@ -267,7 +267,7 @@ export async function POST(req: NextRequest) {
           .from("companies")
           .insert({
             name: parsed.company_name || searchName,
-            type: "startup",
+            type: "other",
             deal_status: "sourced",
             website: parsed.company_website ?? null,
             description: parsed.company_description ?? null,

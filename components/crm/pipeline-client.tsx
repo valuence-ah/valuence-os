@@ -560,6 +560,9 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
   const [logoFinding, setLogoFinding]       = useState(false);
   const [logoMsg, setLogoMsg]               = useState<string | null>(null);
 
+  // Tracks which company is being loaded — prevents stale async results from overwriting newer selections
+  const activeLoadId = useRef<string | null>(null);
+
   // Delete company
   const [confirmDelete, setConfirmDelete]   = useState(false);
   const [deleting, setDeleting]             = useState(false);
@@ -744,6 +747,8 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
 
   // ── Load detail data when selected company changes ────────────────────────
   const loadDetail = useCallback(async (id: string) => {
+    // Mark this load as the active one; if selection changes before we finish, we bail.
+    activeLoadId.current = id;
     setLoadingDetail(true);
     const [{ data: ctcts }, { data: ints }, { data: memos }, { data: company }, { data: docs }] = await Promise.all([
       supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }),
@@ -752,6 +757,9 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
       supabase.from("companies").select("name, website").eq("id", id).single(),
       supabase.from("documents").select("id,name,type,storage_path,google_drive_url,created_at").eq("company_id", id).order("created_at", { ascending: false }),
     ]);
+
+    // If the user switched to another company while we were loading, discard this result.
+    if (activeLoadId.current !== id) return;
 
     let contacts = ctcts ?? [];
 
@@ -769,6 +777,8 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
           p_domain: domainFromWebsite ?? "",
           p_name_slug: nameSlug,
         });
+        // Final guard — another company may have been selected during the RPC
+        if (activeLoadId.current !== id) return;
         contacts = fallback ?? contacts;
       }
     }
@@ -841,6 +851,8 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
 
   useEffect(() => {
     if (selectedId) {
+      // ── Cancel any in-flight load from a previous company ──
+      activeLoadId.current = selectedId;
       // ── Clear previous company's data immediately to prevent bleed-through ──
       setContacts([]);
       setDocuments([]);
@@ -2084,31 +2096,40 @@ export function PipelineClient({ initialCompanies, currentUserId }: Props) {
                   )}
                 </div>
 
-                {/* ── Delete button ── */}
+                {/* ── Delete button — confirmation appears as a positioned dropdown so it never widens the toolbar ── */}
                 {!editing && (
-                  confirmDelete ? (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-red-500">Delete this company?</span>
-                      <button
-                        onClick={() => setConfirmDelete(false)}
-                        className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50"
-                      >No</button>
-                      <button
-                        onClick={handleDeleteCompany}
-                        disabled={deleting}
-                        className="px-2.5 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-1"
-                      >
-                        {deleting ? <><Loader2 size={11} className="animate-spin" /> Deleting…</> : "Yes, delete"}
-                      </button>
-                    </div>
-                  ) : (
+                  <div className="relative">
                     <button
-                      onClick={() => setConfirmDelete(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-red-200 rounded-lg text-red-400 hover:bg-red-50 hover:border-red-300 transition-colors"
+                      onClick={() => setConfirmDelete(v => !v)}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors",
+                        confirmDelete
+                          ? "border-red-400 bg-red-50 text-red-600"
+                          : "border-red-200 text-red-400 hover:bg-red-50 hover:border-red-300"
+                      )}
                     >
                       <X size={12} /> Delete
                     </button>
-                  )
+                    {confirmDelete && (
+                      <div className="absolute right-0 top-full mt-1.5 z-50 w-52 bg-white border border-red-200 rounded-xl shadow-lg p-3 space-y-2.5">
+                        <p className="text-xs font-semibold text-slate-700">Delete this company?</p>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">All data will be permanently removed. This cannot be undone.</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setConfirmDelete(false)}
+                            className="flex-1 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50"
+                          >Cancel</button>
+                          <button
+                            onClick={handleDeleteCompany}
+                            disabled={deleting}
+                            className="flex-1 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-lg disabled:opacity-50 flex items-center justify-center gap-1"
+                          >
+                            {deleting ? <><Loader2 size={11} className="animate-spin" /> Deleting…</> : "Yes, delete"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {editing ? (

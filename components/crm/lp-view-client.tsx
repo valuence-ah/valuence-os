@@ -523,6 +523,8 @@ export function LpViewClient({ initialCompanies }: Props) {
   const [editCity, setEditCity]       = useState("");
   const [editCountry, setEditCountry] = useState("");
   const [editWebsite, setEditWebsite] = useState("");
+  const [editingLpName, setEditingLpName] = useState(false);
+  const [lpNameDraft, setLpNameDraft]     = useState("");
 
   // Sort + city/country filters
   const [sortCol, setSortCol]     = useState<string | null>(null);
@@ -601,6 +603,13 @@ export function LpViewClient({ initialCompanies }: Props) {
 
   // Contact pop-out panel
   const [viewingContact, setViewingContact] = useState<Contact | null>(null);
+
+  // Interaction detail / edit modal
+  const [editingInteraction, setEditingInteraction] = useState<Interaction | null>(null);
+  const [editIntSubject, setEditIntSubject]         = useState("");
+  const [editIntBody, setEditIntBody]               = useState("");
+  const [editIntDate, setEditIntDate]               = useState("");
+  const [savingEditInt, setSavingEditInt]           = useState(false);
 
   // LP Company News feed
   type LpIntelItem = { headline: string; source: string; date: string; summary?: string; url?: string };
@@ -817,6 +826,8 @@ export function LpViewClient({ initialCompanies }: Props) {
     setAddingActivity(false);
     setBriefContent(""); setBriefError("");
     setOutreachContent(""); setOutreachError("");
+    setLpNameDraft(co.name);
+    setEditingLpName(false);
     setLpDetailTab("overview");
     setLpIntelError(null);
     // Load cached intelligence immediately so it's visible when tab opens
@@ -1311,6 +1322,93 @@ export function LpViewClient({ initialCompanies }: Props) {
                   <ExternalLink size={11} /> View full contacts database
                 </a>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Interaction detail / edit modal ──────────────────────────────── */}
+      {editingInteraction && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30" onClick={() => setEditingInteraction(null)}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <InteractionIcon type={editingInteraction.type} />
+                <h3 className="text-sm font-semibold text-slate-800 capitalize">{editingInteraction.type}</h3>
+              </div>
+              <button onClick={() => setEditingInteraction(null)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+            </div>
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {/* Date */}
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1 block">Date</label>
+                <input
+                  type="date"
+                  value={editIntDate}
+                  onChange={e => setEditIntDate(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+              {/* Subject */}
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1 block">Subject</label>
+                <input
+                  type="text"
+                  value={editIntSubject}
+                  onChange={e => setEditIntSubject(e.target.value)}
+                  placeholder="Subject…"
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+              {/* Notes */}
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1 block">Notes</label>
+                <textarea
+                  rows={5}
+                  value={editIntBody}
+                  onChange={e => setEditIntBody(e.target.value)}
+                  placeholder="Add notes…"
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                />
+              </div>
+              {/* Tagged contacts */}
+              {(editingInteraction as { contact_ids?: string[] }).contact_ids && (editingInteraction as { contact_ids?: string[] }).contact_ids!.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Tagged Contacts</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(editingInteraction as { contact_ids?: string[] }).contact_ids!.map((cid: string) => {
+                      const tc = contacts.find(c => c.id === cid);
+                      if (!tc) return null;
+                      return <span key={cid} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-violet-100 text-violet-700 font-medium"><User size={10} />{tc.first_name} {tc.last_name}</span>;
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Footer */}
+            <div className="flex gap-2 px-5 py-4 border-t border-slate-100 flex-shrink-0">
+              <button onClick={() => setEditingInteraction(null)} className="flex-1 py-2 border border-slate-200 rounded-lg text-sm text-slate-500 hover:bg-slate-50">Cancel</button>
+              <button
+                disabled={savingEditInt}
+                onClick={async () => {
+                  if (!editingInteraction) return;
+                  setSavingEditInt(true);
+                  const updates = {
+                    subject: editIntSubject.trim() || null,
+                    body:    editIntBody.trim() || null,
+                    date:    editIntDate || editingInteraction.date,
+                  };
+                  await supabase.from("interactions").update(updates).eq("id", editingInteraction.id);
+                  setInteractions(prev => prev.map(i => i.id === editingInteraction.id ? { ...i, ...updates } : i));
+                  setSavingEditInt(false);
+                  setEditingInteraction(null);
+                }}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-500 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {savingEditInt ? <><Loader2 size={12} className="animate-spin" />Saving…</> : <><Check size={12} />Save</>}
+              </button>
             </div>
           </div>
         </div>
@@ -1822,7 +1920,31 @@ export function LpViewClient({ initialCompanies }: Props) {
               <div className="flex items-start gap-3 min-w-0 flex-1">
                 <CompanyLogo company={selected} size="lg" />
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-base font-bold text-slate-900 truncate">{selected.name}</h2>
+                  {editingLpName ? (
+                    <input
+                      autoFocus
+                      value={lpNameDraft}
+                      onChange={e => setLpNameDraft(e.target.value)}
+                      onBlur={async () => {
+                        setEditingLpName(false);
+                        const trimmed = lpNameDraft.trim();
+                        if (trimmed && trimmed !== selected.name) {
+                          await saveField(selected.id, { name: trimmed });
+                        }
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        if (e.key === "Escape") { setEditingLpName(false); setLpNameDraft(selected.name); }
+                      }}
+                      className="text-base font-bold text-slate-900 border-b border-blue-400 outline-none bg-transparent w-full"
+                    />
+                  ) : (
+                    <h2
+                      className="text-base font-bold text-slate-900 truncate cursor-pointer hover:text-blue-700"
+                      title="Click to edit name"
+                      onClick={() => { setEditingLpName(true); setLpNameDraft(selected.name); }}
+                    >{selected.name}</h2>
+                  )}
                   {selected.lp_type && <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", getLpTypeBadge(selected.lp_type))}>{selected.lp_type}</span>}
                   <div className="flex items-center gap-3 mt-1">
                     {(editCity || editCountry) && <span className="flex items-center gap-1 text-xs text-slate-400"><MapPin size={9} />{[editCity, editCountry].filter(Boolean).join(", ")}</span>}
@@ -2637,18 +2759,21 @@ export function LpViewClient({ initialCompanies }: Props) {
                   <div className="relative pl-4">
                     <div className="absolute left-1.5 top-0 bottom-0 w-px bg-slate-100" />
                     <div className="space-y-3">
-                      {interactions.slice(0, 12).map(int => (
-                        <div key={int.id} className="relative flex gap-2.5">
+                      {interactions.slice(0, 20).map(int => (
+                        <div key={int.id} className="relative flex gap-2.5 group">
                           <div className="absolute -left-4 mt-0.5 w-3 h-3 rounded-full bg-white border-2 border-slate-200" />
-                          <div className="flex-1 min-w-0">
+                          <div
+                            className="flex-1 min-w-0 rounded-lg border border-transparent hover:border-blue-200 hover:bg-blue-50 px-2 py-1.5 -mx-2 -my-1.5 cursor-pointer transition-colors"
+                            onClick={() => { setEditingInteraction(int); setEditIntSubject(int.subject ?? ""); setEditIntBody(int.body ?? ""); setEditIntDate(int.date ?? ""); }}
+                          >
                             <div className="flex items-start gap-1.5">
                               <InteractionIcon type={int.type} />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-start justify-between gap-1">
                                   <p className="text-xs font-medium text-slate-700 leading-tight truncate">{int.subject ?? int.type.charAt(0).toUpperCase() + int.type.slice(1)}</p>
                                   <button
-                                    onClick={async () => { if (!confirm("Delete this interaction?")) return; await supabase.from("interactions").delete().eq("id", int.id); setInteractions(prev => prev.filter(i => i.id !== int.id)); }}
-                                    className="text-slate-300 hover:text-red-400 flex-shrink-0 ml-1"
+                                    onClick={async (e) => { e.stopPropagation(); if (!confirm("Delete this interaction?")) return; await supabase.from("interactions").delete().eq("id", int.id); setInteractions(prev => prev.filter(i => i.id !== int.id)); }}
+                                    className="text-slate-300 hover:text-red-400 flex-shrink-0 ml-1 opacity-0 group-hover:opacity-100 transition-opacity"
                                     title="Delete"
                                   ><X size={10} /></button>
                                 </div>

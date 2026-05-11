@@ -370,7 +370,19 @@ function MoreMenu({ task, onEdit, onDuplicate, onDelete }: {
 
 // ── Table view ────────────────────────────────────────────────────────────────
 
-function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, onStatusChange, onArchive, justCompleted }: { tasks: Task[]; onSelect: (t: Task) => void; onToggleComplete: (t: Task) => void; onDelete: (t: Task) => void; onDuplicate: (t: Task) => void; onStatusChange: (t: Task, newStatus: string) => void; onArchive: (t: Task) => void; justCompleted: Set<number> }) {
+function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, onStatusChange, onArchive, justCompleted, selectedIds, onToggleSelect, onSelectAll }: {
+  tasks: Task[];
+  onSelect: (t: Task) => void;
+  onToggleComplete: (t: Task) => void;
+  onDelete: (t: Task) => void;
+  onDuplicate: (t: Task) => void;
+  onStatusChange: (t: Task, newStatus: string) => void;
+  onArchive: (t: Task) => void;
+  justCompleted: Set<number>;
+  selectedIds: Set<number>;
+  onToggleSelect: (id: number) => void;
+  onSelectAll: (ids: number[]) => void;
+}) {
   const sorted = [...tasks].sort((a, b) => {
     // Just-completed tasks stay at top (position 0) so they stay visible
     const aJust = justCompleted.has(a.id) ? -1 : 0;
@@ -397,7 +409,28 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
       <table className="w-full text-xs min-w-[900px]">
         <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
           <tr>
-            <th className="w-6 px-3 py-2 text-left font-medium text-slate-500"></th>
+            {/* Select-all checkbox */}
+            <th className="w-6 px-3 py-2 text-left" onClick={e => e.stopPropagation()}>
+              <div
+                className={cn(
+                  "w-3.5 h-3.5 border rounded-md flex items-center justify-center cursor-pointer transition-colors",
+                  sorted.length > 0 && sorted.every(t => selectedIds.has(t.id))
+                    ? "bg-blue-600 border-blue-600"
+                    : "border-slate-300 hover:border-blue-400"
+                )}
+                onClick={() => {
+                  const allSelected = sorted.every(t => selectedIds.has(t.id));
+                  onSelectAll(allSelected ? [] : sorted.map(t => t.id));
+                }}
+              >
+                {sorted.length > 0 && sorted.every(t => selectedIds.has(t.id)) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                {sorted.length > 0 && !sorted.every(t => selectedIds.has(t.id)) && sorted.some(t => selectedIds.has(t.id)) && (
+                  <Minus className="w-2.5 h-2.5 text-blue-600" strokeWidth={3} />
+                )}
+              </div>
+            </th>
+            {/* Complete-toggle column header (blank) */}
+            <th className="w-6 px-1 py-2"></th>
             <th className="px-3 py-2 text-left font-medium text-slate-500">Task</th>
             <th className="px-3 py-2 text-left font-medium text-slate-500 whitespace-nowrap">Category</th>
             <th className="px-3 py-2 text-left font-medium text-slate-500 whitespace-nowrap">Initiative</th>
@@ -419,12 +452,22 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
               onClick={() => onSelect(t)}
               className={cn(
                 "group cursor-pointer transition-colors",
-                justCompleted.has(t.id) ? "bg-emerald-50 hover:bg-emerald-100" : "hover:bg-slate-50",
-                t.status === "Overdue" && !justCompleted.has(t.id) && "border-l-2 border-red-400",
-                t.status === "At risk" && !justCompleted.has(t.id) && "border-l-2 border-amber-400",
+                selectedIds.has(t.id) ? "bg-blue-50" : justCompleted.has(t.id) ? "bg-emerald-50 hover:bg-emerald-100" : "hover:bg-slate-50",
+                t.status === "Overdue" && !justCompleted.has(t.id) && !selectedIds.has(t.id) && "border-l-2 border-red-400",
+                t.status === "At risk" && !justCompleted.has(t.id) && !selectedIds.has(t.id) && "border-l-2 border-amber-400",
               )}
             >
-              <td className="px-3 py-2" onClick={e => { e.stopPropagation(); onToggleComplete(t); }}>
+              {/* Bulk-select checkbox */}
+              <td className="px-3 py-2 w-6" onClick={e => { e.stopPropagation(); onToggleSelect(t.id); }}>
+                <div className={cn(
+                  "w-3.5 h-3.5 border rounded-md flex items-center justify-center cursor-pointer transition-colors",
+                  selectedIds.has(t.id) ? "bg-blue-600 border-blue-600" : "border-slate-300 hover:border-blue-400"
+                )}>
+                  {selectedIds.has(t.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                </div>
+              </td>
+              {/* Complete-toggle */}
+              <td className="px-1 py-2 w-6" onClick={e => { e.stopPropagation(); onToggleComplete(t); }}>
                 <div className={cn(
                   "w-3.5 h-3.5 border rounded-md flex items-center justify-center cursor-pointer transition-colors",
                   t.status === "Completed"
@@ -1210,7 +1253,7 @@ function AddTaskModal({ onClose, onAdd, initiatives }: AddTaskModalProps) {
     prio: "Medium",
     status: "Not started",
     owner: OWNERS[0],
-    start: "2026-03-24",
+    start: new Date().toISOString().slice(0, 10),
     due: "",
     notes: "",
     cos: [] as string[],
@@ -1230,7 +1273,7 @@ function AddTaskModal({ onClose, onAdd, initiatives }: AddTaskModalProps) {
       return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     }
 
-    const startStr = form.start ? fmtDate(form.start) : "Mar 24, 2026";
+    const startStr = form.start ? fmtDate(form.start) : fmtDate(new Date().toISOString().slice(0, 10));
     const dueStr = form.due ? fmtDate(form.due) : "";
     const daysLeft = dueStr ? calcDaysLeft(dueStr) : 0;
 
@@ -1334,9 +1377,21 @@ function AddTaskModal({ onClose, onAdd, initiatives }: AddTaskModalProps) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function TasksClient() {
-  const [tasks, setTasks] = useState<Task[]>(() =>
-    INITIAL_TASKS.map(t => ({ ...t, daysLeft: calcDaysLeft(t.due) }))
-  );
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    // Try to restore from localStorage first — preserves archive/delete/edits across refreshes.
+    // Fall back to INITIAL_TASKS only on first-ever load (nothing saved yet).
+    try {
+      const saved = localStorage.getItem("crm_tasks");
+      if (saved) {
+        const parsed = JSON.parse(saved) as Task[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Re-compute daysLeft so it's always fresh relative to today
+          return parsed.map(t => ({ ...t, daysLeft: calcDaysLeft(t.due) }));
+        }
+      }
+    } catch { /* ignore parse errors */ }
+    return INITIAL_TASKS.map(t => ({ ...t, daysLeft: calcDaysLeft(t.due) }));
+  });
   const [initiatives, setInitiatives] = useState(DEFAULT_INITIATIVES);
   const [newInitLabel, setNewInitLabel] = useState("");
   const [showNewInit, setShowNewInit] = useState(false);
@@ -1349,45 +1404,32 @@ export function TasksClient() {
   const [confirmDeleteTaskId, setConfirmDeleteTaskId] = useState<number | null>(null);
   // Track tasks just-checked-complete so they stay visible for archive/delete
   const [justCompleted, setJustCompleted] = useState<Set<number>>(new Set());
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // ── localStorage bridge ──────────────────────────────────────────────────────
+  // crm_tasks is the single source of truth (written below on every change).
+  // On cross-tab storage events, merge any tasks added by other pages (CRM, LP, etc.)
+  // without overwriting what we already have.
 
   useEffect(() => {
-    function loadFromStorage() {
+    function mergeFromStorage() {
       try {
-        // Load strategic tasks map
-        const rawMap = localStorage.getItem("strategic_tasks_map");
-        if (rawMap) {
-          const map = JSON.parse(rawMap) as Record<string, Task>;
-          setTasks(prev => {
-            const existingIds = new Set(prev.map(t => t.id));
-            const newTasks = Object.values(map).filter(t => !existingIds.has(t.id));
-            return newTasks.length > 0 ? [...prev, ...newTasks] : prev;
-          });
-        }
-        // Load user-added tasks
         const rawCrm = localStorage.getItem("crm_tasks");
-        if (rawCrm) {
-          const crmTasks = JSON.parse(rawCrm) as Task[];
-          if (Array.isArray(crmTasks)) {
-            setTasks(prev => {
-              const existingIds = new Set(prev.map(t => t.id));
-              const newTasks = crmTasks.filter(t => !existingIds.has(t.id));
-              return newTasks.length > 0 ? [...prev, ...newTasks] : prev;
-            });
-          }
-        }
-      } catch {
-        // ignore parse errors
-      }
+        if (!rawCrm) return;
+        const crmTasks = JSON.parse(rawCrm) as Task[];
+        if (!Array.isArray(crmTasks)) return;
+        setTasks(prev => {
+          const existingIds = new Set(prev.map(t => t.id));
+          const incoming = crmTasks.filter(t => !existingIds.has(t.id));
+          return incoming.length > 0 ? [...prev, ...incoming.map(t => ({ ...t, daysLeft: calcDaysLeft(t.due) }))] : prev;
+        });
+      } catch { /* ignore */ }
     }
 
-    loadFromStorage();
-
     function handleStorage(e: StorageEvent) {
-      if (e.key === "strategic_tasks_map" || e.key === "crm_tasks") {
-        loadFromStorage();
-      }
+      if (e.key === "crm_tasks") mergeFromStorage();
     }
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
@@ -1439,6 +1481,20 @@ export function TasksClient() {
     setTasks(prev => prev.filter(t => t.id !== confirmDeleteTaskId));
     if (selectedTask?.id === confirmDeleteTaskId) setSelectedTask(null);
     setConfirmDeleteTaskId(null);
+  }
+
+  function handleBulkArchive() {
+    setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, archived: true } : t));
+    setJustCompleted(prev => { const next = new Set(prev); selectedIds.forEach(id => next.delete(id)); return next; });
+    if (selectedTask && selectedIds.has(selectedTask.id)) setSelectedTask(null);
+    setSelectedIds(new Set());
+  }
+
+  function handleBulkDelete() {
+    setTasks(prev => prev.filter(t => !selectedIds.has(t.id)));
+    if (selectedTask && selectedIds.has(selectedTask.id)) setSelectedTask(null);
+    setSelectedIds(new Set());
+    setConfirmBulkDelete(false);
   }
 
   // ── Filtering ────────────────────────────────────────────────────────────────
@@ -1768,6 +1824,9 @@ export function TasksClient() {
             onStatusChange={(t, newStatus) => setTasks(prev => prev.map(task => task.id === t.id ? { ...task, status: newStatus } : task))}
             onArchive={handleArchiveTask}
             justCompleted={justCompleted}
+            selectedIds={selectedIds}
+            onToggleSelect={id => setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; })}
+            onSelectAll={ids => setSelectedIds(new Set(ids))}
           />
         )}
         {view === "kanban" && (
@@ -1793,6 +1852,46 @@ export function TasksClient() {
           onDelete={handleDeleteTask}
           initiatives={initiatives}
         />
+      )}
+
+      {/* ── Bulk action bar — floats at the bottom when rows are selected ── */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700">
+          <span className="text-sm font-semibold tabular-nums">{selectedIds.size} selected</span>
+          <div className="w-px h-4 bg-slate-600" />
+          <button
+            onClick={handleBulkArchive}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+          >
+            <Archive className="w-3.5 h-3.5" /> Archive
+          </button>
+          <button
+            onClick={() => setConfirmBulkDelete(true)}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" /> Delete
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-slate-400 hover:text-white ml-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Bulk delete confirm */}
+      {confirmBulkDelete && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-80">
+            <p className="text-sm font-semibold text-slate-800 mb-1">Delete {selectedIds.size} task{selectedIds.size > 1 ? "s" : ""}?</p>
+            <p className="text-xs text-slate-500 mb-4">This action cannot be undone.</p>
+            <div className="flex gap-2">
+              <button onClick={handleBulkDelete} className="flex-1 py-1.5 bg-red-500 text-white text-xs font-medium rounded-lg hover:bg-red-600 transition-colors">Delete all</button>
+              <button onClick={() => setConfirmBulkDelete(false)} className="flex-1 py-1.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-200 transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Confirm delete task overlay */}

@@ -11,7 +11,7 @@ import { MeetingTranscripts } from "@/components/crm/meeting-transcripts";
 import {
   Search, Plus, X, Check, Loader2, Mail, Video, Phone, FileText,
   Building2, Target, TrendingUp, AlertCircle, Users, User, Shield,
-  Handshake, MoreHorizontal, ChevronRight, ExternalLink, RefreshCw, MapPin, Link2, Star,
+  Handshake, MoreHorizontal, ChevronRight, ExternalLink, RefreshCw, MapPin, Link2, Star, Clock,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -415,6 +415,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
   const [addingContact, setAddingContact]     = useState(false);
   const [contactOrder, setContactOrder]       = useState<string[]>([]);
   const strContactDragIdx                     = useRef<number | null>(null);
+  const [viewingContact, setViewingContact]   = useState<Contact | null>(null);
 
   // Pipeline companies for portco match dropdown
   const [pipelineCompanies, setPipelineCompanies] = useState<{ id: string; name: string }[]>([]);
@@ -626,7 +627,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
     setLoadingDetail(true);
     const [{ data: ctcts }, { data: ints }] = await Promise.all([
       supabase.from("contacts").select("*").eq("company_id", id).order("is_primary_contact", { ascending: false }),
-      supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(20),
+      supabase.from("interactions").select("*").eq("company_id", id).order("date", { ascending: false }).limit(50),
     ]);
     setContacts((ctcts ?? []) as Contact[]);
     setInteractions((ints ?? []) as Interaction[]);
@@ -1508,17 +1509,38 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                                     setContactOrder(order);
                                     strContactDragIdx.current = null;
                                   }}
-                                  className="flex items-start gap-2 p-2.5 border border-slate-100 rounded-xl cursor-grab hover:border-slate-200 bg-slate-50 hover:bg-white transition-colors">
+                                  onClick={() => setViewingContact(c)}
+                                  className="flex items-start gap-2 p-2.5 border border-slate-100 rounded-xl hover:border-blue-200 hover:bg-blue-50 bg-slate-50 transition-colors cursor-pointer">
                                   <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${hashColor(c.first_name + (c.last_name ?? ""))} flex items-center justify-center flex-shrink-0`}>
                                     <span className="text-white text-[9px] font-bold">{getInitials(`${c.first_name} ${c.last_name ?? ""}`)}</span>
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-xs font-medium text-slate-800 truncate">{c.first_name} {c.last_name}</p>
                                     {c.title && <p className="text-[10px] text-slate-400 truncate">{c.title}</p>}
-                                    {c.email && <a href={`mailto:${c.email}`} className="flex items-center gap-1 text-[10px] text-blue-500 hover:underline truncate"><Mail size={9} />{c.email}</a>}
+                                    {c.last_contact_date && (
+                                      <p className="flex items-center gap-0.5 text-[10px] text-slate-400 mt-0.5">
+                                        <Clock size={9} className="flex-shrink-0" />
+                                        {timeAgo(c.last_contact_date)}
+                                      </p>
+                                    )}
+                                    {c.email && (
+                                      <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()}
+                                        className="flex items-center gap-1 text-[10px] text-blue-500 hover:underline truncate active:opacity-70">
+                                        <Mail size={9} />{c.email}
+                                      </a>
+                                    )}
+                                    {c.phone && (
+                                      <a href={`tel:${c.phone}`} onClick={e => e.stopPropagation()}
+                                        className="flex items-center gap-1 text-[10px] text-green-500 hover:underline truncate active:opacity-70">
+                                        <Phone size={9} />{c.phone}
+                                      </a>
+                                    )}
                                   </div>
-                                  <button onClick={async () => { if (!confirm(`Remove ${c.first_name}?`)) return; await supabase.from("contacts").delete().eq("id", c.id); setContacts(prev => prev.filter(x => x.id !== c.id)); }}
-                                    className="w-5 h-5 flex items-center justify-center rounded border border-slate-200 text-slate-300 hover:border-red-200 hover:text-red-400 flex-shrink-0 mt-0.5"><X size={10} /></button>
+                                  <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                                    <ChevronRight size={10} className="text-slate-300" />
+                                    <button onClick={async (e) => { e.stopPropagation(); if (!confirm(`Remove ${c.first_name}?`)) return; await supabase.from("contacts").delete().eq("id", c.id); setContacts(prev => prev.filter(x => x.id !== c.id)); }}
+                                      className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-slate-300 hover:border-red-200 hover:text-red-400"><X size={10} /></button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -1670,7 +1692,7 @@ export function StrategicViewClient({ initialCompanies }: Props) {
                           <div className="relative pl-4">
                             <div className="absolute left-1.5 top-0 bottom-0 w-px bg-slate-100" />
                             <div className="space-y-3">
-                              {interactions.slice(0, 12).map(int => (
+                              {interactions.slice(0, 30).map(int => (
                                 <div key={int.id} className="relative flex gap-2.5">
                                   <div className="absolute -left-4 mt-0.5 w-3 h-3 rounded-full bg-white border-2 border-slate-200" />
                                   <div className="flex-1 min-w-0">
@@ -2022,6 +2044,94 @@ export function StrategicViewClient({ initialCompanies }: Props) {
           </>)}
         </div>
       </div>
+
+      {/* ── Contact pop-out panel ──────────────────────────────────────────── */}
+      {viewingContact && (
+        <div className="fixed inset-0 z-50" onClick={() => setViewingContact(null)}>
+          <div className="absolute right-0 top-0 h-full w-80 bg-white shadow-2xl border-l border-slate-200 flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-4 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${hashColor(viewingContact.first_name + (viewingContact.last_name ?? ""))} flex items-center justify-center flex-shrink-0`}>
+                  <span className="text-white text-xs font-bold">{getInitials(`${viewingContact.first_name} ${viewingContact.last_name ?? ""}`)}</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">
+                    {viewingContact.first_name} {viewingContact.last_name}
+                  </p>
+                  {viewingContact.is_primary_contact && (
+                    <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium">Primary</span>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => setViewingContact(null)} className="text-slate-400 hover:text-slate-600 flex-shrink-0"><X size={16} /></button>
+            </div>
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+              {viewingContact.title && (
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Title</p>
+                  <p className="text-sm text-slate-700">{viewingContact.title}</p>
+                </div>
+              )}
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Contact</p>
+                {viewingContact.email && (
+                  <a href={`mailto:${viewingContact.email}`} className="flex items-center gap-2 text-xs text-blue-600 hover:underline">
+                    <Mail size={12} className="flex-shrink-0 text-slate-400" />
+                    {viewingContact.email}
+                  </a>
+                )}
+                {viewingContact.phone && (
+                  <a href={`tel:${viewingContact.phone}`} className="flex items-center gap-2 text-xs text-slate-700 hover:text-green-600">
+                    <Phone size={12} className="flex-shrink-0 text-slate-400" />
+                    {viewingContact.phone}
+                  </a>
+                )}
+                {viewingContact.linkedin_url && (
+                  <a href={viewingContact.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-xs text-slate-700 hover:text-blue-600">
+                    <ExternalLink size={12} className="flex-shrink-0 text-slate-400" />
+                    LinkedIn
+                  </a>
+                )}
+                {!viewingContact.email && !viewingContact.phone && (
+                  <p className="text-xs text-slate-400 italic">No contact details</p>
+                )}
+              </div>
+              {(viewingContact.location_city || viewingContact.location_country) && (
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Location</p>
+                  <p className="flex items-center gap-1 text-xs text-slate-600">
+                    <MapPin size={11} className="text-slate-400 flex-shrink-0" />
+                    {[viewingContact.location_city, viewingContact.location_country].filter(Boolean).join(", ")}
+                  </p>
+                </div>
+              )}
+              {viewingContact.last_contact_date && (
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Last Contact</p>
+                  <p className="flex items-center gap-1 text-xs text-slate-600">
+                    <Clock size={11} className="text-slate-400 flex-shrink-0" />
+                    {formatDate(viewingContact.last_contact_date)}
+                    <span className="text-slate-400 ml-1">({timeAgo(viewingContact.last_contact_date)})</span>
+                  </p>
+                </div>
+              )}
+              {viewingContact.notes && (
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Notes</p>
+                  <p className="text-xs text-slate-600 whitespace-pre-wrap">{viewingContact.notes}</p>
+                </div>
+              )}
+              <div className="pt-2 border-t border-slate-100">
+                <a href="/crm/contacts" className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-medium">
+                  <ExternalLink size={11} /> View full contacts database
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Add Partner Modal ────────────────────────────────────────────────── */}
       {showAddPartner && (
