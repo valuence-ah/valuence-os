@@ -616,8 +616,6 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
                 )}
               </div>
             </th>
-            {/* Complete-toggle column header (blank) */}
-            <th className="w-6 px-1 py-2"></th>
             <th className="px-3 py-2 text-left font-medium text-slate-500">Task</th>
             <th className="px-3 py-2 text-left font-medium text-slate-500 whitespace-nowrap">Category</th>
             <th className="px-3 py-2 text-left font-medium text-slate-500 whitespace-nowrap">Initiative</th>
@@ -651,17 +649,6 @@ function TableView({ tasks, onSelect, onToggleComplete, onDelete, onDuplicate, o
                   selectedIds.has(t.id) ? "bg-blue-600 border-blue-600" : "border-slate-300 hover:border-blue-400"
                 )}>
                   {selectedIds.has(t.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-                </div>
-              </td>
-              {/* Complete-toggle */}
-              <td className="px-1 py-2 w-6" onClick={e => { e.stopPropagation(); onToggleComplete(t); }}>
-                <div className={cn(
-                  "w-3.5 h-3.5 border rounded-md flex items-center justify-center cursor-pointer transition-colors",
-                  t.status === "Completed"
-                    ? "bg-emerald-500 border-emerald-500"
-                    : "border-slate-300 hover:border-blue-400"
-                )}>
-                  {t.status === "Completed" && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                 </div>
               </td>
               <td className={cn("px-3 py-2 max-w-[280px]", t.status === "Completed" && "line-through text-slate-400")}>

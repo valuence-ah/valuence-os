@@ -129,12 +129,16 @@ export async function POST(
     }).join("\n");
   }
 
-  // Template variables — all available to the admin's prompt
+  // Template variables — all available to the admin's prompt.
+  // partner_name / partner_profile are aliases so the partnership_intelligence
+  // prompt works without needing to rename every {{lp_name}} occurrence.
   const templateVars: Record<string, string> = {
-    lp_name:    lp.name,
-    lp_profile: lpProfile,
-    portfolio:  companyList(portfolio),
-    pipeline:   companyList(pipeline),
+    lp_name:         lp.name,
+    lp_profile:      lpProfile,
+    partner_name:    lp.name,     // alias used by partnership_intelligence prompt
+    partner_profile: lpProfile,   // alias used by partnership_intelligence prompt
+    portfolio:       companyList(portfolio),
+    pipeline:        companyList(pipeline),
   };
 
   const rawPrompt    = cfg.user_prompt?.trim() ? cfg.user_prompt : DEFAULT_PROMPT;
